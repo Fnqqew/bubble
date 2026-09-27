@@ -81,7 +81,8 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
             "• Subtítulos: ves quién habla (Voz 1, Voz 2…) y qué dice, en tu idioma.\n"
             "• Tu voz para los demás: hablás en tu idioma y te escuchan en el suyo, con un botón o en modo directo. "
             "«Te escuchan en» es el mismo idioma que elegís en la barra para escribir (Tab).\n\n"
-            "En «Pruebas» probás tu micrófono y tu voz traducida sin jugar, y le enseñás tu forma de hablar.\n\n"
+            "En «Pruebas» probás tu micrófono y tu voz traducida sin jugar. Si querés, «Entrenar tu voz» (5 "
+            "minutos, opcional) le enseña tu vocabulario, tus expresiones y cómo preguntás y gritás.\n\n"
             "Para que te escuchen, Bubble habla por un micrófono virtual (como Soundpad). Mirá el paso siguiente.",
         ),
         Step(

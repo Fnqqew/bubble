@@ -59,7 +59,7 @@ def test_profile_learns_your_words_and_translations(tmp_path):
     profile.remember("una frase larguísima que depende mucho del contexto de la partida", "en", "x")
     assert profile.summary()["guardadas"] == 1
     profile.forget()
-    assert profile.summary() == {"frases": 0, "ejemplos": 0, "guardadas": 0, "voz": 0}
+    assert not any(profile.summary().values())
 
 
 def test_profile_knows_your_usual_voice_after_a_few_phrases(tmp_path):
@@ -90,3 +90,44 @@ def test_pc_check_estimates_how_fast_your_voice_sounds():
     slow = rate_pc(PcReport("CPU", 4, 6, [], "base", 2.0, 0.8, 2.8))
     assert fast.rating == "excelente" and fast.expected_s < 2.6
     assert slow.rating == "lenta" and len(slow.tips) >= 3
+
+
+def test_training_has_a_script_with_questions_shouts_and_your_own_words():
+    from bubble.voice.training import script_for
+
+    for language in ("es-AR", "en"):
+        kinds = [item.kind for item in script_for(language)]
+        assert kinds.count("question") >= 5 and kinds.count("shout") >= 2 and kinds.count("free") >= 5
+        assert kinds.count("normal") >= 8
+    assert script_for("xx") == []
+
+
+def test_training_learns_the_words_whisper_missed(tmp_path):
+    from bubble.voice.training import Item, check, feedback
+
+    result = check(Item("Quiero tradear mi mascota legendaria"), "quiero tratar mi mascota legendaria", None)
+    assert result.missed == ["tradear"] and "tradear" in feedback(result)
+    assert feedback(check(Item("dale vamos"), "Dale, vamos.", None)).startswith("✓ Te entendí perfecto")
+    profile = VoiceProfile(tmp_path / "perfil.json")
+    profile.learn_words(result.missed, "es")
+    assert "tradear" in profile.hint("es-AR")
+
+
+def test_training_makes_the_question_and_shout_thresholds_yours(tmp_path):
+    from bubble.voice.training import Item, Result, calibrate
+
+    def said(kind, rise, level=-30.0):
+        return Result(Item("x", kind), "x", 0.0, [], Melody(rise, 150.0, level, -15.0, 4.0, 0.0, 1.0))
+
+    # esta persona casi no sube la voz al preguntar (+1,4) y sus afirmaciones bajan (-1)
+    results = [said("normal", -1.0), said("normal", -0.8), said("normal", -1.2), said("question", 1.4),
+               said("question", 1.6), said("shout", 0.0, level=-18.0)]
+    found = calibrate(results, (150.0, -30.0, -15.0))
+    assert 0.0 < found["question_rise"] < 1.0 and found["shout_db"] >= 4.0
+    profile = VoiceProfile(tmp_path / "perfil.json")
+    for _ in range(5):
+        profile.learn_melody(Melody(0.0, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0))
+    question = Melody(1.2, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0)
+    assert profile.intonation(question) == ""  # con el umbral de todos (2 semitonos) no parecía pregunta
+    profile.calibrate(found)
+    assert profile.intonation(question) == "question"  # con el tuyo, sí

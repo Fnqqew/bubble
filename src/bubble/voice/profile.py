@@ -1,7 +1,9 @@
 """Lo que Bubble aprende de cómo hablás, para entenderte mejor y traducir más rápido cuanto más lo usás.
 
-- Tus frases (las que se entendieron con seguridad y las que confirmaste en la página Pruebas): se le pasan a Whisper
-  como ejemplo, y así escribe tus palabras, tus nombres y tu forma de hablar.
+- Tus frases (las que se entendieron con seguridad y las que confirmaste en la página Pruebas) y tus palabras (las que
+  Whisper no te entendía en el entrenamiento, tus nombres, tu jerga): se le pasan a Whisper como ejemplo, y así
+  escribe tus palabras, tus nombres y tu forma de hablar.
+- Cuánto sube tu voz al preguntar y cómo suena tu grito (del entrenamiento): cada uno pregunta y grita distinto.
 - Cómo querés sonar: las traducciones que aprobaste o corregiste en Pruebas; Claude las usa de modelo.
 - Frases ya traducidas: si volvés a decir lo mismo ("dale, esperame"), sale al instante, sin preguntarle a Claude.
 - Tu voz de siempre (tono y volumen): para darse cuenta cuando exclamás o gritás.
@@ -29,6 +31,8 @@ EXAMPLES_IN_PROMPT = 6
 MAX_SAVED = 400
 SAVE_UP_TO_WORDS = 8  # frases más largas dependen del contexto: no se reusan
 MIN_MELODIES = 5  # con menos frases no se sabe cómo hablás normalmente
+MAX_WORDS = 120
+WORDS_IN_HINT = 45  # medido: con 20 casi no ayudaba; con 45, 6 a 16 puntos menos de error; con 80, más lento
 _WORDS = re.compile(r"\w+", re.UNICODE)
 
 
@@ -48,7 +52,7 @@ class VoiceProfile:
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or default_path()
         self._lock = threading.Lock()
-        self.data: dict = {"phrases": {}, "examples": {}, "saved": {}, "melody": {}, "times": {}}
+        self.data: dict = self._empty()
         try:
             loaded = json.loads(self.path.read_text(encoding="utf-8"))
             if isinstance(loaded, dict):
@@ -56,12 +60,32 @@ class VoiceProfile:
         except (OSError, ValueError):
             pass
 
+    @staticmethod
+    def _empty() -> dict:
+        return {"phrases": {}, "examples": {}, "saved": {}, "melody": {}, "times": {}, "words": {},
+                "calibration": {}, "training": {}}
+
     # ------------------------------------------------------------ Whisper: tus palabras
     def hint(self, language: str) -> str:
-        """Ejemplo para Whisper en ese idioma: cómo se habla (con ¿? ¡!) y tus últimas frases."""
+        """Ejemplo para Whisper en ese idioma: cómo se habla (con ¿? ¡!), tus palabras y tus últimas frases. Lo más
+        tuyo va al final: si no entra todo, se recorta el principio."""
         language = language.split("-")[0].lower()
+        words = self.data["words"].get(language, [])[-WORDS_IN_HINT:]
         mine = self.data["phrases"].get(language, [])[-PHRASES_IN_HINT:]
-        return " ".join([EXAMPLES.get(language, ""), *mine]).strip()
+        vocabulary = (", ".join(words) + ".") if words else ""
+        return " ".join(part for part in [EXAMPLES.get(language, ""), vocabulary, *mine] if part).strip()
+
+    def learn_words(self, found: list[str], language: str) -> None:
+        """Palabras tuyas (las que Whisper no te entendía, nombres, jerga): pasan a ser pistas para Whisper."""
+        found = [word.strip() for word in found if word.strip()]
+        if not found:
+            return
+        language = language.split("-")[0].lower()
+        with self._lock:
+            known = [w for w in self.data["words"].get(language, []) if w.casefold() not in
+                     {f.casefold() for f in found}]
+            self.data["words"][language] = [*known, *found][-MAX_WORDS:]
+        self.save()
 
     def learn_phrase(self, text: str, language: str) -> None:
         text = text.strip()
@@ -130,7 +154,24 @@ class VoiceProfile:
         return known["pitch"], known["level"], known["effort"]
 
     def intonation(self, melody: Melody | None) -> str:
-        return melody.kind(self.usual()) if melody else ""
+        """Cómo lo dijiste, con tus umbrales si ya entrenaste (si no, los de todos)."""
+        return melody.kind(self.usual(), **self.data["calibration"]) if melody else ""
+
+    def calibrate(self, found: dict[str, float]) -> None:
+        with self._lock:
+            self.data["calibration"].update({key: value for key, value in found.items()
+                                             if key in ("question_rise", "shout_db", "exclaim_db")})
+        self.save()
+
+    # ------------------------------------------------------------ entrenamiento
+    def training_step(self, language: str) -> int:
+        """Por qué frase va el entrenamiento en ese idioma (para seguir otro día)."""
+        return int(self.data["training"].get(language.split("-")[0].lower(), 0))
+
+    def set_training_step(self, language: str, step: int) -> None:
+        with self._lock:
+            self.data["training"][language.split("-")[0].lower()] = step
+        self.save()
 
     # ------------------------------------------------------------ tiempos
     def note_times(self, times: dict[str, float]) -> None:
@@ -147,11 +188,13 @@ class VoiceProfile:
             "ejemplos": sum(len(p) for p in self.data["examples"].values()),
             "guardadas": len(self.data["saved"]),
             "voz": int(self.data["melody"].get("count", 0)),
+            "palabras": sum(len(w) for w in self.data["words"].values()),
+            "entrenada": int(bool(self.data["calibration"])),
         }
 
     def forget(self) -> None:
         with self._lock:
-            self.data = {"phrases": {}, "examples": {}, "saved": {}, "melody": {}, "times": {}}
+            self.data = self._empty()
         self.save()
 
     def save(self) -> None:

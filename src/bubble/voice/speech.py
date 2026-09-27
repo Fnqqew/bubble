@@ -71,6 +71,15 @@ def sounds_finished(text: str, language: str) -> bool:
     return bool(_SENTENCE_END.search(text.strip())) and not sounds_unfinished(text, language)
 
 
+QUESTION_RISE = 2.0  # semitonos (con el entrenamiento, el tuyo)
+SHOUT_DB = 8.0  # más fuerte que de costumbre
+SHOUT_STRAIN = 5.0
+SHOUT_EFFORT = -2.0  # sin saber cómo habla: voz con muchísimos agudos
+EXCLAIM_DB = 5.0
+SOFT_DB = -7.0
+CLIPPED = 0.002
+
+
 @dataclass(frozen=True)
 class Melody:
     """Cómo sonó una frase: entonación, volumen y esfuerzo de la voz."""
@@ -83,36 +92,29 @@ class Melody:
     clipped: float  # parte del audio saturado (gritos pegados al micrófono)
     voiced_s: float  # cuánto de la frase tiene voz
 
-    def kind(self, usual: tuple[float, float, float] | None = None) -> str:
+    def kind(self, usual: tuple[float, float, float] | None = None, question_rise: float = QUESTION_RISE,
+             shout_db: float = SHOUT_DB, exclaim_db: float = EXCLAIM_DB) -> str:
         """Cómo lo dijo: "question", "shout", "exclaim" o "soft", juntos con "+" ("question+shout") o "".
-        `usual`: (tono, volumen, esfuerzo) de siempre de esa persona. Sin eso solo se notan los gritos evidentes."""
+        `usual`: (tono, volumen, esfuerzo) de siempre de esa persona. Sin eso solo se notan los gritos evidentes.
+        Los umbrales pueden ser los de esa persona (ver voice/training.py)."""
         if self.voiced_s < 0.3:
             return ""
-        marks = ["question"] if self.rise >= QUESTION_RISE else []
+        marks = ["question"] if self.rise >= question_rise else []
         if usual:
             pitch, level, effort = usual
             louder = self.level - level
             higher = self.pitch / pitch if pitch else 1.0
             strained = self.effort - effort
-            if louder >= SHOUT_DB or (strained >= SHOUT_STRAIN and higher >= 1.2) or (
+            if louder >= shout_db or (strained >= SHOUT_STRAIN and higher >= 1.2) or (
                     self.clipped > CLIPPED and louder >= 4):
                 marks.append("shout")
-            elif (louder >= EXCLAIM_DB and higher >= 1.1) or (higher >= 1.25 and self.spread >= 8):
+            elif (louder >= exclaim_db and higher >= 1.1) or (higher >= 1.25 and self.spread >= 8):
                 marks.append("exclaim")
             elif louder <= SOFT_DB and higher <= 1.02:
                 marks.append("soft")
         elif self.effort >= SHOUT_EFFORT or self.clipped > 2 * CLIPPED:
             marks.append("shout")
         return "+".join(marks)
-
-
-QUESTION_RISE = 2.0  # semitonos
-SHOUT_DB = 8.0  # más fuerte que de costumbre
-SHOUT_STRAIN = 5.0
-SHOUT_EFFORT = -2.0  # sin saber cómo habla: voz con muchísimos agudos
-EXCLAIM_DB = 5.0
-SOFT_DB = -7.0
-CLIPPED = 0.002
 
 
 class Usual:

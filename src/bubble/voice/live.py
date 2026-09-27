@@ -139,10 +139,11 @@ class LiveListener:
         language: str | None = None,
         native: str = "",
         hint="",
-        usual_melody=None,
+        judge=None,
     ) -> None:
-        """`hint`: ejemplo de cómo se habla, para Whisper (texto o función idioma → texto). `usual_melody`: función que
-        devuelve (tono, volumen) de siempre de esa voz, para notar exclamaciones."""
+        """`hint`: ejemplo de cómo se habla, para Whisper (texto o función idioma → texto). `judge`: función que dice
+        cómo lo dijo esa voz (tu perfil: con tu voz de siempre y tus umbrales); sin eso, se compara cada voz del juego
+        con cómo viene hablando."""
         self.final_asr = final_asr
         self.partial_asr = partial_asr
         self.speakers = speakers
@@ -157,7 +158,7 @@ class LiveListener:
         # en tu idioma no se subtitula.
         self.native = native.split("-")[0].lower()
         self.hint = hint
-        self.usual_melody = usual_melody
+        self.judge = judge
         self._usual: dict[int, Usual] = {}  # cómo habla cada voz del juego (para notar sus gritos)
         self._running = threading.Event()
         self._wake = threading.Condition()
@@ -360,8 +361,8 @@ class LiveListener:
         tune = melody(audio)
         if tune is None:
             return ""
-        if self.usual_melody is not None:
-            return tune.kind(self.usual_melody())
+        if self.judge is not None:
+            return self.judge(tune)
         usual = self._usual.setdefault(speaker, Usual()) if speaker else None
         kind = tune.kind(usual.get() if usual else None)
         if learn and usual is not None:

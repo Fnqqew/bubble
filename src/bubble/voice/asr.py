@@ -34,7 +34,7 @@ DENSE_TOKENS_PER_S = 30
 LIKELY = {"en", "es", "pt", "fr", "de", "it", "nl", "ru", "uk", "pl", "tr", "ar", "hi", "ur", "bn", "id", "ms", "vi",
           "th", "tl", "zh", "ja", "ko", "sv", "no", "da", "fi", "ro", "hu", "cs", "el", "he", "fa", "ta", "te"}
 UNLIKELY_WEIGHT = 0.05
-MAX_HINT_TOKENS = 96  # pistas cortas: más largas no mejoran y demoran
+MAX_HINT_TOKENS = 160  # alcanza para tus palabras y tus frases; más largo demora (medido)
 
 
 @dataclass

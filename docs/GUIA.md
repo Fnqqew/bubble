@@ -176,6 +176,8 @@ sintética lo acompaña: más rápida y fuerte si gritaste, más suave si hablas
 - Lo que ya dijiste queda guardado: si volvés a decir lo mismo ("dale, esperame"), sale al instante.
 - En **Pruebas** corregís lo que entendió o cómo lo tradujo: Claude usa esas traducciones de modelo para sonar como
   vos querés.
+- Si querés ir más rápido: **Pruebas → Entrenar tu voz** (opcional, ~5 minutos) le enseña tu vocabulario, tus
+  expresiones, cómo preguntás y cómo gritás de una vez.
 
 Todo queda en `%LOCALAPPDATA%\Bubble\perfil_voz.json` (solo en tu PC); se borra desde **Pruebas**.
 
@@ -263,8 +265,21 @@ La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus 
 - **Lo que te dicen:** una voz sintética dice una frase en inglés, como otro jugador, y ves el subtítulo.
 - **Tu PC:** tu procesador, memoria y placa de video, cuánto tarda de verdad en esta PC entender una frase y armar la
   voz, y cuánto va a tardar tu voz traducida. Te dice si anda excelente, bien, normal o lenta, y qué ajustar.
-- **Lo que aprendió:** cuántas frases tuyas conoce, cuántas traducciones aprobaste, cuántas salen al instante y los
-  tiempos promedio de tu voz. **Borrar lo aprendido** empieza de cero.
+- **Entrenar tu voz (opcional):** unos 5 minutos, en una ventana aparte, en dos partes:
+  1. **Leé en voz alta** 28 frases como las de una partida: voseo, jerga de juego ("pvp", "tradear", "farmear",
+     "lag"), nombres de juegos, preguntas, exclamaciones y dos gritos. Después de cada una te dice qué entendió; las
+     palabras que no te entendió pasan a ser pistas para Whisper, y si salió bien pasa sola a la siguiente. Medido
+     con voces rioplatenses sintéticas, en frases nuevas (no las del entrenamiento): después de entrenar entiende mal
+     de 6 a 16 puntos menos de palabras.
+  2. **Con tus palabras:** te pregunta cómo saludás, qué decís cuando ganás o perdés, cómo pedís ayuda o proponés un
+     intercambio, los nombres de tus amigos y juegos, y las expresiones que más usás. Contestás como hablás, corregís
+     lo que entendió si hace falta y tocás **Guardar**: queda como tu vocabulario.
+
+  Además aprende tu voz de siempre, **cuánto sube tu voz cuando preguntás** y **cómo suena tu grito**: cada uno
+  pregunta y grita distinto, y desde ahí los umbrales son los tuyos. Cortás cuando quieras (**Terminar por ahora**)
+  y la próxima vez seguís desde la misma frase. Está en español y en inglés (según tu idioma).
+- **Lo que aprendió:** cuántas frases y palabras tuyas conoce, cuántas traducciones aprobaste, cuántas salen al
+  instante, los tiempos promedio de tu voz y lo que sacó del entrenamiento. **Borrar lo aprendido** empieza de cero.
 
 ## Jerga, dialectos y tono
 

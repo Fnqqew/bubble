@@ -6,6 +6,8 @@
 - Chat a voz: escribís como en la barra del juego y escuchás cómo lo dice.
 - Lo que te dicen: una voz sintética dice una frase en inglés, como si fuera otro jugador, y ves el subtítulo.
 - Tu PC: cómo va a andar Bubble en esta computadora.
+- Entrenar tu voz (opcional): leés unas frases y contestás unas preguntas con tus palabras; aprende tu vocabulario,
+  tus expresiones, cómo preguntás y cómo gritás (ver ui/training_window.py).
 - Lo que aprendió: cuánto sabe de tu voz, y un botón para borrarlo.
 
 Todo suena solo en tus auriculares: nada le llega a Roblox.
@@ -50,6 +52,7 @@ class TestsPanel:
         self._last_speech = None  # la última voz traducida (para volver a escucharla)
         self._mine_target = ""
         self._chat_target = ""
+        self._training = None  # la ventana del entrenamiento, si está abierta
 
     # ------------------------------------------------------------ armado
     def build_page(self, page) -> None:
@@ -116,6 +119,17 @@ class TestsPanel:
         self.pc_rating = ttk.Label(row, text="", font="SunValleyBodyStrongFont")
         self.pc_rating.pack(side="left", padx=12)
         self.pc_info = widgets.muted(box, "")
+
+        box = widgets.card(page, "Entrenar tu voz (opcional)", "Leés unas frases de juego y contestás unas preguntas "
+                                                               "con tus palabras (unos 5 minutos). Aprende tu "
+                                                               "vocabulario y tus expresiones, cómo preguntás y cómo "
+                                                               "gritás. Cortás cuando quieras y seguís otro día.")
+        row = ttk.Frame(box)
+        row.pack(fill="x")
+        self.train_button = ttk.Button(row, text="Empezar", command=self._train, style="Accent.TButton")
+        self.train_button.pack(side="left")
+        self.train_info = ttk.Label(row, text="", foreground=colors["muted"])
+        self.train_info.pack(side="left", padx=12)
 
         box = widgets.card(page, "Lo que aprendió", "Todo queda en tu PC.")
         self.learned = widgets.muted(box, "")
@@ -414,12 +428,54 @@ class TestsPanel:
         profile = self.voice.profile
         counts = profile.summary()
         times = profile.data.get("times", {})
-        text = (f"{counts['frases']} frases tuyas · {counts['ejemplos']} traducciones aprobadas · "
-                f"{counts['guardadas']} frases que salen al instante · conoce tu voz de {counts['voz']} frases")
+        text = (f"{counts['frases']} frases tuyas · {counts['palabras']} palabras tuyas · {counts['ejemplos']} "
+                f"traducciones aprobadas · {counts['guardadas']} frases que salen al instante · conoce tu voz de "
+                f"{counts['voz']} frases")
+        calibration = profile.data.get("calibration", {})
+        if calibration:
+            known = [name for key, name in (("question_rise", "cómo preguntás"), ("shout_db", "cómo gritás"),
+                                            ("exclaim_db", "cómo exclamás")) if key in calibration]
+            if known:
+                text += "\nDel entrenamiento: " + ", ".join(known)
         if times:
             text += "\nTiempos de tu voz (promedio): " + " · ".join(
                 f"{stage} {_seconds(seconds)}" for stage, seconds in times.items())
         self.learned.configure(text=text)
+        self._refresh_training()
+
+    def _refresh_training(self) -> None:
+        from ..voice.training import script_for
+
+        language = self.app.config.user.language
+        total = len(script_for(language))
+        if not total:
+            self.train_button.state(["disabled"])
+            self.train_info.configure(text="Por ahora el entrenamiento está en español y en inglés.")
+            return
+        step = self.voice.profile.training_step(language)
+        self.train_button.state(["!disabled"])
+        if step >= total:
+            self.train_button.configure(text="Entrenar de nuevo")
+            self.train_info.configure(text="✓ Ya lo hiciste completo.")
+        elif step:
+            self.train_button.configure(text="Seguir")
+            self.train_info.configure(text=f"Vas por la frase {step + 1} de {total}.")
+        else:
+            self.train_button.configure(text="Empezar")
+            self.train_info.configure(text=f"{total} frases y preguntas.")
+
+    def _train(self) -> None:
+        from .training_window import TrainingWindow
+
+        if self._training is not None:
+            self._training.win.lift()
+            return
+
+        def closed() -> None:
+            self._training = None
+            self.refresh_learned()
+
+        self._training = TrainingWindow(self.app, closed)
 
     def _forget(self) -> None:
         self.voice.profile.forget()

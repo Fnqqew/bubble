@@ -341,7 +341,7 @@ class DirectVoice:
         self.listener = LiveListener(final_asr, self._caption, partial_asr=final_asr, source_factory=mic_factory,
                                      on_error=lambda msg: on_event("error", msg), settings=settings,
                                      language=mine, hint=profile.hint if profile is not None else "",
-                                     usual_melody=profile.usual if profile is not None else None)
+                                     judge=profile.intonation if profile is not None else None)
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="bubble-directo-trad")
         self._asked: dict[int, tuple[str, Future]] = {}
         self._queue: queue.Queue = queue.Queue()

@@ -71,7 +71,9 @@ Elegís tu idioma y prendés lo que quieras. Después, jugás: Bubble encuentra 
 cómo se ven los subtítulos.
 
 **Probalo sin jugar:** en **Pruebas** ves si tu micrófono va a andar bien, normal o mal, cómo entiende y traduce tu
-voz (y cuánto tarda cada paso), y cómo va a andar Bubble en tu PC. [Más](docs/GUIA.md#pruebas).
+voz (y cuánto tarda cada paso), y cómo va a andar Bubble en tu PC. Y si querés, **entrenás tu voz** en 5 minutos:
+leés unas frases de juego y contestás con tus palabras, y aprende tu vocabulario, tus expresiones, cómo preguntás y
+cómo gritás. [Más](docs/GUIA.md#pruebas).
 
 <br>
 
