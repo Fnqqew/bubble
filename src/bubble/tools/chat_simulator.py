@@ -188,7 +188,9 @@ class Simulator:
     def _on_key(self, event) -> None:
         if self.typing is None:
             if event.keycode == 0xBF:  # tecla física "/": abre el chat, como en Roblox
-                self.typing = ""
+                # Como Roblox: si con este teclado la tecla escribe otra cosa que "/" (en español, "}"), ese
+                # carácter queda escrito en la barra recién abierta.
+                self.typing = event.char if event.char and event.char != "/" and event.char.isprintable() else ""
                 self._write("abrir_chat")
             else:
                 self._write("tecla_juego", keysym=event.keysym, keycode=event.keycode)

@@ -1,6 +1,6 @@
 [project]
 name = "bubble"
-version = "1.0.0"
+version = "1.1.0"
 description = "Traductor en tiempo real para Roblox: el chat, las burbujas y lo que escribís, con la suscripción de Claude del jugador."
 requires-python = ">=3.12"
 dependencies = [
@@ -10,6 +10,7 @@ dependencies = [
     "mss>=10",
     "dxcam>=0.3",  # captura de pantalla por GPU (DXGI): mucho menos CPU
     "comtypes>=1.4",
+    "sv-ttk>=2.6",  # tema oscuro de Windows 11 para la ventana
     "numpy>=2",
     "scipy>=1.14",
     "winrt-runtime>=3.2",

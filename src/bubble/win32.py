@@ -247,6 +247,17 @@ def press_chat_key() -> None:
     _send([(VK_OEM_2, SCAN_SLASH, 0), (VK_OEM_2, SCAN_SLASH, KEYEVENTF_KEYUP)])
 
 
+def chat_key_leaves_a_character() -> bool:
+    """True si la tecla física del chat escribe otra cosa que "/" con tu teclado (en uno latinoamericano escribe
+    "}"): Roblox abre el chat pero ese carácter queda escrito en la barra, y hay que borrarlo."""
+    char = user32.MapVirtualKeyW(VK_OEM_2, 2) & 0x7FFF  # MAPVK_VK_TO_CHAR
+    return bool(char) and chr(char) != "/"
+
+
+def press_backspace() -> None:
+    _send([(0x08, 0x0E, 0), (0x08, 0x0E, KEYEVENTF_KEYUP)])
+
+
 def press_enter() -> None:
     _send([(VK_RETURN, 0x1C, 0), (VK_RETURN, 0x1C, KEYEVENTF_KEYUP)])
 

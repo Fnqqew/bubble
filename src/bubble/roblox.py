@@ -74,6 +74,11 @@ def open_chat(open_chat_key: str = "/") -> None:
     cualquier distribución de teclado)."""
     if open_chat_key in ("/", "slash", ""):
         win32.press_chat_key()
+        if win32.chat_key_leaves_a_character():
+            # Con un teclado en español esa tecla escribe "}": Roblox abre el chat y el carácter queda en la barra
+            # (salía "}lol" en vez de "lol"). Se borra antes de escribir el mensaje.
+            time.sleep(0.12)
+            win32.press_backspace()
     else:
         win32.press_char(open_chat_key)
 

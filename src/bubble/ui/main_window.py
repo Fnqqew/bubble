@@ -11,7 +11,6 @@ import tkinter as tk
 from dataclasses import replace
 from pathlib import Path
 from tkinter import ttk
-from tkinter.scrolledtext import ScrolledText
 
 from .. import roblox, shortcut, win32
 from ..async_runner import AsyncRunner
@@ -32,6 +31,7 @@ from ..translate.languages import LOCALE_CHOICES
 from ..state import load_state, update_state
 from .inline import BubbleView, Entry, InlineChatView
 from .overlays import CalibrationOverlay, ComposeBar, HotkeyCaptureDialog, TranslationOverlay
+from .theme import MUTED, apply_theme, scrolled_text, strong_font
 from .tutorial import TutorialWindow, build_steps
 
 ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "bubble.ico"
@@ -120,6 +120,7 @@ class BubbleWindow:
         self.root.minsize(620, 520)
         if ICON_PATH.exists():
             self.root.iconbitmap(default=str(ICON_PATH))
+        apply_theme(self.root)
         self._build()
         self.overlay = TranslationOverlay(
             self.root, config.roblox.overlay_seconds, self._overlay_anchor, self._overlay_visible
@@ -166,7 +167,7 @@ class BubbleWindow:
         self.tone.set(TONE_CHOICES[clamp_tone(self.config.user.tone) - 1])
         self.tone.bind("<<ComboboxSelected>>", self._on_tone_change)
         self.tone.pack(side="left", padx=(4, 8))
-        self.tone_hint = ttk.Label(tone_row, text=TONE_HINTS[clamp_tone(self.config.user.tone)], foreground="#666")
+        self.tone_hint = ttk.Label(tone_row, text=TONE_HINTS[clamp_tone(self.config.user.tone)], foreground=MUTED)
         self.tone_hint.pack(side="left")
         ttk.Button(tone_row, text="Tutorial", command=self.open_tutorial).pack(side="right")
         ttk.Label(tone_row, text=f"Modelo: {self.config.claude.model} ({self.config.claude.effort})").pack(
@@ -190,18 +191,19 @@ class BubbleWindow:
         ttk.Checkbutton(
             rbx, text="Traducir burbujas de los jugadores", variable=self.bubbles_var, command=self._toggle_bubbles
         ).grid(row=1, column=3, padx=6)
-        self.region_label = ttk.Label(rbx, text=self._region_text(), foreground="#666")
+        self.region_label = ttk.Label(rbx, text=self._region_text(), foreground=MUTED)
         self.region_label.grid(row=2, column=0, columnspan=4, sticky="w", padx=6)
         hotkey_row = ttk.Frame(rbx)
         hotkey_row.grid(row=3, column=0, columnspan=4, sticky="w", padx=6, pady=(2, 6))
         ttk.Label(hotkey_row, text="Para escribir en otro idioma, en el juego apretá").pack(side="left")
-        self.hotkey_label = ttk.Label(hotkey_row, text="", font=("Segoe UI", 10, "bold"))
+        self.hotkey_label = ttk.Label(hotkey_row, text="", font=strong_font())
         self.hotkey_label.pack(side="left", padx=(6, 10))
         ttk.Button(hotkey_row, text="Cambiar…", command=self._change_hotkey).pack(side="left")
-        ttk.Label(hotkey_row, text="(se abre una barra: escribís y Enter lo traduce y lo manda).",
-                  foreground="#666").pack(side="left", padx=6)
+        ttk.Label(hotkey_row, text="(escribís y Enter lo manda traducido).",
+                  foreground=MUTED).pack(side="left", padx=6)
         self._refresh_hotkey_label()
-        self.perf_label = ttk.Label(rbx, text="Detectando tu PC...", foreground="#666")
+        self.perf_label = ttk.Label(rbx, text="Detectando tu PC...", foreground=MUTED, wraplength=940,
+                                    justify="left")
         self.perf_label.grid(row=4, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 6))
 
         sim = ttk.LabelFrame(self.root, text="Prueba sin Roblox")
@@ -221,15 +223,15 @@ class BubbleWindow:
         ttk.Button(sim, text="Traducir y copiar", command=self._send_outgoing).grid(row=1, column=3, padx=4)
         sim.columnconfigure(2, weight=1)
 
-        self.live = ttk.Label(self.root, text="", foreground="#666")
+        self.live = ttk.Label(self.root, text="", foreground=MUTED)
         self.live.pack(fill="x", **pad)
-        self.log = ScrolledText(self.root, wrap="word", state="disabled", font=("Segoe UI", 10))
-        self.log.pack(fill="both", expand=True, **pad)
-        self.log.tag_configure("in", foreground="#0b5394")
-        self.log.tag_configure("out", foreground="#38761d")
-        self.log.tag_configure("meta", foreground="#888888", font=("Segoe UI", 8))
-        self.log.tag_configure("error", foreground="#cc0000")
-        self.log.tag_configure("info", foreground="#7a4d00")
+        log_frame, self.log = scrolled_text(self.root, wrap="word", state="disabled", font=("Segoe UI", 10))
+        log_frame.pack(fill="both", expand=True, **pad)
+        self.log.tag_configure("in", foreground="#7cc4ff")
+        self.log.tag_configure("out", foreground="#8be28b")
+        self.log.tag_configure("meta", foreground="#8a8f98", font=("Segoe UI", 8))
+        self.log.tag_configure("error", foreground="#ff8a8a")
+        self.log.tag_configure("info", foreground="#ffcc66")
         self.status = ttk.Label(self.root, text="", anchor="w", relief="sunken")
         self.status.pack(fill="x", side="bottom")
 
@@ -362,9 +364,9 @@ class BubbleWindow:
         hwnd = win32.find_roblox_window()
         if hwnd:
             rect = win32.client_rect(hwnd)
-            self.roblox_status.configure(text=f"Roblox detectado ({rect.width}x{rect.height})", foreground="#38761d")
+            self.roblox_status.configure(text=f"Roblox detectado ({rect.width}x{rect.height})", foreground="#6cd46c")
         else:
-            self.roblox_status.configure(text="Roblox no está abierto (o está minimizado)", foreground="#cc0000")
+            self.roblox_status.configure(text="Roblox no está abierto (o está minimizado)", foreground="#ff6b6b")
         # Sin chat calibrado: se busca solo mientras jugás (apenas haya un par de mensajes a la vista).
         if self.ready and not self.saved_region and hwnd and win32.roblox_is_foreground():
             self._detect_chat(quiet=True)

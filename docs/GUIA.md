@@ -70,10 +70,12 @@ La primera vez aparece un tutorial corto. Se puede saltar, y se reabre con el bo
 
 En el juego apretá el atajo (**°** por defecto) y se abre una barra para escribir:
 
-- **Escribí como hablás vos.** Mientras escribís ves cómo va a quedar la traducción.
+- **Escribí como hablás vos.** Mientras escribís ves cómo va a quedar la traducción, en celeste, debajo.
 - **Enter:** lo traduce y lo manda al chat de Roblox. Bubble solo hace tres cosas: abre el chat con su tecla,
-  escribe el mensaje y aprieta Enter. No toca ninguna otra tecla.
-- **Tab** cambia el idioma, **↑ ↓** el tono y **Esc** cierra. Si la reabrís enseguida, lo que escribiste sigue ahí.
+  escribe el mensaje y aprieta Enter. No toca ninguna otra tecla. (Con teclados en español esa tecla también
+  escribe «}» en la barra del chat: Bubble lo borra antes de escribir.)
+- **Tab** cambia el idioma (el chip de la izquierda: EN, PT…), **↑ ↓** el tono (los puntitos de la derecha: más
+  llenos, más informal) y **Esc** cierra. Si la reabrís enseguida, lo que escribiste sigue ahí.
 - Si el atajo lleva Shift (como «°»), podés apretar **la misma tecla sola**. En Roblox el Shift activa el Shift
   Lock y mueve la cámara.
 - El atajo solo funciona con Roblox al frente; en otros programas la tecla escribe normalmente.

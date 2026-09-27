@@ -28,7 +28,7 @@ MAX_BUBBLE_SPEED = 1800  # px/s: más rápido que esto es un giro brusco de cám
 RENDER_DELAY_S = 0.03  # lo que tarda en verse la ventana después de moverla
 
 # Estilo de las píldoras del chat.
-CHAT_FILL = (17, 19, 24, 238)
+CHAT_FILL = (17, 19, 24, 252)  # casi opaca: con menos se transparentaba el texto original debajo
 CHAT_TEXT = (246, 247, 250)
 CHAT_PENDING_TEXT = (150, 156, 168)
 ACCENT = (84, 152, 255, 240)
