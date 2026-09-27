@@ -20,6 +20,24 @@ from ..geometry import Rect
 
 log = logging.getLogger(__name__)
 _local = threading.local()
+# Mientras sacás una captura de pantalla, las traducciones se ven en las capturas (ver screenshots.py): en ese
+# momento no se lee la pantalla (el OCR leería las traducciones en vez del chat).
+_reading = {"paused": False, "mark": 0}
+
+
+def pause_reading(paused: bool) -> None:
+    _reading["paused"] = paused
+    _reading["mark"] += 1
+
+
+def reading_mark() -> int | None:
+    """None si ahora no se puede leer la pantalla; si no, una marca para `still_readable`."""
+    return None if _reading["paused"] else _reading["mark"]
+
+
+def still_readable(mark: int) -> bool:
+    """False si mientras se capturaba se empezó (o terminó) a sacar una captura: esa imagen no sirve."""
+    return not _reading["paused"] and _reading["mark"] == mark
 
 
 def _grab_gdi(rect: Rect) -> Image.Image:

@@ -442,6 +442,21 @@ class InlineChatView:
         self.last_frame = None
         self.last_patches: list[tuple[Image.Image, int, int]] = []
 
+    def reset(self, same_message: Callable[[ChatLine, ChatLine], bool] | None = None) -> None:
+        """Empezar de cero (se cerró Roblox o se refrescó): se ocultan las traducciones y se olvida la partida."""
+        self.layer.hide_all()
+        if same_message is not None:
+            self.same_message = same_message
+        self.entries.clear()
+        self.by_id.clear()
+        self.by_line.clear()
+        self._positions.clear()
+        self._placed.clear()
+        self._moving_frames = 0
+        self._last_bottom = None
+        self.last_frame = None
+        self.last_patches = []
+
     # --- estado de las traducciones
     def _add(self, entry: Entry) -> None:
         if len(self.entries) == self.entries.maxlen:
@@ -648,6 +663,15 @@ class BubbleView:
         # Lo último mostrado de cada burbuja (imagen, x, y, cuándo, velocidad): si en una detección no aparece (el OCR
         # la leyó distinta o no la vio), se sostiene un instante en vez de apagarse y prenderse.
         self._recent: dict[int, tuple[Image.Image, int, int, float, float, float]] = {}
+
+    def reset(self, same_message: Callable[[ChatLine, ChatLine], bool] | None = None) -> None:
+        self.layer.hide_all()
+        if same_message is not None:
+            self.same_message = same_message
+        self.entries.clear()
+        self._pairs, self._texts, self._area = [], {}, None
+        self._recent.clear()
+        self.last_patches = []
 
     def entry_for(self, text: str) -> tuple[Entry, bool]:
         """Entrada de esa burbuja; True si es nueva (hay que traducirla)."""

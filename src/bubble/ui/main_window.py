@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import logging
 import os
 import queue
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 
@@ -34,6 +36,7 @@ from .theme import apply_theme
 from .tutorial import TutorialWindow, build_steps
 from .voice_panel import VoicePanel
 
+log = logging.getLogger(__name__)
 ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "bubble.ico"
 STATUS_TEXT = {
     "translated": "",
@@ -146,21 +149,28 @@ class BubbleWindow:
 
         self.hotkey = None
         self._start_hotkey()
+        self.screenshots = None
+        self._start_screenshots()
         # Mantener el acceso directo del escritorio al día (ícono y ubicación) sin frenar el arranque.
         threading.Thread(target=self._sync_shortcut, name="bubble-shortcut", daemon=True).start()
         # El tutorial se abre solo la primera vez; después, solo desde el botón "Tutorial".
         self.tutorial: TutorialWindow | None = None
         if not load_state().get("tutorial_seen"):
             self.root.after(600, self.open_tutorial)
-        self._set_status("Conectando con tu suscripción de Claude…")
-        future = self.runner.submit(self._startup())
-        future.add_done_callback(lambda f: self.events.put(("started", f.exception())))
+        # Conexión: se conecta al abrir y se desconecta sola si cerrás Roblox (vuelve sola cuando lo abrís).
+        self.link = "desconectado"  # "conectando" | "conectado" | "desconectando" | "desconectado" | "error"
+        self._closed_by_roblox = False
+        self._roblox_seen = False
+        self._roblox_gone_since: float | None = None
+        self._redetect_chat = False
+        self._connect()
 
     def show(self) -> None:
         """Muestra la ventana ya armada (una sola vez, completa)."""
         self.root.update_idletasks()
         self.root.deiconify()
         self.root.lift()
+        self.root.focus_set()  # que ninguna lista arranque con el texto resaltado
 
     # ================= interfaz (ver app_view.py) =================
     def _region_text(self) -> str:
@@ -175,11 +185,13 @@ class BubbleWindow:
         for provider in self.translator.router.providers:
             if hasattr(provider, "keep_warm_when"):
                 provider.keep_warm_when = win32.roblox_is_foreground  # solo mientras jugás
-        self.ocr = WindowsOcr(self.config.roblox.ocr_language)
-        # Se adapta a esta PC: captura por GPU si hay, y lecturas más o menos seguidas según el procesador.
         rbx = self.config.roblox
-        self.hardware = await asyncio.to_thread(detect_hardware, rbx.gpu_capture, rbx.performance)
-        self.events.put(("hardware", self.hardware))
+        if self.ocr is None:
+            self.ocr = WindowsOcr(rbx.ocr_language)
+        if self.hardware is None:
+            # Se adapta a esta PC: captura por GPU si hay, y lecturas más o menos seguidas según el procesador.
+            self.hardware = await asyncio.to_thread(detect_hardware, rbx.gpu_capture, rbx.performance)
+            self.events.put(("hardware", self.hardware))
         self.watcher = ChatWatcher(
             self.ocr, self.tracker, self._reading_region, self._on_chat_line,
             on_error=lambda msg: self.events.put(("info", msg)),
@@ -195,9 +207,9 @@ class BubbleWindow:
             interval_s=rbx.bubble_interval_s,
             pacer=self.hardware.pacer("bubbles", rbx.bubble_interval_s, max_s=1.0),
         )
-        if self.read_var.get():
+        if rbx.read_chat:
             self.watcher.start()
-        if self.bubbles_var.get():
+        if rbx.translate_bubbles:
             self.bubble_watcher.start()
 
     def _start_hotkey(self) -> None:
@@ -261,12 +273,115 @@ class BubbleWindow:
         if self.bubble_watcher:
             self.bubble_watcher.stop()
         if self.translator is not None:
-            await self.translator.close()
+            try:
+                async with asyncio.timeout(8):
+                    await self.translator.close()
+            except (Exception, TimeoutError):  # noqa: BLE001 - las sesiones colgadas se abandonan
+                log.warning("No se pudo cerrar la conexión con Claude a tiempo")
+
+    # ================= conectarse / desconectarse / refrescar =================
+    GONE_S = 5.0  # Roblox se reinicia al pasar de un juego a otro: se espera un poco antes de desconectar
+
+    def _connect(self, message: str = "") -> None:
+        if self.link in ("conectando", "conectado", "desconectando"):
+            return
+        self.link = "conectando"
+        self._start_error = None
+        if message:
+            self._append(f"{message}\n", "info")
+        self._set_status("Conectando con tu suscripción de Claude…")
+        self._refresh_header()
+        future = self.runner.submit(self._startup())
+        future.add_done_callback(lambda f: self.events.put(("started", f.exception())))
+
+    def _disconnect(self, message: str, by_roblox: bool = False, then=None) -> None:
+        """Apaga todo: lectura del chat y de las burbujas, la voz, el micrófono virtual y la conexión con Claude. Y
+        olvida la partida (lo que se veía en pantalla, los mensajes, las voces)."""
+        if self.link in ("desconectando", "desconectado"):
+            if then:
+                then()
+            return
+        self.link = "desconectando"
+        self.ready = False
+        self._closed_by_roblox = by_roblox
+        self._reset_session()
+        self.voice_panel.pause()
+        self._refresh_header()
+        future = self.runner.submit(self._shutdown())
+        future.add_done_callback(lambda _f: self.events.put(("disconnected", (message, then))))
+
+    def _ev_disconnected(self, payload) -> None:
+        message, then = payload
+        self.link = "desconectado"
+        self.watcher = self.bubble_watcher = None
+        self.translator = None
+        if message:
+            self._append(f"{message}\n", "info")
+        self._set_status("")
+        self._refresh_header()
+        if then:
+            then()
+
+    def _reset_session(self) -> None:
+        self.tracker = ChatTracker(username=self.config.roblox.username)
+        self.spam = SpamFilter()
+        self.inline_chat.reset(self.tracker.same_message)
+        self.bubbles.reset(self.tracker.same_message)
+        if self.compose.visible:
+            self.compose.close()
+        self._compose_results.clear()
+        self._compose_running.clear()
+        self._send_when_ready = None
+
+    def _refresh(self) -> None:
+        """Botón «Refrescar»: si algo anda raro, reinicia todo el mecanismo sin cerrar Bubble (lectura, traducciones
+        en pantalla, voz, atajo y conexión con Claude) y vuelve a buscar el chat."""
+        if self.link in ("conectando", "desconectando"):
+            return
+        self._redetect_chat = True
+        self._start_hotkey()
+        self._set_status("Refrescando…")
+        if self.link == "desconectado":
+            self._connect("Refresqué todo: me vuelvo a conectar.")
+        else:
+            self._disconnect("", then=lambda: self._connect("Refresqué todo: me vuelvo a conectar."))
+
+    def _watch_roblox_session(self, running: bool) -> None:
+        """Si cerrás Roblox, Bubble se desconecta; cuando lo abrís de nuevo, se reconecta solo."""
+        if running:
+            self._roblox_seen = True
+            self._roblox_gone_since = None
+            if self.link == "desconectado" and self._closed_by_roblox:
+                self._closed_by_roblox = False
+                self._connect("Roblox volvió: me conecto de nuevo.")
+            return
+        if not self._roblox_seen or self.link != "conectado":
+            return
+        now = time.monotonic()
+        if self._roblox_gone_since is None:
+            self._roblox_gone_since = now
+        elif now - self._roblox_gone_since >= self.GONE_S:
+            self._roblox_gone_since = None
+            self._disconnect("Roblox se cerró, así que me desconecté. Cuando lo abras, me conecto solo.",
+                             by_roblox=True)
+
+    def _start_screenshots(self) -> None:
+        """Que las traducciones salgan en tus capturas de pantalla (ver screenshots.py)."""
+        from ..screenshots import ScreenshotKeys
+
+        if self.screenshots:
+            self.screenshots.stop()
+            self.screenshots = None
+        if self.config.appearance.in_screenshots:
+            self.screenshots = ScreenshotKeys(win32.roblox_is_foreground)
+            self.screenshots.start()
 
     def _on_close(self) -> None:
         self._set_status("Cerrando...")
         if self.hotkey:
             self.hotkey.stop()
+        if self.screenshots:
+            self.screenshots.stop()
         self.voice_panel.stop()
         try:
             self.runner.submit(self._shutdown()).result(timeout=5)
@@ -293,23 +408,36 @@ class BubbleWindow:
         from .widgets import palette
 
         hwnd = win32.find_roblox_window()
+        running = hwnd is not None or win32.roblox_running()
         colors = palette()
         if hwnd:
             self.roblox_status.configure(text="Roblox está abierto.", foreground=colors["good"])
+        elif running:
+            self.roblox_status.configure(text="Roblox está minimizado.", foreground=colors["muted"])
         else:
-            self.roblox_status.configure(text="Roblox está cerrado (o minimizado).", foreground=colors["muted"])
+            self.roblox_status.configure(text="Roblox está cerrado.", foreground=colors["muted"])
+        self._watch_roblox_session(running)
         self._refresh_header(bool(hwnd))
         # Sin chat calibrado: se busca solo mientras jugás (apenas haya un par de mensajes a la vista).
         if self.ready and not self.saved_region and hwnd and win32.roblox_is_foreground():
             self._detect_chat(quiet=True)
         self._refresh_perf_label()
-        self.root.after(2000, self._poll_roblox)
+        self.root.after(1500, self._poll_roblox)
 
     def _refresh_header(self, roblox_open: bool | None = None) -> None:
         if roblox_open is None:
             roblox_open = win32.find_roblox_window() is not None
-        if getattr(self, "_start_error", None):
-            app_view.set_state(self, "bad", "No pude conectarme con Claude. Mirá «Actividad».", "Sin conexión")
+        link = getattr(self, "link", "conectando")
+        busy = link in ("conectando", "desconectando")
+        self.refresh_button.state(["disabled"] if busy else ["!disabled"])
+        if link == "error":
+            app_view.set_state(self, "bad", "No pude conectarme con Claude. Mirá «Actividad» o tocá Refrescar.",
+                               "Sin conexión")
+        elif link == "desconectando":
+            app_view.set_state(self, "muted", "Desconectando…", "Desconectando")
+        elif link == "desconectado" and self._closed_by_roblox:
+            app_view.set_state(self, "muted", "Roblox se cerró, así que me desconecté. Cuando lo abras, vuelvo solo.",
+                               "En pausa")
         elif not self.ready:
             app_view.set_state(self, "warn", "Preparando todo… dame un segundito.", "Conectando")
         elif roblox_open:
@@ -402,6 +530,7 @@ class BubbleWindow:
 
     def _toggle_reading(self) -> None:
         enabled = self.read_var.get()
+        self.config.roblox.read_chat = enabled
 
         async def apply() -> None:
             if self.watcher:
@@ -413,6 +542,7 @@ class BubbleWindow:
 
     def _toggle_bubbles(self) -> None:
         enabled = self.bubbles_var.get()
+        self.config.roblox.translate_bubbles = enabled
         save_setting("roblox", "translate_bubbles", enabled)
 
         async def apply() -> None:
@@ -739,16 +869,24 @@ class BubbleWindow:
         self._log_result("in", "(burbuja)", result)
 
     def _ev_started(self, error: BaseException | None) -> None:
+        if self.link != "conectando":
+            return  # mientras tanto se desconectó (se cerró Roblox o se refrescó)
         if error:
+            self.link = "error"
             self._start_error = error
-            self._set_status(f"No se pudo iniciar: {error}")
+            self._set_status(f"No se pudo conectar: {error}")
             self._append(f"{error}\n", "error")
             self._refresh_header()
             return
+        self.link = "conectado"
         self.ready = True
         self._set_status("")
         self._refresh_header()
         self.voice_panel.start()
+        if self._redetect_chat:
+            self._redetect_chat = False
+            if win32.find_roblox_window():
+                self._detect_chat(quiet=True)
 
     # --- voz
     def _ev_voice_status(self, text: str) -> None:

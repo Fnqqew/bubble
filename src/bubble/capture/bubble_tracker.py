@@ -25,7 +25,7 @@ from ..geometry import Rect
 from ..performance import Pacer, Stopwatch
 from .bubbles import BubbleItem
 from .ocr import WindowsOcr
-from .screen import grab
+from .screen import grab, reading_mark, still_readable
 
 log = logging.getLogger(__name__)
 
@@ -504,9 +504,15 @@ class BubbleWatcher:
                     self.on_bubbles(None, [])
                     await asyncio.sleep(0.4)
                     continue
+                mark = reading_mark()
+                if mark is None:
+                    await asyncio.sleep(0.05)  # estás sacando una captura: las traducciones se ven en ella
+                    continue
                 captured_at = time.monotonic()
                 watch = Stopwatch()
                 image = await asyncio.to_thread(watch.cpu, grab, area)
+                if not still_readable(mark):
+                    continue
                 chat = await asyncio.to_thread(self.chat_area)
                 exclude = chat.offset(-area.left, -area.top) if chat else None
                 boxes = await asyncio.to_thread(watch.cpu, find_bubble_boxes, image, exclude)

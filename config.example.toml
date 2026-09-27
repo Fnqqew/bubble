@@ -105,3 +105,5 @@ text_scale = 1.0
 subtitle_size = 1.0
 subtitle_position = "abajo"
 subtitle_original = true
+# Que las traducciones salgan en tus capturas de pantalla (Impr Pant, Win + Shift + S, Win + Impr Pant).
+in_screenshots = true

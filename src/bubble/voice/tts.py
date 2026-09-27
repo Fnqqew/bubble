@@ -27,7 +27,7 @@ PREFERRED_REGION = {"en": "en_US", "es": "es_MX", "pt": "pt_BR", "fr": "fr_FR", 
 # voz de uno de los dos, se usa la otra.
 CURATED: dict[str, tuple[str | None, str | None]] = {
     "es": ("es_AR-daniela-high", "es_MX-ald-medium"),
-    "en": ("en_US-amy-medium", "en_US-ryan-high"),
+    "en": ("en_US-amy-medium", "en_US-ryan-medium"),
     "pt": (None, "pt_BR-faber-medium"),
     "fr": ("fr_FR-siwis-medium", "fr_FR-tom-medium"),
     "de": ("de_DE-kerstin-low", "de_DE-thorsten-medium"),
@@ -105,6 +105,25 @@ class Voices:
             config = next(p for key, p in paths.items() if key.endswith(".onnx.json"))
             self._loaded[name] = PiperVoice.load(model, config_path=config)
         return self._loaded[name]
+
+    def is_loaded(self, language: str, gender: str | None = None) -> bool:
+        name = self.voice_for(language, gender or self.gender)
+        return name is not None and name in self._loaded
+
+    def is_downloaded(self, language: str, gender: str | None = None) -> bool:
+        name = self.voice_for(language, gender or self.gender)
+        return name is not None and (self.folder / f"{name}.onnx").exists()
+
+    def prepare(self, language: str, gender: str | None = None) -> bool:
+        """Descarga (si hace falta) y carga la voz, sin decir nada: así la primera frase sale enseguida."""
+        name = self.voice_for(language, gender or self.gender)
+        if name is None:
+            return False
+        with self._lock:
+            voice = self._load(name)
+        # La primera síntesis de cada voz es más lenta (prepara el modelo): se hace una de práctica.
+        self.synthesize("ok", language, gender)
+        return voice is not None
 
     def synthesize(self, text: str, language: str, gender: str | None = None, speed: float | None = None
                    ) -> Speech | None:

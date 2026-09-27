@@ -16,9 +16,23 @@ SAMPLE_RATE = 16000
 CABLE_NAMES = ("cable input", "vb-audio virtual cable", "voicemeeter input")
 
 
+def com_ready() -> None:
+    """El audio de Windows (WASAPI) usa COM, que se prepara por hilo. soundcard lo prepara solo en el hilo que lo
+    importa: si ese hilo termina, los demás fallaban con "Error 0x800401f0". Se prepara en cada hilo que lo usa."""
+    import ctypes
+    import warnings
+
+    # Primero soundcard (al cargarse prepara COM en su hilo y falla si ya estaba preparado), después este hilo.
+    warnings.filterwarnings("ignore", message="data discontinuity in recording")
+    import soundcard  # noqa: F401
+
+    ctypes.windll.ole32.CoInitializeEx(None, 0)  # COINIT_MULTITHREADED; si ya estaba, no hace nada
+
+
 def _sc():
     import warnings
 
+    com_ready()
     import soundcard
 
     # Aviso de soundcard al empezar a grabar (y si el búfer se atrasa): llenaba el registro de errores.
@@ -79,6 +93,7 @@ def voice_output(prefer_cable: bool = True) -> Output:
 
 def play(output: Output, audio: np.ndarray, rate: int) -> None:
     """Reproduce (bloquea hasta terminar)."""
+    com_ready()
     output.device.play(np.clip(audio, -1, 1).astype(np.float32), samplerate=rate)
 
 

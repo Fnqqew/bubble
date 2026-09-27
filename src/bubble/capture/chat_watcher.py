@@ -18,7 +18,7 @@ from .chat_parser import ChatItem, ChatTracker, parse_chat_items
 from .ocr import (
     WHITE_TEXT, WindowsOcr, binarize_local_background, looks_faded, prepare_chat_image, white_text_bands,
 )
-from .screen import grab
+from .screen import grab, reading_mark, still_readable
 
 log = logging.getLogger(__name__)
 
@@ -229,8 +229,14 @@ class ChatWatcher:
                     self.on_frame(None)  # saliste de Roblox: se ocultan las traducciones
                     await asyncio.sleep(0.5)
                     continue
+                mark = reading_mark()
+                if mark is None:
+                    await asyncio.sleep(0.05)  # estás sacando una captura: las traducciones se ven en ella
+                    continue
                 watch = Stopwatch()
                 image, fingerprint = await asyncio.to_thread(watch.cpu, _grab_fingerprint, region)
+                if not still_readable(mark):
+                    continue
                 now = time.monotonic()
                 # Si el texto del chat no cambió (mismas letras), no hace falta volver a leerlo. Pero una lectura
                 # incompleta (hay letras que no salieron como mensaje: fondo complicado detrás del chat) se repite cada

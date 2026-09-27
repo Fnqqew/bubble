@@ -111,6 +111,7 @@ class AppearanceConfig:
     subtitle_size: float = 1.0
     subtitle_position: str = "abajo"  # "abajo" | "arriba"
     subtitle_original: bool = True  # mostrar chiquito lo que dijeron en su idioma
+    in_screenshots: bool = True  # las traducciones salen en tus capturas (Impr Pant, Win + Shift + S)
 
 
 @dataclass

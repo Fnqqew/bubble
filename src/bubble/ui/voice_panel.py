@@ -48,6 +48,7 @@ class VoicePanel:
         self.subtitles = SubtitleView()
         self.board = None  # frases a la vista (ver voice/captions.py)
         self._preparing = False
+        self._samples: dict[tuple, object] = {}  # frases de prueba ya dichas
         self.subtitles_var = tk.BooleanVar(value=self.config.subtitles)
         self.speak_var = tk.BooleanVar(value=self.config.speak)
         self.mode_var = tk.StringVar(value=self.config.speak_mode if self.config.speak_mode in MODES else "boton")
@@ -155,6 +156,16 @@ class VoicePanel:
                 part.stop()
         if self._preparing:
             update_state(voice_loading=False)  # cerraste Bubble a mitad de la descarga: no fue un error
+
+    def pause(self) -> None:
+        """Se cerró Roblox o se refrescó: se apaga todo (escucha, tu voz, el micrófono virtual) y se olvida la partida
+        (las voces vuelven a numerarse desde 1). Los modelos quedan cargados: retomar con `start()` es rápido."""
+        for part in (self.listener, self.speaker, self.bridge):
+            if part:
+                part.stop()
+        self.listener = self.speaker = self.bridge = self.out = self.board = None
+        if self.models is not None and self.models[2] is not None:
+            self.models[2].voices.clear()
 
     def _set_status(self, text: str) -> None:
         self.app.events.put(("voice_status", text))
@@ -291,7 +302,7 @@ class VoicePanel:
         save_setting("voice", "gender", self.config.gender)
         if self.voices:
             self.voices.gender = self.config.gender
-        self._try_voice()
+        self._try_voice()  # se escucha cómo suena (y queda cargada)
 
     def _change_speed(self) -> None:
         from .app_view import later
@@ -336,8 +347,32 @@ class VoicePanel:
 
         HotkeyCaptureDialog(self.app.root, done)
 
+    def _sample_language(self) -> str:
+        language = "en"
+        if self.app.ready and self.app.translator is not None:
+            language = self.app.translator.outgoing_target().split("-")[0]
+        return language if self.voices is None or self.voices.voice_for(language) else "en"
+
+    def warm_up(self) -> None:
+        """Deja lista la voz elegida (se llama al abrir la página «Voz» y al cambiar de voz)."""
+
+        def work() -> None:
+            try:
+                from ..voice.tts import Voices
+
+                self.voices = self.voices or Voices()
+                self.voices.gender, self.voices.speed = self.config.gender, self.config.speed
+                language = self._sample_language()
+                if not self.voices.is_loaded(language):
+                    self.voices.prepare(language)
+            except Exception:  # noqa: BLE001 - es solo para que después salga rápido
+                pass
+
+        threading.Thread(target=work, name="bubble-voz-precarga", daemon=True).start()
+
     def _try_voice(self) -> None:
-        """Una frase de prueba en tus auriculares (no le llega a Roblox)."""
+        """Una frase de prueba en tus auriculares (no le llega a Roblox). La frase se guarda: la segunda vez suena al
+        instante."""
 
         def work() -> None:
             try:
@@ -346,10 +381,18 @@ class VoicePanel:
 
                 self.voices = self.voices or Voices()
                 self.voices.gender, self.voices.speed = self.config.gender, self.config.speed
-                language = self.app.translator.outgoing_target().split("-")[0] if self.app.ready else "en"
-                speech = self.voices.synthesize(SAMPLES.get(language, SAMPLES["en"]), language)
+                language = self._sample_language()
+                key = (language, self.config.gender, self.config.speed)
+                speech = self._samples.get(key)
                 if speech is None:
-                    speech = self.voices.synthesize(SAMPLES["en"], "en")
+                    if not self.voices.is_downloaded(language):
+                        self._set_status("Descargando esta voz (una sola vez, ~60 MB)…")
+                    elif not self.voices.is_loaded(language):
+                        self._set_status("Preparando la voz…")
+                    speech = self.voices.synthesize(SAMPLES.get(language, SAMPLES["en"]), language)
+                    if speech is not None:
+                        self._samples[key] = speech
+                    self._set_status("")
                 if speech is not None:
                     audio_io.play(audio_io.monitor_output(), speech.audio, speech.sample_rate)
             except ImportError:

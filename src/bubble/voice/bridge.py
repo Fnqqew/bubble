@@ -33,6 +33,9 @@ VIRTUAL = ("cable", "vb-audio", "voicemeeter")  # dispositivos virtuales: no son
 def _sc():
     import warnings
 
+    from .audio import com_ready
+
+    com_ready()
     import soundcard
 
     warnings.filterwarnings("ignore", message="data discontinuity in recording")
@@ -101,6 +104,9 @@ class MicBridge:
 
     def _run(self) -> None:
         try:
+            from .audio import com_ready
+
+            com_ready()
             cable = cable_input()
             mic = _microphone(self.mic_name)
             with mic.recorder(RATE, channels=1, blocksize=BLOCK * 8) as recorder, \

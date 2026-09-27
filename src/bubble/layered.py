@@ -2,13 +2,15 @@
 
 Permiten bordes redondeados y suaves, sombras y fondos semitransparentes (algo que una ventana de Tk no
 puede), y son más rápidas: mostrar una imagen es una sola llamada a Windows y moverla no la redibuja.
-Además no aparecen en las capturas de pantalla (así el OCR sigue leyendo el chat original de debajo) y
-dejan pasar los clics.
+Además no aparecen en las capturas de pantalla (así el OCR sigue leyendo el chat original de debajo), salvo un
+momento cuando vos sacás una captura (ver screenshots.py), y dejan pasar los clics.
 """
 
 from __future__ import annotations
 
 import ctypes
+import threading
+import weakref
 from ctypes import wintypes
 
 from PIL import Image, ImageChops
@@ -28,7 +30,7 @@ SW_HIDE, SW_SHOWNOACTIVATE = 0, 4
 SWP_NOSIZE, SWP_NOACTIVATE = 0x1, 0x10
 HWND_TOPMOST = HANDLE(-1)
 ULW_ALPHA, AC_SRC_OVER, AC_SRC_ALPHA = 0x2, 0x0, 0x1
-WDA_EXCLUDEFROMCAPTURE = 0x11
+WDA_NONE, WDA_EXCLUDEFROMCAPTURE = 0x0, 0x11
 CLASS_NAME = "BubbleTranslationPatch"
 
 
@@ -72,6 +74,7 @@ user32.DestroyWindow.argtypes = [HANDLE]
 user32.ShowWindow.argtypes = [HANDLE, ctypes.c_int]
 user32.SetWindowPos.argtypes = [HANDLE, HANDLE, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
 user32.SetWindowDisplayAffinity.argtypes = [HANDLE, wintypes.DWORD]
+user32.GetWindowDisplayAffinity.argtypes = [HANDLE, ctypes.POINTER(wintypes.DWORD)]
 user32.GetDC.argtypes = [HANDLE]
 user32.GetDC.restype = HANDLE
 user32.ReleaseDC.argtypes = [HANDLE, HANDLE]
@@ -92,6 +95,26 @@ kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
 kernel32.GetModuleHandleW.restype = HANDLE
 
 _class_registered = False
+_windows: weakref.WeakSet = weakref.WeakSet()
+_windows_lock = threading.Lock()
+_affinity = WDA_EXCLUDEFROMCAPTURE
+
+
+def set_capturable(capturable: bool) -> None:
+    """Con True, todas las traducciones salen en las capturas de pantalla (y el OCR también las vería)."""
+    global _affinity
+    with _windows_lock:
+        _affinity = WDA_NONE if capturable else WDA_EXCLUDEFROMCAPTURE
+        windows = list(_windows)
+    for window in windows:
+        if window.hwnd:
+            user32.SetWindowDisplayAffinity(window.hwnd, _affinity)
+
+
+def capturable(window: "LayeredWindow") -> bool:
+    value = wintypes.DWORD()
+    user32.GetWindowDisplayAffinity(window.hwnd, ctypes.byref(value))
+    return value.value != WDA_EXCLUDEFROMCAPTURE
 # DefWindowProcW nativo como procedimiento de la ventana: no hay código Python por cada mensaje.
 _WNDPROC = WNDPROC(ctypes.cast(user32.DefWindowProcW, ctypes.c_void_p).value)
 
@@ -117,7 +140,7 @@ def to_premultiplied_bgra(image: Image.Image) -> bytes:
 
 
 class LayeredWindow:
-    """Ventana siempre arriba, sin foco, que deja pasar los clics y no sale en capturas."""
+    """Ventana siempre arriba, sin foco, que deja pasar los clics y no sale en capturas (salvo las tuyas)."""
 
     def __init__(self) -> None:
         _register_class()
@@ -126,7 +149,9 @@ class LayeredWindow:
                                            kernel32.GetModuleHandleW(None), None)
         if not self.hwnd:
             raise OSError(f"No se pudo crear la ventana de la traducción ({ctypes.get_last_error()})")
-        user32.SetWindowDisplayAffinity(self.hwnd, WDA_EXCLUDEFROMCAPTURE)
+        with _windows_lock:
+            user32.SetWindowDisplayAffinity(self.hwnd, _affinity)
+            _windows.add(self)
         self.visible = False
         self.position = (0, 0)
         self.size = (0, 0)

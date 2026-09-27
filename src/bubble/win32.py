@@ -102,6 +102,24 @@ def client_rect(hwnd: int) -> Rect:
     return Rect(origin.x, origin.y, rect.right, rect.bottom)
 
 
+def roblox_running() -> bool:
+    """¿Roblox está abierto? (cualquier ventana suya, aunque esté minimizada). Distingue "cerrado" de "minimizado"."""
+    found = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def callback(hwnd, _lparam):
+        if user32.IsWindowVisible(hwnd) or user32.IsIconic(hwnd):
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if _process_name(pid.value).lower() == ROBLOX_PROCESS:
+                found.append(hwnd)
+                return False  # alcanza con una
+        return True
+
+    user32.EnumWindows(callback, 0)
+    return bool(found)
+
+
 def find_roblox_window() -> int | None:
     """La ventana visible más grande de RobloxPlayerBeta.exe (o None si Roblox no está abierto)."""
     found: list[tuple[int, int]] = []
@@ -126,6 +144,16 @@ def is_roblox_window(hwnd: int | None) -> bool:
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return _process_name(pid.value).lower() == ROBLOX_PROCESS
+
+
+def foreground_process() -> str:
+    """El programa de la ventana activa ("snippingtool.exe"), en minúsculas."""
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return ""
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return _process_name(pid.value).lower()
 
 
 def roblox_is_foreground() -> bool:

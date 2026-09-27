@@ -134,6 +134,7 @@ class VoiceSpeaker:
         self.on_event("grabando", "")
         blocks: list[np.ndarray] = []
         try:
+            audio_io.com_ready()
             with self.mic_factory().recorder(samplerate=SAMPLE_RATE, channels=1, blocksize=BLOCK * 4) as recorder:
                 started = time.monotonic()
                 while self._held() and time.monotonic() - started < self.MAX_SECONDS and self.running:

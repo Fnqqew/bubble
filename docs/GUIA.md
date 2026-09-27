@@ -92,6 +92,12 @@ Al abrir aparece un cartelito con el logo y, en un par de segundos, la ventana c
 - Si la traducción es más larga que el original, la burbuja crece en vez de cortar el texto.
 - Se apagan con el interruptor **Burbujas**, en Inicio.
 
+**En tus capturas:** las traducciones salen cuando sacás una captura con **Impr Pant**, **Win + Shift + S** o
+**Win + Impr Pant** (para mandar ejemplos). El resto del tiempo son invisibles para las capturas: así Bubble lee el
+chat original que queda debajo. Mientras sacás la captura deja de leer un momento. La Xbox Game Bar
+(Win + Alt + Impr Pant) y las grabaciones o transmisiones (OBS, Discord) no las muestran. Se apaga en
+**Ajustes → Traducciones en el juego**.
+
 ## Escribir en otro idioma
 
 En el juego apretá el atajo (**°** por defecto) y se abre una barra para escribir:
@@ -222,6 +228,7 @@ Copiá [config.example.toml](../config.example.toml) a `%APPDATA%\Bubble\config.
 | `[voice] mic` | Tu micrófono (vacío = el predeterminado de Windows) |
 | `[appearance] theme` | `oscuro` o `claro` |
 | `[appearance] pill_color`, `accent`, `pill_opacity`, `text_scale` | Cómo se ven las traducciones |
+| `[appearance] in_screenshots` | Que las traducciones salgan en tus capturas |
 
 Casi todo esto se cambia más fácil desde la ventana (Ajustes y Voz).
 

@@ -42,6 +42,11 @@ PERFORMANCE = {"auto": "Automático", "alta": "Máxima", "media": "Equilibrado",
 def build(app: BubbleWindow) -> None:
     root = app.root
     root.configure(background=widgets.palette()["bg"])
+    # Las listas desplegables de solo lectura quedaban con el texto resaltado (seleccionado) al elegir o al tener el
+    # foco: se saca la selección.
+    root.bind_class("TCombobox", "<FocusIn>", lambda event: event.widget.selection_clear(), add="+")
+    root.bind_all("<<ComboboxSelected>>", lambda event: (event.widget.selection_clear(),
+                                                         root.after_idle(root.focus_set)), add="+")
     shell = ttk.Frame(root, padding=(22, 18, 22, 10))
     shell.pack(fill="both", expand=True)
     _header(app, shell)
@@ -89,9 +94,14 @@ def _header(app: BubbleWindow, parent) -> None:
     app.greeting = ttk.Label(texts, text="Preparando todo… dame un segundito.", font="SunValleyCaptionFont",
                              foreground=widgets.palette()["muted"])
     app.greeting.pack(anchor="w")
-    app.state_chip = ttk.Label(head, text="●  Conectando", font="SunValleyCaptionFont",
+    side = ttk.Frame(head)
+    side.pack(side="right", anchor="n")
+    app.state_chip = ttk.Label(side, text="●  Conectando", font="SunValleyCaptionFont",
                                foreground=widgets.palette()["warn"])
-    app.state_chip.pack(side="right", anchor="n", pady=(6, 0))
+    app.state_chip.pack(anchor="e", pady=(2, 4))
+    # Si algo anda raro: reinicia todo el mecanismo sin cerrar Bubble.
+    app.refresh_button = ttk.Button(side, text="↻  Refrescar", command=app._refresh)
+    app.refresh_button.pack(anchor="e")
 
 
 def set_state(app: BubbleWindow, kind: str, greeting: str, chip: str) -> None:
@@ -106,6 +116,8 @@ def _show_page(app: BubbleWindow) -> None:
             page.pack(fill="both", expand=True)
         else:
             page.pack_forget()
+    if app.page_var.get() == "voz":
+        app.voice_panel.warm_up()  # que «Probar voz» (y tu voz traducida) salga enseguida
 
 
 # ---------------------------------------------------------------- Inicio
@@ -177,6 +189,10 @@ def _settings(app: BubbleWindow, page) -> None:
     app.look_preview = ttk.Label(box)
     app.look_preview.pack(anchor="w", pady=(12, 0))
     _render_preview(app)
+    app.shots_var = tk.BooleanVar(value=look.in_screenshots)
+    ttk.Checkbutton(box, text="Que salgan en tus capturas de pantalla", variable=app.shots_var,
+                    style="Switch.TCheckbutton", command=lambda: _change_screenshots(app)).pack(anchor="w", pady=(12, 0))
+    widgets.muted(box, "Con Impr Pant, Win + Shift + S o Win + Impr Pant, para mandar ejemplos.")
 
     box = widgets.card(page, "Subtítulos de voz")
     app.sub_size_var = tk.StringVar(value=_closest(look.subtitle_size, SUB_SIZES))
@@ -253,11 +269,74 @@ def _closest(value: float, options: dict[str, str]) -> str:
 
 
 def _change_theme(app: BubbleWindow) -> None:
+    """Cambia el tema detrás de una "foto" de la ventana y después la desvanece: así el cambio es de una vez y suave
+    (antes se veía cada parte cambiar por separado)."""
+    if app.config.appearance.theme == app.theme_var.get():
+        return
     app.config.appearance.theme = app.theme_var.get()
     save_setting("appearance", "theme", app.config.appearance.theme)
+    cover = _freeze(app.root)
     theme.apply_theme(app.root, app.config.appearance.theme)
     recolor(app)
     _render_preview(app)  # el fondo de la vista previa sigue al tema
+    app.root.update_idletasks()
+    app.root.update()
+    if cover is not None:
+        _fade(cover)
+
+
+def _freeze(root) -> tk.Toplevel | None:
+    """Una ventana sin bordes encima de Bubble con la imagen de cómo se ve ahora."""
+    import ctypes
+    from ctypes import wintypes
+
+    from PIL import Image, ImageTk
+
+    try:
+        root.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(root.winfo_id()) or root.winfo_id()
+        rect = wintypes.RECT()
+        ctypes.windll.user32.GetClientRect(hwnd, ctypes.byref(rect))
+        width, height = rect.right, rect.bottom
+        user32, gdi32 = ctypes.windll.user32, ctypes.windll.gdi32
+        hdc = user32.GetDC(hwnd)
+        memory = gdi32.CreateCompatibleDC(hdc)
+        bitmap = gdi32.CreateCompatibleBitmap(hdc, width, height)
+        gdi32.SelectObject(memory, bitmap)
+        user32.PrintWindow(hwnd, memory, 3)  # solo el interior, con todo dibujado
+        buffer = ctypes.create_string_buffer(width * height * 4)
+
+        class Header(ctypes.Structure):
+            _fields_ = [("size", wintypes.DWORD), ("width", wintypes.LONG), ("height", wintypes.LONG),
+                        ("planes", wintypes.WORD), ("bits", wintypes.WORD), ("compression", wintypes.DWORD),
+                        ("image_size", wintypes.DWORD), ("x", wintypes.LONG), ("y", wintypes.LONG),
+                        ("used", wintypes.DWORD), ("important", wintypes.DWORD)]
+
+        header = Header(ctypes.sizeof(Header), width, -height, 1, 32, 0, 0, 0, 0, 0, 0)
+        gdi32.GetDIBits(memory, bitmap, 0, height, buffer, ctypes.byref(header), 0)
+        gdi32.DeleteObject(bitmap)
+        gdi32.DeleteDC(memory)
+        user32.ReleaseDC(hwnd, hdc)
+        image = Image.frombuffer("RGBA", (width, height), buffer, "raw", "BGRA", 0, 1).convert("RGB")
+        cover = tk.Toplevel(root)
+        cover.overrideredirect(True)
+        cover.transient(root)
+        cover.geometry(f"{width}x{height}+{root.winfo_rootx()}+{root.winfo_rooty()}")
+        cover._image = ImageTk.PhotoImage(image)
+        tk.Label(cover, image=cover._image, borderwidth=0).pack()
+        cover.lift()
+        cover.update()
+        return cover
+    except Exception:  # noqa: BLE001 - sin foto, el tema cambia igual
+        return None
+
+
+def _fade(cover: tk.Toplevel, step: int = 0, steps: int = 12) -> None:
+    if step >= steps:
+        cover.destroy()
+        return
+    cover.attributes("-alpha", 1 - (step + 1) / steps)
+    cover.after(16, lambda: _fade(cover, step + 1, steps))
 
 
 def recolor(app: BubbleWindow) -> None:
@@ -337,6 +416,12 @@ def _change_subtitles(app: BubbleWindow) -> None:
     for key in ("subtitle_size", "subtitle_position", "subtitle_original"):
         save_setting("appearance", key, getattr(look, key))
     apply_overlay_style(app)
+
+
+def _change_screenshots(app: BubbleWindow) -> None:
+    app.config.appearance.in_screenshots = bool(app.shots_var.get())
+    save_setting("appearance", "in_screenshots", app.config.appearance.in_screenshots)
+    app._start_screenshots()
 
 
 def _change_performance(app: BubbleWindow) -> None:

@@ -255,7 +255,10 @@ def test_bridge_passes_your_voice_and_lowers_it_while_the_translation_plays(monk
     monkeypatch.setattr(bridge, "_microphone", lambda name: mic)
     loop = bridge.MicBridge(duck=0.2)
     assert loop.start()
-    time.sleep(0.1)
+    for _ in range(100):  # la primera vez carga el audio de Windows
+        if len(player.blocks) >= 3:
+            break
+        time.sleep(0.03)
     assert player.blocks and max(player.blocks[-3:]) == 0.5  # tu voz pasa tal cual
     loop.duck(0.3)
     time.sleep(0.1)
@@ -279,7 +282,7 @@ def test_voices_have_both_genders_where_piper_has_them():
 
     voices = Voices.__new__(Voices)
     voices._catalog = {name: {} for pair in CURATED.values() for name in pair if name}
-    assert voices.voice_for("en", "masculina") == "en_US-ryan-high"
+    assert voices.voice_for("en", "masculina") == "en_US-ryan-medium"
     assert voices.voice_for("es-AR", "femenina") == "es_AR-daniela-high"
     assert voices.voice_for("pt", "femenina") == "pt_BR-faber-medium"  # sin voz femenina: la otra
     assert all(voices.voice_for(code) is None for code in NO_VOICE)
