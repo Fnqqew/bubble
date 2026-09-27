@@ -100,13 +100,15 @@ class Translator:
         target_lang: str | None = None,
         on_delta: DeltaCallback | None = None,
         tone: int | None = None,
+        spoken: bool = False,
     ) -> TranslationResult:
+        """`spoken`: se va a decir en voz (sin abreviaturas de chat, en la escritura del idioma)."""
         target = target_lang or self.outgoing_target()
         lang, region = split_locale(target)
         if "-" not in target:
             region = self.outgoing_region(lang)
         tone = clamp_tone(tone if tone is not None else self.config.user.tone)
-        return await self._translate(text, lang, region, "outgoing", MY_SPEAKER, on_delta, tone)
+        return await self._translate(text, lang, region, "outgoing", MY_SPEAKER, on_delta, tone, spoken=spoken)
 
     async def _translate(
         self,
@@ -118,6 +120,7 @@ class Translator:
         on_delta: DeltaCallback | None,
         tone: int = 3,
         on_pending: Callable[[], None] | None = None,
+        spoken: bool = False,
     ) -> TranslationResult:
         start = time.perf_counter()
         text = text.strip()
@@ -165,14 +168,14 @@ class Translator:
                 self.history.append(ChatLine(speaker, text))
                 return result(text, "same_language", source)
 
-        cache_key = f"{target}-{region}:{mode}:{direction}:{tone if direction == 'outgoing' else ''}"
+        cache_key = f"{target}-{region}:{mode}:{direction}:{tone if direction == 'outgoing' else ''}:{spoken}"
         if (cached := self.cache.get(text, cache_key)) is not None:
             self.history.append(ChatLine(speaker, text))
             return result(cached, "cache", source)
 
         request = TranslationRequest(
             text, target, direction, speaker, tuple(self.history),
-            target_region=region, mode=mode, slang_hints=_hint_tuples(hints), tone=tone,
+            target_region=region, mode=mode, slang_hints=_hint_tuples(hints), tone=tone, spoken=spoken,
         )
         # Se agrega al contexto ya (no al terminar) para que el siguiente mensaje del chat lo tenga en cuenta.
         self.history.append(ChatLine(speaker, text))

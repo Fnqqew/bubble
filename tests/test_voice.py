@@ -215,3 +215,71 @@ def test_direct_voice_translates_each_phrase_early_and_in_order(monkeypatch):
     assert asked == ["dale, esperame en la torre", "ya voy"]  # la primera se pidió en la pausa, una sola vez
     assert [text for kind, text in events if kind == "traduccion"] == ["EN: dale, esperame en la torre", "EN: ya voy"]
     assert direct.listener.language == "es"  # tu idioma ya se sabe: no se detecta
+
+
+# ---------------------------------------------------------------- micrófono virtual (como Soundpad)
+class _FakeRecorder:
+    def __init__(self, level):
+        self.level = level
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def record(self, numframes):
+        import time
+
+        time.sleep(0.002)
+        return np.full((numframes, 1), self.level, dtype=np.float32)
+
+
+class _FakePlayer(_FakeRecorder):
+    def __init__(self):
+        self.blocks = []
+
+    def play(self, block):
+        self.blocks.append(float(np.abs(block).max()))
+
+
+def test_bridge_passes_your_voice_and_lowers_it_while_the_translation_plays(monkeypatch):
+    import time
+
+    from bubble.voice import bridge
+
+    player = _FakePlayer()
+    cable = type("Cable", (), {"player": lambda self, *a, **k: player})()
+    mic = type("Mic", (), {"recorder": lambda self, *a, **k: _FakeRecorder(0.5)})()
+    monkeypatch.setattr(bridge, "cable_input", lambda: cable)
+    monkeypatch.setattr(bridge, "_microphone", lambda name: mic)
+    loop = bridge.MicBridge(duck=0.2)
+    assert loop.start()
+    time.sleep(0.1)
+    assert player.blocks and max(player.blocks[-3:]) == 0.5  # tu voz pasa tal cual
+    loop.duck(0.3)
+    time.sleep(0.1)
+    assert abs(player.blocks[-1] - 0.1) < 1e-6  # mientras suena la traducida, baja
+    loop.enabled = False
+    time.sleep(0.1)
+    assert player.blocks[-1] == 0.0  # "pasar mi voz real" apagado: solo la traducida
+    loop.stop()
+
+
+def test_bridge_does_not_start_without_a_virtual_microphone(monkeypatch):
+    from bubble.voice import bridge
+
+    monkeypatch.setattr(bridge, "cable_input", lambda: None)
+    loop = bridge.MicBridge()
+    assert not loop.start() and "virtual" in loop.error
+
+
+def test_voices_have_both_genders_where_piper_has_them():
+    from bubble.voice.tts import CURATED, NO_VOICE, Voices
+
+    voices = Voices.__new__(Voices)
+    voices._catalog = {name: {} for pair in CURATED.values() for name in pair if name}
+    assert voices.voice_for("en", "masculina") == "en_US-ryan-high"
+    assert voices.voice_for("es-AR", "femenina") == "es_AR-daniela-high"
+    assert voices.voice_for("pt", "femenina") == "pt_BR-faber-medium"  # sin voz femenina: la otra
+    assert all(voices.voice_for(code) is None for code in NO_VOICE)

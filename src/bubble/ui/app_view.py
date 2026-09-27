@@ -69,7 +69,7 @@ def build(app: BubbleWindow) -> None:
     footer = ttk.Frame(shell)
     footer.pack(fill="x", side="bottom", pady=(8, 0))
     app.status = ttk.Label(footer, text="", font="SunValleyCaptionFont", foreground=widgets.palette()["muted"],
-                           anchor="w")
+                           anchor="w", wraplength=540, justify="left")
     app.status.pack(fill="x")
     _show_page(app)
 
@@ -170,7 +170,7 @@ def _settings(app: BubbleWindow, page) -> None:
     app.opacity_var = tk.DoubleVar(value=look.pill_opacity)
     row = widgets.label_row(box, "Opacidad")
     ttk.Scale(row, from_=0.7, to=1.0, variable=app.opacity_var, length=180,
-              command=lambda _v: _change_look(app, redraw_preview=True)).pack(side="right")
+              command=lambda _v: later(app, "look", lambda: _change_look(app))).pack(side="right")
     app.text_var = tk.StringVar(value=_closest(look.text_scale, TEXT_SIZES))
     row = widgets.label_row(box, "Letra")
     _option_menu(row, app.text_var, TEXT_SIZES, lambda: _change_look(app))
@@ -225,6 +225,14 @@ def _settings(app: BubbleWindow, page) -> None:
               foreground=widgets.palette()["faint"]).pack(side="right")
 
 
+def later(app: BubbleWindow, name: str, action, delay_ms: int = 250) -> None:
+    """Hace `action` cuando se deja de mover un deslizador (si no, se guardaba el ajuste en cada píxel)."""
+    jobs = app.__dict__.setdefault("_later_jobs", {})
+    if name in jobs:
+        app.root.after_cancel(jobs[name])
+    jobs[name] = app.root.after(delay_ms, lambda: (jobs.pop(name, None), action()))
+
+
 def _option_menu(parent, variable: tk.StringVar, options: dict[str, str], command) -> ttk.Combobox:
     """Lista desplegable que muestra nombres lindos y guarda el valor."""
     box = ttk.Combobox(parent, values=list(options.values()), state="readonly", width=16)
@@ -249,6 +257,7 @@ def _change_theme(app: BubbleWindow) -> None:
     save_setting("appearance", "theme", app.config.appearance.theme)
     theme.apply_theme(app.root, app.config.appearance.theme)
     recolor(app)
+    _render_preview(app)  # el fondo de la vista previa sigue al tema
 
 
 def recolor(app: BubbleWindow) -> None:

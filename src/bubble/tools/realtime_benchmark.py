@@ -12,7 +12,6 @@ from __future__ import annotations
 import ctypes
 import json
 import os
-import statistics
 import subprocess
 import sys
 import time
@@ -260,7 +259,7 @@ def run_app(log_path: Path, max_seconds: float, sends: bool = False, detect: boo
                 fake["focused"] = focused
                 write("focus", active=focused)
         elif fake["seen"] and not hwnd or time.time() - started > max_seconds:
-            provider = app.translator.router.providers[0]
+            provider = app.translator.router.providers[0] if app.translator else None
             usage = getattr(provider, "usage", None)
             chat_pacer = app.watcher.pacer if app.watcher else None
             bubble_pacer = app.bubble_watcher.pacer if app.bubble_watcher else None

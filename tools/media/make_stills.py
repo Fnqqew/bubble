@@ -71,14 +71,19 @@ def card_corners(image: Image.Image, radius: int) -> Image.Image:
 
 # ------------------------------------------------------------------ la ventana
 def interface() -> None:
-    raw = Image.open(SCRATCH / "main_raw.png")
-    window = rounded(raw.crop((9, 0, raw.width - 9, raw.height - 9)), 8)  # sin los bordes invisibles de Windows
-    margin_x, margin_top, margin_bottom = 70, 60, 80
-    w, h = window.width + 2 * margin_x, window.height + margin_top + margin_bottom
-    canvas = glow_backdrop(w, h, [(int(w * 0.18), int(h * 0.2), 330, (60, 110, 230, 150)),
-                                  (int(w * 0.86), int(h * 0.82), 360, (140, 80, 220, 120)),
-                                  (int(w * 0.7), int(h * 0.1), 220, (40, 170, 200, 70))])
-    drop(canvas, window, margin_x, margin_top, 9, blur=34, offset=20, strength=190)
+    """Dos páginas de la ventana, una delante de la otra (Inicio adelante, Ajustes atrás)."""
+    front_raw = Image.open(SCRATCH / "page_oscuro_inicio.png")
+    back_raw = Image.open(SCRATCH / "page_oscuro_ajustes.png")
+    crop = lambda im: rounded(im.crop((9, 0, im.width - 9, im.height - 9)), 8)  # noqa: E731 - sin bordes invisibles
+    front, back = crop(front_raw), crop(back_raw)
+    scale = 0.9
+    back = back.resize((int(back.width * scale), int(back.height * scale)), Image.Resampling.LANCZOS)
+    w, h = front.width + back.width - 120 + 140, front.height + 120
+    canvas = glow_backdrop(w, h, [(int(w * 0.2), int(h * 0.25), 360, (60, 110, 230, 150)),
+                                  (int(w * 0.85), int(h * 0.8), 380, (140, 80, 220, 120)),
+                                  (int(w * 0.6), int(h * 0.1), 240, (40, 170, 200, 70))])
+    drop(canvas, back, w - back.width - 70, 90, 8, blur=30, offset=18, strength=170)
+    drop(canvas, front, 70, 50, 8, blur=36, offset=22, strength=200)
     card_corners(canvas, 18).save(OUT / "interfaz.png", optimize=True)
 
 

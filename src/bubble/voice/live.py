@@ -207,7 +207,6 @@ class LiveListener:
 
     def _append(self, frame: np.ndarray, prob: float | None) -> None:
         s = self.settings
-        position = self._samples
         self._samples += len(frame)
         with self._lock:
             current = self._current

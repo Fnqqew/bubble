@@ -18,8 +18,11 @@ def test_tutorial_steps_use_hotkey_and_actions():
     steps = build_steps("F8", lambda: calls.append("calibrar"), lambda: calls.append("captura"))
     assert any("F8" in s.title for s in steps)
     actions = [s for s in steps if s.action]
-    assert [s.action_label for s in actions] == ["Detectar ahora", "Probar captura ahora"]
+    assert [s.action_label for s in actions] == ["Buscar el chat ahora"]
     for s in actions:
         s.action()
-    assert calls == ["calibrar", "captura"]
+    assert calls == ["calibrar"]
+    # Nombra lo que existe en la ventana nueva (no botones viejos).
+    text = " ".join(s.title + s.body for s in steps)
+    assert "Probar captura" not in text and "Tono al enviar" not in text and "Ctrl+Enter" in text
 

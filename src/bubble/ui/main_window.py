@@ -8,9 +8,7 @@ import os
 import queue
 import threading
 import tkinter as tk
-from dataclasses import replace
 from pathlib import Path
-from tkinter import ttk
 
 from .. import roblox, shortcut, win32
 from ..async_runner import AsyncRunner
@@ -26,7 +24,7 @@ from ..config import Config, save_setting
 from ..geometry import Rect
 from ..performance import detect_hardware
 from ..translate import build_translator
-from ..translate.base import TONE_NAMES, ChatLine, TranslationResult, clamp_tone
+from ..translate.base import TONE_NAMES, ChatLine, TranslationResult
 from ..translate.languages import LOCALE_CHOICES
 from ..state import load_state, update_state
 from .inline import BubbleView, Entry, InlineChatView
@@ -596,10 +594,23 @@ class BubbleWindow:
         messages, own, pairs = self._compose_results[key]
         self.compose.close(sent=True)
         if self._send_as_voice:
-            # Escrito a voz: la traducción se dice con la voz sintética (la escucha quien tengas cerca en el juego).
-            self.voice_panel.say(pairs, key[0])
+            # Escrito a voz: se pide la versión para decir (sin "vc", "kkkk"…, que la voz leería letra por letra) y se
+            # dice con la voz sintética.
             if self.roblox_hwnd:
                 win32.force_foreground(self.roblox_hwnd)  # volver al juego
+
+            async def speak() -> None:
+                spoken = []
+                for language, text in pairs:
+                    try:
+                        result = await self.translator.translate_outgoing(key[0], language, tone=key[2], spoken=True)
+                        ok = result.status != "error" and result.translation.strip()
+                        spoken.append((result.target_lang or language, result.translation if ok else text))
+                    except Exception:  # noqa: BLE001 - se dice la traducción del chat, que ya estaba
+                        spoken.append((language, text))
+                self.voice_panel.say(spoken, key[0])
+
+            self.runner.submit(speak())
             return
         for text in own:
             self.tracker.mark_sent(text)  # que tu propio mensaje no se traduzca al aparecer en el chat
@@ -739,7 +750,7 @@ class BubbleWindow:
         self._refresh_header()
         self.voice_panel.start()
 
-    # --- voz (beta)
+    # --- voz
     def _ev_voice_status(self, text: str) -> None:
         if self.voice_panel.status is not None:
             self.voice_panel.status.configure(text=text)

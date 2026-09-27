@@ -7,13 +7,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-BG = "#ffffff"
-TEXT = "#1f2328"
-MUTED = "#6b7280"
-ACCENT = "#2f6fed"
-ACCENT_HOVER = "#1f56c9"
-DOT_OFF = "#d6dae1"
-WIDTH, HEIGHT = 680, 470
+WIDTH, HEIGHT = 640, 440
+
+
+def _colors() -> dict[str, str]:
+    """Los colores del tema elegido (oscuro o claro), para que combine con la ventana."""
+    from .widgets import palette
+
+    colors = palette()
+    dark = colors["bg"] == "#1c1c1c"
+    return {"bg": colors["bg"], "text": colors["text"], "muted": colors["muted"], "accent": colors["accent"],
+            "accent_hover": "#3d8fe6" if dark else "#004a8f", "dot_off": "#3a3d42" if dark else "#d6dae1",
+            "button": "#2d2f33" if dark else "#eef1f6", "button_hover": "#3a3d42" if dark else "#dfe4ec",
+            "on_accent": "#0b1a2a" if dark else "#ffffff"}
 
 
 @dataclass(frozen=True)
@@ -25,94 +31,63 @@ class Step:
     action: Callable[[], None] | None = None
 
 
-def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callable[[], None]) -> list[Step]:
+def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callable[[], None] | None = None
+                ) -> list[Step]:
     return [
         Step(
-            "¡Bienvenido a Bubble!",
-            "Bubble traduce en tiempo real el chat de Roblox:\n\n"
-            "• Lo que escriben los demás aparece traducido al lado del chat.\n"
-            "• Lo que escribís vos se envía traducido.\n\n"
-            "Usa tu suscripción de Claude, así que no hace falta configurar claves. "
-            "Mirá la barra de abajo de la ventana: cuando diga «Listo», ya está conectado.",
+            "¡Hola! Soy Bubble",
+            "Traduzco Roblox mientras jugás: el chat, lo que dicen sobre la cabeza de los jugadores y hasta la voz.\n\n"
+            "Uso tu suscripción de Claude, así que no tenés que configurar nada. Cuando arriba diga «Listo», "
+            "estamos.",
         ),
         Step(
-            "Tu idioma y el de ellos",
-            "«Tu idioma» ya viene con el de tu Windows, incluida tu variante (por ejemplo, Argentina). "
-            "Todo lo que te llega se traduce a cómo hablás vos, con tu jerga.\n\n"
-            "«Enviar en» en «auto» elige solo el idioma que más se usa en el chat.",
-        ),
-        Step(
-            "¿Qué tan informal querés sonar?",
-            "En «Tono al enviar» elegís del 1 al 5:\n\n"
-            "1 · Neutro / formal: claro y sin jerga, el que menos confusiones genera.\n"
-            "3 · Casual: relajado, con jerga muy conocida.\n"
-            "5 · Jerga nativa: como escribe un gamer de ese país.\n\n"
-            "Solo cambia cómo se dice, nunca qué se dice.",
-        ),
-        Step(
-            "Abrí Roblox",
-            "Entrá a cualquier juego. En el panel de Bubble tiene que aparecer «Roblox detectado».\n\n"
-            "Roblox tiene que quedar visible (no minimizado ni tapado por otra ventana), "
-            "porque Bubble lee el chat de la pantalla.",
+            "Contame cómo hablás",
+            "En Inicio, «Hablo» ya viene con el idioma de tu Windows, con tu variante (argentino, mexicano…). "
+            "Todo lo que te llegue te lo cuento así, con tu jerga.",
         ),
         Step(
             "Apagá la traducción de Roblox",
-            "Roblox tiene su propia traducción automática del chat. Apagala: si no, Bubble lee mensajes ya "
-            "traducidos por Roblox (con menos precisión) y se pierde la jerga original.\n\n"
-            "1. Dentro del juego apretá Esc (o tocá el menú arriba a la izquierda).\n"
-            "2. Entrá a la pestaña «Configuración» (Settings).\n"
-            "3. Desactivá «Traducción automática del chat» (Automatic Chat Translation).\n\n"
-            "Se hace una vez, pero revisalo si ves mensajes traducidos por Roblox: a veces vuelve a activarse.",
+            "Roblox trae su propia traducción automática del chat. Apagala: si no, leo mensajes ya traducidos por "
+            "Roblox y se pierde lo que dijeron de verdad.\n\n"
+            "1. En el juego apretá Esc.\n"
+            "2. Entrá a «Configuración» (Settings).\n"
+            "3. Desactivá «Traducción automática del chat».",
         ),
         Step(
-            "Bubble encuentra el chat solo",
-            "Cada juego puede poner el chat en otro lugar. Con Roblox abierto y un par de mensajes a la vista, Bubble "
-            "lo busca solo. Si cambiás de juego y el chat está en otro lado, tocá «Detectar chat».\n\n"
-            "Si no lo encuentra, tocá «a mano…» y arrastrá un rectángulo sobre los mensajes. Queda guardado aunque "
-            "muevas la ventana de Roblox.",
-            "Detectar ahora",
+            "Abrí un juego",
+            "Entrá a cualquier juego y dejalo a la vista (leo el chat de la pantalla). Apenas haya un par de "
+            "mensajes, lo encuentro solo.\n\n"
+            "Si en algún juego no lo encuentro, en Ajustes tenés «Buscar el chat» o «Marcarlo a mano».",
+            "Buscar el chat ahora",
             calibrate,
         ),
         Step(
-            "Comprobá que lo lee bien",
-            "«Probar captura» muestra en el registro lo que leyó y qué mensajes reconoció.\n\n"
-            "Si no reconoce nada, tocá «Detectar chat» de nuevo o marcalo «a mano…» un poco más grande.",
-            "Probar captura ahora",
-            capture_test,
+            "Leé en tu idioma",
+            "Cada mensaje en otro idioma aparece traducido encima del original, y el nombre de quien lo escribió "
+            "queda a la vista. Lo que ya está en tu idioma no lo toco.\n\n"
+            "Las burbujas sobre la cabeza de los jugadores también se traducen, y siguen a la cámara.",
         ),
         Step(
-            "Leé el chat traducido",
-            "Cada mensaje en otro idioma se traduce encima de sí mismo: el original queda borroso debajo y el "
-            "nombre del jugador sigue visible. Mientras se traduce vas a ver «• • •» en su lugar.\n\n"
-            "Las burbujas de texto sobre la cabeza de los jugadores también se traducen (se puede apagar).\n\n"
-            "Si cerrás el chat de Roblox, deja de traducir; al abrirlo, sigue donde estaba.",
+            f"Escribí con {hotkey}",
+            f"En el juego apretá {hotkey}: se abre una barra. Escribí como hablás y mirá cómo va a quedar.\n\n"
+            "• Enter lo manda traducido al chat.\n"
+            "• Ctrl+Enter lo dice en voz.\n"
+            "• Tab cambia el idioma, ↑ ↓ el tono y Esc cierra.\n\n"
+            "Si tu tecla lleva Shift (como «°»), apretala sola: el Shift mueve la cámara en Roblox.",
         ),
         Step(
-            f"Escribí en tu idioma con {hotkey}",
-            f"En el juego, apretá {hotkey} y se abre una barra para escribir. Escribí como hablás vos: mientras "
-            "escribís ves cómo va a quedar la traducción.\n\n"
-            "• Enter: lo traduce y lo manda al chat de Roblox (Bubble solo abre el chat, escribe y envía).\n"
-            "• Tab cambia el idioma  ·  ↑ ↓ cambian el tono  ·  Esc cierra.\n\n"
-            "Si tu atajo lleva Shift (como «°»), apretá la misma tecla sola: el Shift le llega a Roblox y "
-            "mueve la cámara (Shift Lock).\n"
-            "¿Preferís otra tecla o un botón del mouse? Tocá «Cambiar…» al lado del atajo.",
+            "La voz",
+            "En la página «Voz»:\n\n"
+            "• Subtítulos: ves quién habla (Voz 1, Voz 2…) y qué dice, en tu idioma.\n"
+            "• Tu voz para los demás: hablás en tu idioma y te escuchan en el suyo, con un botón o en modo directo.\n\n"
+            "Para que te escuchen, Bubble habla por un micrófono virtual (como Soundpad). Se instala en un clic "
+            "desde ahí mismo.",
         ),
         Step(
-            "Nuevo: la voz (beta)",
-            "En la sección «Voz · beta»:\n\n"
-            "• Subtítulos: lo que te dicen por el chat de voz aparece traducido abajo, en el centro del juego.\n"
-            "• Tu voz: mantené apretado el botón lateral del mouse, hablá y soltalo. Los demás te escuchan en su "
-            "idioma.\n\n"
-            "Para que te escuchen hace falta el micrófono virtual VB-Audio Virtual Cable (gratis) y, en Roblox, "
-            "elegir «CABLE Output» como micrófono. Todo el audio se procesa en tu PC.",
-        ),
-        Step(
-            "Últimos consejos",
-            "• Poné tu nombre de Roblox en la configuración ([roblox] username) para que tus propios "
-            "mensajes no se traduzcan.\n"
-            "• Si «/» no abre el chat con tu teclado, cambiá open_chat_key.\n"
-            "• La configuración está en %APPDATA%\\Bubble\\config.toml.\n"
-            "• Podés volver a ver esta guía con el botón «Tutorial».",
+            "Hacelo tuyo",
+            "En Ajustes elegís el tema (oscuro o claro), el color y el tamaño de las traducciones, dónde van los "
+            "subtítulos y qué tan informal querés sonar al escribir.\n\n"
+            "Podés volver a ver esta guía cuando quieras, desde Ajustes → «Ver el tutorial». ¡A jugar!",
         ),
     ]
 
@@ -128,7 +103,8 @@ class TutorialWindow:
         self.steps = steps
         self.on_close = on_close
         self.index = 0
-        self.win = tk.Toplevel(root, bg=BG)
+        self.c = _colors()
+        self.win = tk.Toplevel(root, bg=self.c["bg"])
         self.win.title("Tutorial de Bubble")
         self.win.resizable(False, False)
         self.win.transient(root)
@@ -148,32 +124,32 @@ class TutorialWindow:
 
     # ---------- interfaz ----------
     def _build(self) -> None:
-        header = tk.Frame(self.win, bg=BG)
+        header = tk.Frame(self.win, bg=self.c["bg"])
         header.pack(fill="x", padx=24, pady=(20, 4))
         if self._icon:
-            tk.Label(header, image=self._icon, bg=BG).pack(side="left", padx=(0, 12))
+            tk.Label(header, image=self._icon, bg=self.c["bg"]).pack(side="left", padx=(0, 12))
         # El contador se empaqueta antes que los títulos para que un título largo no lo empuje afuera.
-        self.counter = tk.Label(header, font=("Segoe UI", 9), fg=MUTED, bg=BG)
+        self.counter = tk.Label(header, font=("Segoe UI", 9), fg=self.c["muted"], bg=self.c["bg"])
         self.counter.pack(side="right", anchor="n")
-        titles = tk.Frame(header, bg=BG)
+        titles = tk.Frame(header, bg=self.c["bg"])
         titles.pack(side="left", fill="x", expand=True)
-        tk.Label(titles, text="Tutorial de Bubble", font=("Segoe UI", 10), fg=MUTED, bg=BG).pack(anchor="w")
+        tk.Label(titles, text="Tutorial de Bubble", font=("Segoe UI", 10), fg=self.c["muted"], bg=self.c["bg"]).pack(anchor="w")
         self.title = tk.Label(
-            titles, font=("Segoe UI", 17, "bold"), fg=TEXT, bg=BG, anchor="w", justify="left", wraplength=WIDTH - 200
+            titles, font=("Segoe UI", 17, "bold"), fg=self.c["text"], bg=self.c["bg"], anchor="w", justify="left", wraplength=WIDTH - 200
         )
         self.title.pack(anchor="w", fill="x")
 
         self.body = tk.Label(
-            self.win, font=("Segoe UI", 11), fg=TEXT, bg=BG, justify="left", anchor="nw", wraplength=WIDTH - 80
+            self.win, font=("Segoe UI", 11), fg=self.c["text"], bg=self.c["bg"], justify="left", anchor="nw", wraplength=WIDTH - 80
         )
         self.body.pack(fill="both", expand=True, padx=24, pady=(10, 6))
 
         self.action_button = self._button(self.win, "", self._run_action, primary=False)
 
-        self.dots = tk.Canvas(self.win, height=14, bg=BG, highlightthickness=0)
+        self.dots = tk.Canvas(self.win, height=14, bg=self.c["bg"], highlightthickness=0)
         self.dots.pack(fill="x", padx=24, pady=(4, 8))
 
-        bottom = tk.Frame(self.win, bg=BG)
+        bottom = tk.Frame(self.win, bg=self.c["bg"])
         bottom.pack(fill="x", padx=24, pady=(0, 18))
         self._link(bottom, "No mostrar más", lambda: self._close("no_mostrar")).pack(side="left")
         self._link(bottom, "Saltar tutorial", lambda: self._close("saltado")).pack(side="left", padx=(16, 0))
@@ -185,7 +161,9 @@ class TutorialWindow:
         self.back_button.pack(side="right", padx=(0, 8))
 
     def _button(self, parent, text: str, command, primary: bool) -> tk.Button:
-        colors = (ACCENT, "#ffffff", ACCENT_HOVER) if primary else ("#eef1f6", TEXT, "#dfe4ec")
+        c = self.c
+        colors = ((c["accent"], c["on_accent"], c["accent_hover"]) if primary
+                  else (c["button"], c["text"], c["button_hover"]))
         button = tk.Button(
             parent, text=text, command=command, font=("Segoe UI", 10, "bold" if primary else "normal"),
             bg=colors[0], fg=colors[1], activebackground=colors[2], activeforeground=colors[1],
@@ -196,7 +174,7 @@ class TutorialWindow:
         return button
 
     def _link(self, parent, text: str, command) -> tk.Label:
-        link = tk.Label(parent, text=text, font=("Segoe UI", 9, "underline"), fg=MUTED, bg=BG, cursor="hand2")
+        link = tk.Label(parent, text=text, font=("Segoe UI", 9, "underline"), fg=self.c["muted"], bg=self.c["bg"], cursor="hand2")
         link.bind("<Button-1>", lambda _e: command())
         return link
 
@@ -216,7 +194,7 @@ class TutorialWindow:
         start = (WIDTH - 48 - spacing * (total - 1)) // 2
         for i in range(total):
             x = start + i * spacing
-            color = ACCENT if i == self.index else DOT_OFF
+            color = self.c["accent"] if i == self.index else self.c["dot_off"]
             radius = 5 if i == self.index else 4
             self.dots.create_oval(x - radius, 7 - radius, x + radius, 7 + radius, fill=color, outline="")
 

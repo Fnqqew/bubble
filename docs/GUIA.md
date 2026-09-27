@@ -1,13 +1,14 @@
-# Guía de Bubble 1.0
+# Guía de Bubble 2.0
 
 Todo lo que no entra en la portada: instalación paso a paso, cómo se usa cada parte, la configuración y cómo está
 hecho por dentro.
 
 - [Instalación](#instalación)
 - [Primer uso](#primer-uso)
+- [La ventana](#la-ventana)
 - [Leer el chat y las burbujas](#leer-el-chat-y-las-burbujas)
 - [Escribir en otro idioma](#escribir-en-otro-idioma)
-- [Voz (beta 2.0)](#voz-beta-20)
+- [Voz](#voz)
 - [Jerga, dialectos y tono](#jerga-dialectos-y-tono)
 - [Configuración](#configuración)
 - [Cómo está hecho](#cómo-está-hecho)
@@ -27,25 +28,47 @@ hecho por dentro.
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.venv\Scripts\python.exe -m pip install -e ".[voz]"
 ```
+
+`[voz]` suma la voz (subtítulos y tu voz traducida). Sin eso, Bubble traduce el chat, las burbujas y lo que
+escribís; para correr los tests, `".[voz,dev]"`.
 
 Para abrirlo: `Iniciar.bat`, o el acceso directo **Bubble** que se crea solo en el escritorio.
 
 ## Primer uso
 
-La primera vez aparece un tutorial corto. Se puede saltar, y se reabre con el botón **Tutorial**.
+La primera vez aparece un tutorial corto. Se puede saltar, y se reabre desde **Ajustes → Ver el tutorial**.
 
-1. Abrí Bubble y esperá a que diga **Listo**.
-2. Abrí Roblox en ventana o en pantalla completa. La ventana de Bubble tiene que decir **Roblox detectado**.
+1. Abrí Bubble. Arriba dice **Listo** cuando ya está conectado con tu suscripción de Claude (unos segundos).
+2. Abrí Roblox, en ventana o en pantalla completa.
 3. **Apagá la traducción automática de Roblox.** Si no, Bubble lee mensajes ya traducidos por Roblox y se pierde la
    jerga original. Adentro del juego: **Esc** → **Configuración** → desactivá **Traducción automática del chat**.
-4. **El chat se encuentra solo.** Con un par de mensajes a la vista, Bubble ubica el chat del juego. Si cambiás de
-   juego y el chat está en otro lugar, tocá **Detectar chat**. Si aun así no lo encuentra, tocá **a mano…** y
-   arrastrá un rectángulo sobre los mensajes.
-5. **Probar captura** muestra lo que leyó y qué mensajes reconoció. Guarda imágenes en
-   `%LOCALAPPDATA%\Bubble\debug`, entre ellas una vista con las traducciones encima. Las traducciones no salen en
-   las capturas de pantalla a propósito: así Bubble no se lee a sí mismo.
+4. **El chat se encuentra solo.** Con un par de mensajes a la vista, Bubble ubica el chat del juego. Si en algún
+   juego no lo encuentra: **Ajustes → Buscar el chat**, o **Marcarlo a mano** (arrastrás un rectángulo sobre los
+   mensajes).
+5. **Ajustes → Probar lectura** muestra en **Actividad** lo que leyó y qué mensajes reconoció, y guarda imágenes en
+   `%LOCALAPPDATA%\Bubble\debug` (entre ellas una vista con las traducciones encima: las traducciones no salen en
+   las capturas de pantalla, a propósito, así Bubble no se lee a sí mismo).
+
+## La ventana
+
+Cuatro páginas, arriba:
+
+- **Inicio:** en qué idioma hablás y cuatro interruptores: el chat, las burbujas, lo que te dicen por voz y tu voz
+  para los demás. Y la tecla para escribir.
+- **Voz:** cómo se traduce tu voz (con botón o directo), cómo suena (femenina o masculina, velocidad) y el
+  micrófono.
+- **Ajustes:** todo lo personalizable:
+  - el tema de la ventana (oscuro o claro);
+  - cómo se ven las traducciones en el juego: el fondo (grafito, medianoche, violeta, bosque o negro), el detalle de
+    color, la opacidad y el tamaño de la letra, con una vista previa;
+  - los subtítulos de voz: tamaño, arriba o abajo, y si se ve lo que dijeron en su idioma;
+  - al escribir: en qué idioma mandar y con qué tono;
+  - el chat de Roblox (buscarlo, marcarlo a mano, probar la lectura) y el rendimiento.
+- **Actividad:** todo lo que se fue traduciendo, y un lugar para probar sin Roblox.
+
+Al abrir aparece un cartelito con el logo y, en un par de segundos, la ventana completa.
 
 ## Leer el chat y las burbujas
 
@@ -53,7 +76,9 @@ La primera vez aparece un tutorial corto. Se puede saltar, y se reabre con el bo
 
 - Cada mensaje en otro idioma se traduce **encima de sí mismo**. El nombre del jugador queda visible, y los
   mensajes en tu idioma quedan como están.
-- Mientras se traduce, el mensaje queda "seleccionado" con el original en gris.
+- La traducción aparece de una vez, terminada (~2 s después del mensaje). Si en un mensaje de dos renglones la
+  traducción es corta, se reparte entre los dos: nunca queda un renglón tapado y vacío.
+- Si el OCR lee un mensaje roto (letras mezcladas), espera a leerlo bien antes de traducirlo.
 - Solo se traducen los **mensajes nuevos**: si subís en el chat, lo viejo no se toca.
 - Cuando llega un mensaje y el chat sube, las traducciones suben con él al instante.
 - Los avisos del juego (`[SYSTEM]`, "has joined the game", "(+25)") y el spam no se traducen.
@@ -65,7 +90,7 @@ La primera vez aparece un tutorial corto. Se puede saltar, y se reabre con el bo
 - Las burbujas apiladas del mismo jugador se separan.
 - Si una burbuja pasa por detrás del chat, su traducción queda tapada igual que el original.
 - Si la traducción es más larga que el original, la burbuja crece en vez de cortar el texto.
-- Se apagan con la casilla del panel.
+- Se apagan con el interruptor **Burbujas**, en Inicio.
 
 ## Escribir en otro idioma
 
@@ -75,58 +100,65 @@ En el juego apretá el atajo (**°** por defecto) y se abre una barra para escri
 - **Enter:** lo traduce y lo manda al chat de Roblox. Bubble solo hace tres cosas: abre el chat con su tecla,
   escribe el mensaje y aprieta Enter. No toca ninguna otra tecla. (Con teclados en español esa tecla también
   escribe «}» en la barra del chat: Bubble lo borra antes de escribir.)
+- **Ctrl+Enter:** lo dice en voz en vez de mandarlo al chat (ver [Voz](#voz)).
 - **Tab** cambia el idioma (el chip de la izquierda: EN, PT…), **↑ ↓** el tono (los puntitos de la derecha: más
   llenos, más informal) y **Esc** cierra. Si la reabrís enseguida, lo que escribiste sigue ahí.
 - Si el atajo lleva Shift (como «°»), podés apretar **la misma tecla sola**. En Roblox el Shift activa el Shift
   Lock y mueve la cámara.
 - El atajo solo funciona con Roblox al frente; en otros programas la tecla escribe normalmente.
-- Para cambiarlo: **Cambiar…** en la ventana, y apretá la tecla o el botón del mouse que quieras.
+- Para cambiarlo: **Cambiar**, en Inicio, y apretá la tecla o el botón del mouse que quieras.
 
 El idioma de destino se elige solo: el que más se usa en el chat. Si el servidor mezcla idiomas, la opción
 **Todos los del chat** manda el mensaje en varios a la vez.
 
-## Voz (beta 2.0)
+## Voz
 
 Todo el audio se procesa en tu PC: Whisper entiende la voz, un modelo chico reconoce quién habla y Piper habla. Los
-tres son locales. Claude solo traduce el texto.
+tres son locales. Claude solo traduce el texto. Hace falta instalar la parte de voz (`".[voz]"`, ver
+[Instalación](#instalación)).
 
-```powershell
-.venv\Scripts\python.exe -m pip install -e ".[voz]"
-```
+La primera vez se descargan el reconocimiento de voz (hasta ~500 MB, según tu PC), el de voces (~30 MB) y cada voz
+que se use (~60 MB). Quedan en `%LOCALAPPDATA%\Bubble\models`.
 
-La primera vez se descargan el reconocimiento de voz (hasta ~500 MB, según tu PC), el de voces (~30 MB) y una voz
-por idioma (~60 MB). Quedan en `%LOCALAPPDATA%\Bubble\models`.
-
-**Subtítulos de lo que te dicen.** Activá la casilla en la sección **Voz · beta**.
+**Subtítulos de lo que te dicen.** Interruptor **Lo que te dicen por voz**, en Inicio.
 
 - Mientras la persona habla ya ves lo que va diciendo, en gris (aparece ~0,5 s después de que empieza).
 - Apenas hace una pausa se pide la traducción, que llega palabra por palabra y reemplaza al gris, en blanco.
   Tarda ~2 s desde que termina de hablar; casi todo es lo que tarda Claude.
 - Cada persona tiene su color y su número (**Voz 1**, **Voz 2**…) y Bubble la reconoce cuando vuelve a hablar. No
   sabe su nombre de Roblox: la numera en el orden en que aparece.
-- Lo que ya está en tu idioma no se subtitula.
+- Lo que ya está en tu idioma no se subtitula (tu idioma pesa más al detectar, y si Claude confirma que ya estaba
+  en tu idioma, la frase desaparece).
 
-En esta beta se subtitula todo lo que suena en la PC. Si tenés Discord o un video abierto, también.
+Se subtitula todo lo que suena en la PC. Si tenés Discord o un video abierto, también.
 
-**Tu voz, traducida.** Activá **Traducir mi voz** y elegí cómo:
+**Tu voz, traducida.** Interruptor **Tu voz para los demás**, en Inicio. En la página **Voz** elegís cómo:
 
-- **Mientras mantengo apretado:** apretás el botón (por defecto el **botón lateral del mouse, adelante**), hablás y
+- **Mientras aprieto un botón:** apretás el botón (por defecto el **botón lateral del mouse, adelante**), hablás y
   lo soltás.
-- **Directo:** hablás normal, sin botón. Cada frase que decís sale traducida en voz ~2 s después de que terminás.
+- **Directo, sin botón:** hablás normal. Cada frase que decís sale traducida en voz ~2 s después de que terminás.
   Ojo: traduce todo lo que diga tu micrófono.
-- **Escribiendo:** en la barra para escribir, **Ctrl+Enter** en vez de Enter. Lo que escribiste se dice en voz en
-  vez de mandarse al chat.
+- **Escribiendo:** en la barra para escribir, **Ctrl+Enter** en vez de Enter.
 
-Con **Escucharla yo también**, tu voz traducida suena también en tus auriculares, más bajo, así sabés qué dijo.
+Lo que se va a decir en voz se traduce como se habla (palabras completas, sin "vc" ni "kkkk", y en la escritura del
+idioma: el hindi, en devanagari), para que la voz no lea abreviaturas letra por letra.
 
-Para que **los demás** lo escuchen, Roblox tiene que recibir esa voz como si fuera tu micrófono:
+**Cómo suena:** voz **femenina** o **masculina** (elegidas a mano para cada idioma; si un idioma tiene una sola, se
+usa esa), **velocidad** y **Probar voz**. Con **Escucharla yo también**, tu voz traducida suena en tus auriculares,
+más bajo, así sabés qué dijo. Hay voz para español, inglés, portugués, francés, alemán, italiano, ruso, polaco,
+neerlandés, chino, hindi, turco, árabe, coreano, indonesio y vietnamita.
 
-1. Instalá **VB-Audio Virtual Cable** (gratis): <https://vb-audio.com/Cable/>. Se instala como administrador y
-   después hay que reiniciar Bubble.
-2. En Roblox: **Configuración** → **Micrófono** → elegí **CABLE Output**.
+**Que te escuchen los demás (como Soundpad).** Windows no deja que un programa hable "por tu micrófono" sin un
+micrófono virtual. Bubble usa VB-Audio Virtual Cable (gratis):
 
-Así, lo que sale por tu micrófono en Roblox es solo tu voz traducida. Sin el cable virtual, la voz traducida suena
-por tus parlantes: sirve para probar.
+1. En **Voz → Micrófono**, tocá **Instalar (gratis)**. Windows pide permiso de administrador; en el instalador
+   tocá **Install Driver**. Si te lo pide, reiniciá la PC. Después volvé a abrir Bubble.
+2. En **Tu micrófono** elegí tu micrófono de verdad.
+3. En Roblox: **Configuración → Micrófono → CABLE Output**.
+
+Bubble pasa tu micrófono al virtual en vivo y le suma la voz traducida: los demás te escuchan a vos y a tu voz
+traducida (mientras suena, tu voz baja). Con **Pasar también mi voz real** apagado, solo escuchan la traducida.
+Si cerrás Bubble, en Roblox volvé a elegir tu micrófono de siempre.
 
 El chat de voz de Roblox pide verificación de edad. Usar voz sintética puede ir contra sus reglas en algunos
 casos: usala con cuidado, para comunicarte.
@@ -186,6 +218,12 @@ Copiá [config.example.toml](../config.example.toml) a `%APPDATA%\Bubble\config.
 | `[roblox] performance` | `auto`, `alta`, `media` o `baja` |
 | `[roblox] gpu_capture` | Capturar la pantalla con la placa de video |
 | `[claude] model` | `opus` por defecto (el más preciso en las pruebas) |
+| `[voice] gender`, `speed` | Cómo suena tu voz traducida |
+| `[voice] mic` | Tu micrófono (vacío = el predeterminado de Windows) |
+| `[appearance] theme` | `oscuro` o `claro` |
+| `[appearance] pill_color`, `accent`, `pill_opacity`, `text_scale` | Cómo se ven las traducciones |
+
+Casi todo esto se cambia más fácil desde la ventana (Ajustes y Voz).
 
 ## Cómo está hecho
 
@@ -277,15 +315,19 @@ píldoras fuera de lugar, mensajes sin tapar y basura. Tarda un minuto por escen
 **Otras herramientas:**
 
 - `python -m pytest` corre los tests.
-- `python -m bubble.tools.voice_lab` es el laboratorio de voz (ver [Voz](#voz-beta-20)).
+- `python -m bubble.tools.voice_lab` es el laboratorio de voz (ver [Voz](#voz)).
 - `python -m bubble.tools.bench_latency --models opus sonnet` mide la latencia por modelo.
 - `python -m bubble --console` traduce por consola (`Nombre: mensaje`, o `> lo que escribís`).
 
 ## Si algo no anda
 
-- **No encuentra el chat:** esperá a que haya dos o tres mensajes a la vista y tocá **Detectar chat**, o marcalo
-  **a mano…**.
+- **No encuentra el chat:** esperá a que haya dos o tres mensajes a la vista y tocá **Ajustes → Buscar el chat**,
+  o **Marcarlo a mano**.
 - **Las traducciones no aparecen:** Roblox tiene que estar al frente y sin otras ventanas encima del chat.
 - **El mensaje no se envía:** el chat de Roblox se abre con la tecla física "/" (en un teclado latinoamericano es
   la tecla "-"). Si el juego usa otra, cambiá `open_chat_key`.
 - **Ves mensajes ya traducidos por Roblox:** volvé a apagar su traducción automática (a veces se reactiva).
+- **Los demás no escuchan tu voz traducida:** hace falta el micrófono virtual (**Voz → Micrófono**) y, en Roblox,
+  elegir **CABLE Output** como micrófono.
+- **Bubble se cerró de golpe:** los errores quedan en `%APPDATA%\Bubble\errores.log`. Si se cerró mientras
+  preparaba la voz, la próxima vez abre con la voz en pausa.

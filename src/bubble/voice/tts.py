@@ -18,6 +18,8 @@ from .models import Progress, download, models_dir
 CATALOG_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json"
 FILE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/{path}"
 QUALITY_ORDER = {"medium": 0, "high": 1, "low": 2, "x_low": 3}
+# Idiomas cuya voz de Piper necesita programas extra que no vienen instalados (tailandés: tltk; japonés: pyopenjtalk).
+NO_VOICE = {"th", "ja"}
 # Variante preferida por idioma (la más neutra / más hablada entre jugadores).
 PREFERRED_REGION = {"en": "en_US", "es": "es_MX", "pt": "pt_BR", "fr": "fr_FR", "de": "de_DE", "zh": "zh_CN",
                     "ar": "ar_JO", "hi": "hi_IN", "nl": "nl_NL"}
@@ -69,6 +71,8 @@ class Voices:
         """Nombre de la mejor voz para `language` ("en", "pt", "es-AR"...) con ese género ("femenina" o
         "masculina"), o None si Piper no tiene ese idioma."""
         family = language.split("-")[0].lower()
+        if family in NO_VOICE:
+            return None
         female, male = CURATED.get(family, (None, None))
         wanted, other = (male, female) if gender.startswith("m") else (female, male)
         for name in (wanted, other):
@@ -115,7 +119,13 @@ class Voices:
                                  noise_w_scale=0.85)
         with self._lock:  # una síntesis a la vez por voz
             voice = self._load(name)
-            chunks = list(voice.synthesize(text, config))
+            try:
+                chunks = list(voice.synthesize(text, config))
+            except Exception:  # noqa: BLE001 - una voz que falla no corta nada: se avisa que no hay voz
+                import logging
+
+                logging.getLogger(__name__).exception("La voz %s no pudo decir el texto", name)
+                return None
         if not chunks:
             return None
         audio = np.concatenate([chunk.audio_float_array for chunk in chunks]).astype(np.float32)

@@ -16,7 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 sys.path.insert(0, "src")
 from bubble.ui.inline import InlineChatView, PillSpot, render_bubble, fit_bubble_text  # noqa: E402

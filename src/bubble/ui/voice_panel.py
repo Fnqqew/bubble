@@ -29,6 +29,8 @@ SAMPLES = {
     "de": "Hallo! So werde ich klingen.", "it": "Ciao! Ecco come suonerò.", "ru": "Привет! Вот так я буду звучать.",
     "hi": "नमस्ते! मेरी आवाज़ ऐसी सुनाई देगी।", "pl": "Cześć! Tak będę brzmieć.", "nl": "Hoi! Zo ga ik klinken.",
     "tr": "Merhaba! Sesim böyle olacak.", "id": "Halo! Beginilah suaraku.", "zh": "你好！我的声音听起来是这样的。",
+    "ko": "안녕하세요! 제 목소리는 이렇게 들려요.", "ja": "こんにちは！こんな声になります。",
+    "vi": "Xin chào! Giọng của tôi sẽ như thế này.", "th": "สวัสดี! เสียงของฉันจะเป็นแบบนี้", "ar": "مرحبا! هكذا سيبدو صوتي.",
 }
 NO_VOICE_PACK = 'Falta instalar la parte de voz: .venv\\Scripts\\python.exe -m pip install -e ".[voz]"'
 
@@ -127,7 +129,8 @@ class VoicePanel:
             self.cable_label.configure(text="Instalado ✓", foreground=colors["good"])
             self.cable_button.pack_forget()
             self.cable_help.configure(text="En Roblox: Configuración → Micrófono → «CABLE Output». Mientras Bubble "
-                                           "está abierto, por ahí sale tu voz y la traducida.")
+                                           "está abierto, por ahí sale tu voz y la traducida. Si cerrás Bubble, en "
+                                           "Roblox volvé a elegir tu micrófono de siempre.")
         else:
             self.cable_label.configure(text="No instalado", foreground=colors["warn"])
             self.cable_button.pack(side="right", padx=(0, 10))
@@ -291,11 +294,13 @@ class VoicePanel:
         self._try_voice()
 
     def _change_speed(self) -> None:
+        from .app_view import later
+
         self.config.speed = round(float(self.speed_var.get()), 2)
         self.speed_text.configure(text=self._speed_label())
-        save_setting("voice", "speed", self.config.speed)
         if self.voices:
             self.voices.speed = self.config.speed
+        later(self.app, "speed", lambda: save_setting("voice", "speed", self.config.speed))
 
     def _change_mic(self, _event=None) -> None:
         choice = self.mic_box.get()
@@ -392,7 +397,7 @@ class VoicePanel:
         translator = self.app.translator
         target = translator.outgoing_target()
         result = self.app.runner.submit(
-            translator.translate_outgoing(text, target, tone=self.app.config.user.tone)).result(timeout=25)
+            translator.translate_outgoing(text, target, tone=self.app.config.user.tone, spoken=True)).result(timeout=25)
         if result.status == "error" or not result.translation.strip():
             return None
         self.app.tracker.mark_sent(result.translation)

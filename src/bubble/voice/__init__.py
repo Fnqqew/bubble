@@ -1,4 +1,4 @@
-"""Voz (beta de Bubble 2.0). Todo el audio se procesa en tu PC; Claude solo traduce el texto.
+"""Voz. Todo el audio se procesa en tu PC; Claude solo traduce el texto.
 
 - Lo que te dicen por voz → subtítulos: audio del juego → frases → Whisper (local) → Claude → subtítulos.
 - Tu voz → los demás: mantenés apretada una tecla y hablás → Whisper → Claude → voz sintética (Piper, local) →

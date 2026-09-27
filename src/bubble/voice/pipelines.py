@@ -219,6 +219,8 @@ class DirectVoice:
         self._running.clear()
         self.listener.stop()
         self._queue.put(None)
+        if self._mute in self.out.listeners:
+            self.out.listeners.remove(self._mute)
 
     def _mute(self, seconds: float) -> None:
         if not self.out.output.is_cable or self.out.hear_myself:

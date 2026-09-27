@@ -44,6 +44,8 @@ class TranslationRequest:
     slang_hints: tuple[tuple[str, str, str], ...] = ()
     # Nivel de informalidad de lo que enviás: 1 = neutro/formal ... 5 = jerga nativa.
     tone: int = 3
+    # Se va a decir en voz (voz sintética): palabras completas, sin abreviaturas de chat, en la escritura del idioma.
+    spoken: bool = False
 
 
 @dataclass(frozen=True)

@@ -78,7 +78,7 @@ class RobloxConfig:
 
 @dataclass
 class VoiceConfig:
-    """Voz (beta 2.0). Todo el audio se procesa en tu PC; Claude solo traduce el texto."""
+    """Voz. Todo el audio se procesa en tu PC; Claude solo traduce el texto."""
 
     # Subtítulos de lo que te dicen por el chat de voz (se escucha el audio de la PC).
     subtitles: bool = False

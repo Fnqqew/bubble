@@ -555,7 +555,7 @@ class InlineChatView:
                     (entry.key, index),
                     (line, size, spot.height, spot.cover_right - spot.left, spot.max_right - spot.left,
                      STYLE.version),
-                    lambda spot=spot, line=line: self._pill(spot, line, size),
+                    lambda spot=spot, line=line, size=size: self._pill(spot, line, size),
                 )
                 key = (*pill, index)
                 shown.add(key)

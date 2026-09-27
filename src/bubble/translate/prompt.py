@@ -142,6 +142,12 @@ class OutputFilter:
 SYSTEM_PROMPT = build_system_prompt()
 
 
+# Para decir en voz: variantes que se escriben distinto de como se dicen en el chat.
+SPOKEN_VARIANTS = {
+    "hi": "casual spoken Hindi, written in Devanagari script (a Hindi voice will read it)",
+}
+
+
 def build_user_prompt(requests: TranslationRequest | Sequence[TranslationRequest]) -> str:
     """Pedido con uno o más mensajes numerados que comparten dirección, destino y tono."""
     batch = [requests] if isinstance(requests, TranslationRequest) else list(requests)
@@ -154,6 +160,13 @@ def build_user_prompt(requests: TranslationRequest | Sequence[TranslationRequest
     parts.append(f"Direction: {first.direction}.")
     if first.direction == "outgoing":
         parts.append(f"Tone level: {first.tone}.")
+    if first.spoken:
+        reader = SPOKEN_VARIANTS.get(first.target_lang, reader)
+        parts.append(
+            "This will be read aloud by a text-to-speech voice, so write it the way people say it out loud: full "
+            "words, no chat abbreviations (vc, tmj, pls, u, q), no emojis, no repeated letters like kkkk or jajaja, "
+            "and use the language's own script. Keep the same tone and meaning."
+        )
     parts.append(f"Translate into {reader}.")
     if any(r.mode == "adapt" for r in batch):
         parts.append(

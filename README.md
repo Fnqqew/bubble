@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 2.0 beta" src="https://img.shields.io/badge/versión-2.0%20beta-8b5cf6?style=flat-square">
+  <img alt="Versión 2.0" src="https://img.shields.io/badge/versión-2.0-4a90e2?style=flat-square">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
   <img alt="Con tu suscripción de Claude" src="https://img.shields.io/badge/con%20tu%20suscripción-Claude-d97757?style=flat-square">
 </p>
@@ -49,19 +49,25 @@ movés la cámara.
 **Escribe por vos.** Apretá **°**, escribí como hablás y apretá **Enter**: sale traducido al chat. Mientras escribís
 ves cómo va a quedar. Bubble solo abre el chat, escribe y envía; no toca ninguna otra tecla del juego.
 
-**Te subtitula la voz** <sup>beta</sup>. Lo que te dicen por voz aparece abajo, como en una película. Y si querés,
-mantenés apretado un botón, hablás, y los demás te escuchan en su idioma.
-[Cómo activarla](docs/GUIA.md#voz-beta-20).
+**Te subtitula la voz.** Lo que te dicen por voz aparece abajo, como en una película: quién habla (Voz 1, Voz 2…)
+y qué dice, en tu idioma, casi al instante.
+
+**Habla por vos.** Hablás en tu idioma y los demás te escuchan en el suyo, con una voz femenina o masculina: con un
+botón, en modo directo o escribiendo (Ctrl+Enter). Como Soundpad, sale por tu micrófono en Roblox, junto con tu voz
+real. [Cómo activarla](docs/GUIA.md#voz).
 
 <br>
 
 ## La app
 
 <p align="center">
-  <img src="docs/interfaz.png" alt="La ventana de Bubble: tu idioma, el tono, el estado de Roblox, la voz y el registro de traducciones" width="100%">
+  <img src="docs/interfaz.png" alt="La ventana de Bubble: tu idioma y cuatro interruptores (chat, burbujas, voz y tu voz), y los ajustes de apariencia" width="100%">
 </p>
 
-Elegís tu idioma y el tono una vez. Después, jugás: Bubble encuentra el chat solo y trabaja en silencio.
+Elegís tu idioma y prendés lo que quieras. Después, jugás: Bubble encuentra el chat solo y trabaja en silencio.
+
+**Hacelo tuyo:** tema oscuro o claro, el color, la opacidad y el tamaño de las traducciones en el juego, y dónde y
+cómo se ven los subtítulos.
 
 <br>
 
@@ -91,11 +97,11 @@ Necesitás Windows 10 u 11, Python 3.12 y [Claude Code](https://claude.com/claud
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e .
+.venv\Scripts\python.exe -m pip install -e ".[voz]"
 .\Iniciar.bat
 ```
 
-Para la voz, instalá también los extras: `.venv\Scripts\python.exe -m pip install -e ".[voz]"`.
+Sin `[voz]` también anda: traduce el chat, las burbujas y lo que escribís.
 
 Un tutorial corto te acompaña la primera vez. Para lo demás —configuración, cómo está hecho, cómo probarlo— está
 la [guía completa](docs/GUIA.md).
@@ -110,8 +116,17 @@ Medido con el simulador de pruebas, con chats lentos, rápidos y en ráfagas:
 |---|---|
 | Mensajes detectados | **100 %** |
 | Traducción lista | **~2 s** desde que aparece el mensaje |
-| Las traducciones siguen al chat | en **0,06 s** |
+| Parpadeos y traducciones fuera de lugar | **0** |
 | Mensajes en tu idioma enviados a traducir | **ninguno** |
+
+Y con el laboratorio de voz (varias personas, siete idiomas, música de fondo):
+
+| | |
+|---|---|
+| Ves lo que dicen | a los **0,5 s** de que empiezan a hablar |
+| La traducción | **~2 s** después de que terminan |
+| Quién habla | acierta **9 de cada 10** frases o más |
+| Tu voz traducida suena | **~2 s** después de que terminás de hablar |
 
 <br>
 
