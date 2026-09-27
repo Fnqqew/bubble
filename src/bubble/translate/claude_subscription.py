@@ -35,6 +35,7 @@ from .prompt import SYSTEM_PROMPT, OutputFilter, build_user_prompt
 log = logging.getLogger(__name__)
 hidden_processes.install()  # sin ventanas negras de claude.exe
 KEEP_WARM_AFTER_S = 240  # el caché del prompt dura 5 minutos
+SHRINK_AFTER_S = 300  # las sesiones de más se cierran tras este tiempo sin pedidos que se superpongan
 
 
 class ProviderError(RuntimeError):
@@ -147,24 +148,69 @@ class ClaudeSubscriptionProvider:
         # Mantener "caliente" el prompt cacheado mientras esta función diga que se está jugando.
         self.keep_warm_when: Callable[[], bool] | None = None
         self._last_used = time.monotonic()
+        self._last_crowded = 0.0  # cuándo llegó un pedido con todas las sesiones ocupadas
+        self._opening = 0
         self._keepalive: asyncio.Task | None = None
 
     async def start(self) -> None:
-        sessions = [_Session(self._options) for _ in range(max(1, self.config.pool_size))]
-        results = await asyncio.gather(*(s.open() for s in sessions), return_exceptions=True)
-        errors = [r for r in results if isinstance(r, BaseException)]
-        if len(errors) == len(sessions):
-            raise ProviderError(f"No se pudo iniciar Claude: {errors[0]}") from errors[0]
-        for session in sessions:
+        """Arranca con una sesión: cada una es un claude.exe de 150 a 300 MB, y como los mensajes que llegan juntos
+        van en un mismo pedido, casi siempre alcanza. Si llegan pedidos con todas ocupadas se abren más (hasta
+        `pool_size`), y las que sobran se cierran solas después de un rato tranquilo."""
+        error: BaseException | None = None
+        for _attempt in range(2):
+            session = _Session(self._options)
+            try:
+                await session.open()
+            except Exception as exc:  # noqa: BLE001 - se reintenta una vez
+                error = exc
+                await self._close_quietly(session)
+                continue
             self._all.add(session)
             self._idle.put_nowait(session)
+            break
+        else:
+            raise ProviderError(f"No se pudo iniciar Claude: {error}") from error
         self._keepalive = asyncio.get_running_loop().create_task(self._keep_warm())
+
+    def _grow(self) -> None:
+        """Todas ocupadas: se abre otra en segundo plano. El pedido toma la primera que se libere (o la nueva)."""
+        self._last_crowded = time.monotonic()
+        if len(self._all) + self._opening >= max(1, self.config.pool_size):
+            return
+        self._opening += 1
+        task = asyncio.get_running_loop().create_task(self._open_extra())
+        self._replacing.add(task)
+        task.add_done_callback(self._replacing.discard)
+
+    async def _open_extra(self) -> None:
+        session = _Session(self._options)
+        try:
+            async with asyncio.timeout(30):
+                await session.open()
+        except Exception:  # noqa: BLE001 - se sigue con las que hay
+            log.warning("No se pudo abrir otra sesión de Claude", exc_info=True)
+            await self._close_quietly(session)
+            return
+        finally:
+            self._opening -= 1
+        self._all.add(session)
+        self._idle.put_nowait(session)
+
+    async def _shrink(self) -> None:
+        """Después de un rato sin pedidos superpuestos, queda una sola sesión abierta (menos memoria)."""
+        if len(self._all) <= 1 or time.monotonic() - self._last_crowded < SHRINK_AFTER_S:
+            return
+        while len(self._all) > 1 and not self._idle.empty():
+            session = self._idle.get_nowait()
+            self._all.discard(session)
+            await self._close_quietly(session)
 
     async def _keep_warm(self) -> None:
         """El caché del prompt vence a los 5 minutos: si el chat está callado mientras jugás, la siguiente
         traducción tardaría más. Un pedido mínimo cada ~4 minutos de silencio lo mantiene vivo."""
         while True:
             await asyncio.sleep(30)
+            await self._shrink()
             if self.keep_warm_when is None or time.monotonic() - self._last_used < KEEP_WARM_AFTER_S:
                 continue
             try:
@@ -192,6 +238,8 @@ class ClaudeSubscriptionProvider:
     async def stream_batch(self, requests: list[TranslationRequest]) -> AsyncIterator[tuple[int, str]]:
         """Traduce varios mensajes en un solo pedido; devuelve (índice, fragmento) a medida que llegan."""
         self._last_used = time.monotonic()
+        if self._idle.empty():
+            self._grow()
         session = await self._idle.get()
         healthy = False
         try:

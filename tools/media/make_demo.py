@@ -1,8 +1,8 @@
 """GIF de demostración para el README.
 
-Escena ilustrada (fondo de juego desenfocado, avatares de bloques) y, encima, el chat de Roblox con las traducciones
+Escena ilustrada (un mundo de Roblox al atardecer, avatares de bloques) y, encima, el chat de Roblox con las traducciones
 dibujadas por el MISMO código de Bubble: píldoras del chat, burbuja traducida, barra para escribir (capturada de la
-ventana real) y subtítulos de voz.
+ventana real), subtítulos de voz y tu voz dicha con voz artificial.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 sys.path.insert(0, "src")
 from bubble.ui.inline import InlineChatView, PillSpot, render_bubble, fit_bubble_text  # noqa: E402
 from bubble.ui.subtitles import render_subtitles  # noqa: E402
-from bubble.voice.captions import Line  # noqa: E402
+from bubble.voice.captions import MINE, Line  # noqa: E402
 
 W, H = 960, 540
 FPS = 20
@@ -109,87 +109,134 @@ AVATAR_A = dict(x=585, feet=452, size=22, shirt=(52, 142, 64), pants=(40, 52, 92
 AVATAR_B = dict(x=790, feet=470, size=24, shirt=(196, 72, 70), pants=(52, 52, 60), dir=-1)
 
 
+def gradient_stops(size, stops) -> Image.Image:
+    """Degradé vertical con varios colores: [(posición 0-1, color), ...]."""
+    w, h = size
+    t = np.linspace(0, 1, h)
+    positions = [p for p, _c in stops]
+    channels = [np.interp(t, positions, [c[i] for _p, c in stops]) for i in range(3)]
+    rows = np.stack(channels, axis=1)[:, None, :]
+    return Image.fromarray(np.repeat(rows, w, axis=1).astype(np.uint8), "RGB")
+
+
+def cloud(scale: float, alpha: int) -> Image.Image:
+    """Nube de caricatura: bolas blancas, base plana y una sombra suave abajo."""
+    w, h = int(240 * scale), int(110 * scale)
+    img = Image.new("RGBA", (w, h), (255, 255, 255, 0))  # transparente pero blanco: el borde no se oscurece
+    d = ImageDraw.Draw(img)
+    base = int(h * 0.78)
+    parts = [(0.22, 0.62, 0.20), (0.40, 0.42, 0.24), (0.60, 0.48, 0.22), (0.78, 0.64, 0.16), (0.50, 0.66, 0.22)]
+    for color, lift in (((206, 216, 238), 0.0), ((255, 255, 255), 0.06)):
+        for cx, cy, r in parts:
+            r_px = r * w
+            x, y = cx * w, (cy - lift) * h
+            d.ellipse((x - r_px, y - r_px, x + r_px, y + r_px), fill=color + (alpha,))
+    arr = np.asarray(img).copy()
+    arr[base:, :, 3] = 0  # base plana
+    img = Image.fromarray(arr, "RGBA")
+    return img.filter(ImageFilter.GaussianBlur(0.6))
+
+
+def soft_ridge(width: int, base: int, height: int, bumps: int, seed: int) -> list[tuple[float, float]]:
+    """Lomas suaves (curva que pasa por cimas al azar), no picos."""
+    rng = random.Random(seed)
+    tops = [(i * width / bumps, base - rng.uniform(0.45, 1.0) * height) for i in range(bumps + 1)]
+    points = []
+    for (x0, y0), (x1, y1) in zip(tops, tops[1:]):
+        for k in range(16):
+            u = k / 16
+            points.append((x0 + (x1 - x0) * u, y0 + (y1 - y0) * (1 - math.cos(math.pi * u)) / 2))
+    points += [(width, base + 60), (0, base + 60)]
+    return points
+
+
+def tree(d: ImageDraw.ImageDraw, x: int, ground: int, size: int, green) -> None:
+    """Árbol de bloques: tronco y copa de cubos."""
+    trunk_w, trunk_h = max(4, size // 5), int(size * 0.55)
+    block(d, (x - trunk_w // 2, ground - trunk_h, x + trunk_w // 2, ground), (122, 84, 52, 255), max(2, size // 12), 0)
+    canopy = [(-0.55, -1.25, 1.1, 0.7), (-0.4, -1.75, 0.8, 0.55), (-0.25, -2.12, 0.5, 0.42)]
+    for i, (dx, dy, w, h) in enumerate(canopy):
+        box = (x + int(dx * size), ground - trunk_h + int(dy * size * 0.62), x + int((dx + w) * size),
+               ground - trunk_h + int((dy + h) * size * 0.62))
+        block(d, box, shade(green, 1.0 + 0.08 * i) + (255,), max(3, size // 8), max(2, size // 12))
+
+
 def backdrop() -> Image.Image:
-    horizon = 300
-    sky = vertical_gradient((W, horizon + 40), (86, 160, 243), (255, 212, 170))
-    img = Image.new("RGB", (W, H))
-    img.paste(sky, (0, 0))
-    # resplandor del sol
+    """Un mundo de Roblox al atardecer: nítido y con color (antes era todo borroso y apagado)."""
+    horizon = 330
+    img = gradient_stops((W, H), [(0.0, (46, 104, 204)), (0.33, (110, 164, 236)), (0.52, (240, 186, 170)),
+                                  (0.62, (255, 212, 168)), (1.0, (255, 212, 168))]).convert("RGBA")
     glow = Image.new("L", (W, H), 0)
-    ImageDraw.Draw(glow).ellipse((620, 150, 900, 380), fill=255)
-    glow = glow.filter(ImageFilter.GaussianBlur(70))
-    img = Image.composite(Image.new("RGB", (W, H), (255, 236, 200)), img, glow.point(lambda v: int(v * 0.55)))
-
-    # torres lejanas (perspectiva aérea: se funden con el cielo)
-    far = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(far)
-    x = -20
-    while x < W:
-        w = random.randint(40, 90)
-        h = random.randint(60, 190)
-        color = random.choice([(150, 180, 230), (190, 170, 220), (160, 200, 215), (215, 185, 200)])
-        block(d, (x, horizon - h, x + w, horizon + 10), color + (170,), 10, 6)
-        x += w + random.randint(10, 50)
-    img = Image.alpha_composite(img.convert("RGBA"), far.filter(ImageFilter.GaussianBlur(7)))
-
-    # suelo (baseplate) con un poco de perspectiva
-    ground = vertical_gradient((W, H - horizon), (140, 200, 128), (62, 132, 68)).convert("RGBA")
+    ImageDraw.Draw(glow).ellipse((690, 150, 910, 370), fill=255)
+    glow = glow.filter(ImageFilter.GaussianBlur(64))
+    img = Image.composite(Image.new("RGBA", (W, H), (255, 232, 196, 255)), img, glow.point(lambda v: int(v * 0.75)))
+    sun = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(sun).ellipse((764, 222, 840, 298), fill=(255, 246, 216, 255))
+    img = Image.alpha_composite(img, sun.filter(ImageFilter.GaussianBlur(1.2)))
+    for x, y, scale, alpha in ((500, 36, 0.95, 240), (760, 70, 0.72, 225), (880, 150, 0.5, 200), (640, 160, 0.42, 185)):
+        img.alpha_composite(cloud(scale, alpha), (x, y))
+    # lomas: lejos (lavanda, se funden con el cielo) y cerca (verdes)
+    for base, height, bumps, seed, color, blur in ((horizon - 4, 110, 6, 4, (160, 168, 214), 1.2),
+                                                   (horizon + 6, 64, 8, 11, (104, 160, 132), 0.6)):
+        layer = Image.new("RGBA", (W, H), color + (0,))  # transparente del mismo color: sin borde oscuro al suavizar
+        ImageDraw.Draw(layer).polygon(soft_ridge(W, base, height, bumps, seed), fill=color + (255,))
+        img = Image.alpha_composite(img, layer.filter(ImageFilter.GaussianBlur(blur)))
+    # suelo: la baseplate verde con su grilla en perspectiva
+    ground = gradient_stops((W, H - horizon), [(0, (132, 208, 98)), (1, (62, 150, 66))]).convert("RGBA")
     grid = Image.new("RGBA", ground.size, (0, 0, 0, 0))
     gd = ImageDraw.Draw(grid)
-    for i in range(1, 16):
-        y = int((H - horizon) * (i / 16) ** 1.7)
-        gd.line((0, y, W, y), fill=(255, 255, 255, 34), width=2)
-    vanishing = (W * 0.62, -260)
-    for i in range(-20, 36):
-        gd.line((vanishing[0], vanishing[1], i * 60, H - horizon), fill=(255, 255, 255, 30), width=2)
-    ground = Image.alpha_composite(ground, grid)
-    haze = vertical_gradient((W, H - horizon), (236, 222, 200), (62, 132, 68)).convert("RGBA")
-    haze.putalpha(Image.fromarray((np.linspace(150, 0, H - horizon) ** 1.0).astype(np.uint8)[:, None].repeat(W, 1)))
-    ground = Image.alpha_composite(ground, haze)
-    img.alpha_composite(ground.filter(ImageFilter.GaussianBlur(2.2)), (0, horizon))
-
-    # plataformas del obby, a media distancia
-    mid = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(mid)
-    for x0, y0, w, h, color in [
-        (660, 236, 120, 18, (255, 89, 89)), (790, 200, 96, 18, (255, 196, 64)), (880, 160, 110, 18, (80, 170, 255)),
-        (500, 262, 80, 16, (170, 110, 240)), (420, 214, 70, 16, (120, 220, 160)),
-    ]:
-        block(d, (x0, y0, x0 + w, y0 + h), color + (255,), 14, 8)
-        mid_shadow = (x0 + 6, y0 + h + 4, x0 + w + 6, y0 + h + 10)
-        d.rectangle(mid_shadow, fill=(0, 0, 0, 40))
-    # torre de destino
-    block(d, (560, 70, 624, 292), (235, 235, 245, 255), 16, 10)
-    for yy in range(86, 280, 26):
-        d.rectangle((573, yy, 611, yy + 12), fill=(120, 170, 235, 255))
-    img = Image.alpha_composite(img, mid.filter(ImageFilter.GaussianBlur(3.6)))
-
-    # destellos (bokeh)
-    bokeh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(bokeh)
-    for _ in range(14):
-        r = random.randint(8, 26)
-        bx, by = random.randint(420, W), random.randint(20, 260)
-        d.ellipse((bx - r, by - r, bx + r, by + r), fill=(255, 255, 255, random.randint(22, 48)))
-    img = Image.alpha_composite(img, bokeh.filter(ImageFilter.GaussianBlur(4)))
-
+    for i in range(1, 14):
+        y = int(ground.height * (i / 14) ** 1.8)
+        gd.line((0, y, W, y), fill=(255, 255, 255, 30), width=2)
+    vanishing = (W * 0.7, -320)
+    for i in range(-24, 40):
+        gd.line((vanishing[0], vanishing[1], i * 52, ground.height), fill=(255, 255, 255, 26), width=2)
+    img.alpha_composite(Image.alpha_composite(ground, grid), (0, horizon))
+    # camino de baldosas hasta la torre
+    world = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(world)
+    lane = [(640, H), (780, H), (738, horizon + 2), (704, horizon + 2)]
+    d.polygon(lane, fill=(230, 200, 146, 255))
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).polygon(lane, fill=255)
+    seams = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(seams)
+    for i in range(1, 10):
+        y = horizon + 2 + int((H - horizon) * (i / 10) ** 1.6)
+        sd.line((600, y, 820, y), fill=(198, 166, 114, 255), width=2)
+    world.paste(seams, (0, 0), Image.composite(seams.getchannel("A"), Image.new("L", (W, H), 0), mask))
+    # hilera de árboles en el horizonte, la torre y las plataformas del obby
+    rng = random.Random(21)
+    x = 440
+    while x < W + 20:
+        if not 690 <= x <= 770:
+            tree(d, x, horizon + 6 + rng.randint(0, 6), rng.randint(18, 30),
+                 rng.choice([(64, 156, 78), (80, 172, 88), (58, 144, 72)]))
+        x += rng.randint(26, 44)
+    block(d, (694, 98, 752, horizon + 4), (240, 240, 248, 255), 16, 10)
+    block(d, (686, 82, 760, 100), (84, 152, 255, 255), 16, 10)
+    for yy in range(118, horizon - 8, 28):
+        d.rounded_rectangle((707, yy, 739, yy + 13), 3, fill=(122, 178, 242, 255))
+    for x0, y0, w, h, color in [(520, 250, 84, 16, (255, 96, 96)), (590, 196, 70, 16, (255, 200, 70)),
+                                (800, 196, 90, 18, (90, 176, 255)), (860, 256, 70, 16, (176, 116, 244))]:
+        block(d, (x0, y0, x0 + w, y0 + h), color + (255,), 12, 8)
+    img = Image.alpha_composite(img, world)
     # avatares con su sombra
     people = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     for spec in (AVATAR_A, AVATAR_B):
         sprite = avatar(spec["size"], spec["shirt"], spec["pants"], face_dir=spec["dir"])
         shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         ImageDraw.Draw(shadow).ellipse((spec["x"] - 44, spec["feet"] - 7, spec["x"] + 50, spec["feet"] + 9),
-                                       fill=(0, 0, 0, 80))
+                                       fill=(0, 0, 0, 90))
         people = Image.alpha_composite(people, shadow.filter(ImageFilter.GaussianBlur(4)))
         people.alpha_composite(sprite, (spec["x"] - sprite.width // 2, spec["feet"] - sprite.height + 4))
-    img = Image.alpha_composite(img, people.filter(ImageFilter.GaussianBlur(1.1)))
-
-    # viñeta y grano (el grano evita las bandas del GIF)
+    img = Image.alpha_composite(img, people)
+    # viñeta suave y grano fino (el grano evita las bandas del GIF)
     yy, xx = np.mgrid[0:H, 0:W]
-    dist = np.sqrt(((xx - W / 2) / (W / 1.6)) ** 2 + ((yy - H / 2) / (H / 1.4)) ** 2)
-    vignette = np.clip(1 - (dist - 0.55) * 0.55, 0.72, 1)[..., None]
+    dist = np.sqrt(((xx - W / 2) / (W / 1.5)) ** 2 + ((yy - H / 2) / (H / 1.3)) ** 2)
+    vignette = np.clip(1 - (dist - 0.6) * 0.45, 0.82, 1)[..., None]
     arr = np.asarray(img.convert("RGB")).astype(float) * vignette
-    arr += np.random.default_rng(3).normal(0, 2.2, arr.shape)
+    arr += np.random.default_rng(3).normal(0, 1.6, arr.shape)
     return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB").convert("RGBA")
 
 
@@ -429,11 +476,114 @@ def draw_voice(canvas: Image.Image, t: float) -> None:
         canvas.alpha_composite(card, ((W - card.width) // 2, H - 58 - card.height + rise))
 
 
+# ------------------------------------------------------------------ tu voz para los demás (voz artificial)
+SPEAK_PRESS, SPEAK_TALK, SPEAK_SAY, SPEAK_REPLY, SPEAK_END = 18.55, 18.9, 20.8, 23.1, 25.3
+MY_WORDS = "¿alguien viene conmigo a la torre?"
+SPOKEN = "anyone coming with me to the tower?"
+
+
+def mic_button(pressed: bool, fade: float) -> Image.Image:
+    """El botón para hablar (el lateral del mouse): una tecla con un micrófono."""
+    s, size = 3, 46
+    img = Image.new("RGBA", (size * s, (size + 6) * s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    off = 3 * s if pressed else 0
+    d.rounded_rectangle((0, 6 * s, size * s, (size + 6) * s), 9 * s, fill=(12, 13, 16, 230))
+    d.rounded_rectangle((0, off, size * s, size * s + off), 9 * s, fill=(38, 41, 48, 240),
+                        outline=(84, 152, 255, 255) if pressed else (70, 74, 84, 255), width=2 * s)
+    cx, cy = size * s / 2, size * s / 2 + off
+    d.rounded_rectangle((cx - 5 * s, cy - 13 * s, cx + 5 * s, cy + 3 * s), 5 * s, fill=(240, 242, 246, 255))
+    d.arc((cx - 9 * s, cy - 8 * s, cx + 9 * s, cy + 8 * s), 20, 160, fill=(240, 242, 246, 255), width=2 * s)
+    d.line((cx, cy + 8 * s, cx, cy + 12 * s), fill=(240, 242, 246, 255), width=2 * s)
+    img = img.resize((size, size + 6), Image.Resampling.LANCZOS)
+    img.putalpha(img.getchannel("A").point(lambda v: int(v * fade)))
+    return img
+
+
+def voice_bubble(text: str, t: float) -> Image.Image:
+    """Lo que dice tu voz artificial, sobre tu avatar: ondas de sonido y la frase en el idioma del otro."""
+    f = font("seguisb.ttf", 15)
+    small = font("segoeui.ttf", 11)
+    s = 3
+    w, h = int(f.getlength(text)) + 62, 46
+    img = Image.new("RGBA", (w * s, (h + 10) * s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, w * s - 1, h * s - 1), 14 * s, fill=(18, 21, 29, 232))
+    d.polygon([(w * s / 2 - 8 * s, h * s - 2), (w * s / 2 + 8 * s, h * s - 2), (w * s / 2, (h + 9) * s)],
+              fill=(18, 21, 29, 232))
+    for i in range(4):  # ondas que se mueven mientras suena
+        level = 0.35 + 0.65 * abs(math.sin(t * 10 + i * 1.4))
+        bh = 18 * s * level
+        bx = (14 + i * 6) * s
+        d.rounded_rectangle((bx, h * s / 2 - bh / 2, bx + 3 * s, h * s / 2 + bh / 2), 3 * s, fill=(84, 152, 255, 255))
+    img = img.resize((w, h + 10), Image.Resampling.LANCZOS)
+    d = ImageDraw.Draw(img)
+    d.text((48, 17), text, font=f, fill=(246, 248, 252, 255), anchor="lm")
+    d.text((48, 34), "voz artificial · en su idioma", font=small, fill=(150, 184, 250, 255), anchor="lm")
+    return img
+
+
+def draw_speak(canvas: Image.Image, t: float) -> None:
+    if not SPEAK_PRESS - 0.2 <= t < SPEAK_END:
+        return
+    # 1. tocás el botón para hablar
+    if t < SPEAK_TALK + 0.4:
+        fade = ease((t - SPEAK_PRESS + 0.2) / 0.15) * (1 - ease((t - SPEAK_TALK - 0.1) / 0.3))
+        button = mic_button(SPEAK_PRESS <= t < SPEAK_PRESS + 0.2, fade)
+        canvas.alpha_composite(button, ((W - button.width) // 2, H - 150))
+    hx, hy = head_top(AVATAR_A)
+    # 2. hablás en tu idioma (el indicador de voz de Roblox sobre tu avatar)
+    if SPEAK_TALK <= t < SPEAK_SAY:
+        fade = ease((t - SPEAK_TALK) / 0.2) * (1 - ease((t - SPEAK_SAY + 0.25) / 0.25))
+        chip = Image.new("RGBA", (58 * 3, 28 * 3), (0, 0, 0, 0))
+        d = ImageDraw.Draw(chip)
+        d.rounded_rectangle((0, 0, chip.width - 1, chip.height - 1), 14 * 3, fill=(18, 20, 26, 215))
+        for i in range(5):
+            level = 0.35 + 0.65 * abs(math.sin(t * 9 + i * 1.3))
+            bh = int(16 * 3 * level)
+            bx = (12 + i * 7.5) * 3
+            d.rounded_rectangle((bx, chip.height / 2 - bh / 2, bx + 3.5 * 3, chip.height / 2 + bh / 2), 6,
+                                fill=(139, 226, 139, 255))
+        chip = chip.resize((58, 28), Image.Resampling.LANCZOS)
+        chip.putalpha(chip.getchannel("A").point(lambda v: int(v * fade)))
+        canvas.alpha_composite(chip, (hx - 29, hy - 40))
+    # 3. Bubble lo dice con voz artificial, en el idioma del otro
+    if SPEAK_SAY <= t < SPEAK_END - 0.3:
+        bubble = voice_bubble(SPOKEN, t if t < SPEAK_REPLY else SPEAK_REPLY)
+        fade = ease((t - SPEAK_SAY) / 0.25) * (1 - ease((t - (SPEAK_END - 0.6)) / 0.3))
+        rise = int(8 * (1 - ease((t - SPEAK_SAY) / 0.25)))
+        bubble.putalpha(bubble.getchannel("A").point(lambda v: int(v * fade)))
+        canvas.alpha_composite(bubble, (hx - bubble.width // 2, hy - bubble.height - 10 + rise))
+    # subtítulo: lo que dijiste y cómo sonó
+    if SPEAK_TALK + 0.4 <= t < SPEAK_END:
+        said = t >= SPEAK_SAY
+        line = Line(7, MINE, "es", MY_WORDS, SPOKEN if said else "", True, said)
+        card = render_subtitles([line])
+        card = card.resize((int(card.width * 0.8), int(card.height * 0.8)), Image.Resampling.LANCZOS)
+        fade = ease((t - SPEAK_TALK - 0.4) / 0.25) * (1 - ease((t - (SPEAK_END - 0.35)) / 0.35))
+        card.putalpha(card.getchannel("A").point(lambda v: int(v * fade)))
+        canvas.alpha_composite(card, ((W - card.width) // 2, H - 58 - card.height))
+    # 4. el otro te contesta (y su burbuja también se traduce)
+    if SPEAK_REPLY <= t < SPEAK_END:
+        original, box = roblox_bubble("omw!!")
+        bx, by = head_top(AVATAR_B)
+        fade = ease((t - SPEAK_REPLY) / 0.25) * (1 - ease((t - (SPEAK_END - 0.35)) / 0.3))
+        bubble = original.copy()
+        if t >= SPEAK_REPLY + 1.1:
+            width, height = box[2] - 2, box[3] - 2
+            size, lines, out_w, out_h = fit_bubble_text("¡ya voy!", width, height, 1)
+            patch = render_bubble((out_w, out_h), lines, size, (255, 255, 255), (57, 59, 61), radius=min(height // 2, 12))
+            bubble.alpha_composite(patch, (1 + (width - patch.width) // 2, 1 + height - patch.height))
+        bubble.putalpha(bubble.getchannel("A").point(lambda v: int(v * fade)))
+        canvas.alpha_composite(bubble, (bx - bubble.width // 2, by - bubble.height - 8))
+
+
 # ------------------------------------------------------------------ títulos de cada parte
 CAPTIONS = [
     (0.2, 7.2, "1", "Te escriben en otro idioma: lo leés en el tuyo"),
     (7.2, 12.6, "2", "Apretás ° y escribís como hablás"),
     (12.6, 18.2, "3", "Te hablan por voz: subtítulos al instante"),
+    (18.2, 25.3, "4", "Hablás en tu idioma: te escuchan en el suyo, con voz artificial"),
 ]
 
 
@@ -468,7 +618,7 @@ def draw_brand(canvas: Image.Image) -> None:
 
 
 # ------------------------------------------------------------------ armado
-TOTAL = 18.6
+TOTAL = 25.7
 LOOP_FADE = 0.4
 
 
@@ -477,6 +627,7 @@ def frame_at(base: Image.Image, t: float) -> Image.Image:
     draw_bubble(canvas, t)
     draw_chat(canvas, t)
     draw_voice(canvas, t)
+    draw_speak(canvas, t)
     draw_keycap(canvas, t)
     draw_compose(canvas, t)
     draw_caption(canvas, t)
@@ -494,7 +645,7 @@ def main() -> None:
     for k in range(fade_n):
         frames[-fade_n + k] = Image.blend(frames[-fade_n + k], first, (k + 1) / (fade_n + 1))
     OUT.mkdir(parents=True, exist_ok=True)
-    for name, t in (("still_chat", 5.9), ("still_compose", 10.9), ("still_voice", 15.5)):
+    for name, t in (("still_chat", 5.9), ("still_compose", 10.9), ("still_voice", 15.5), ("still_speak", 22.4)):
         frame_at(base, t).save(SCRATCH / f"{name}.png")
 
     # GIF con ffmpeg: paleta pensada para lo que cambia y tramado ordenado (lo que no cambia queda idéntico)

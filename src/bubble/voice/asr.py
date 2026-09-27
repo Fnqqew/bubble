@@ -89,6 +89,13 @@ def _pick_language(scores: list[tuple[str, float]], prior: dict[str, float]) -> 
     return best, best_prob
 
 
+UNSURE_LOGPROB = -0.5
+
+
+def _unsure(result) -> bool:
+    return not result.scores or float(result.scores[0]) < UNSURE_LOGPROB or result.no_speech_prob > 0.5
+
+
 def pick_models(threads: int | None = None) -> tuple[str, str]:
     """(modelo para ir mostrando el texto mientras hablan, modelo para la versión final), según el procesador."""
     threads = threads or os.cpu_count() or 4
@@ -119,7 +126,7 @@ class FastWhisper:
         return self._tokenizers[language]
 
     def transcribe(self, audio: np.ndarray, language: str | None = None, beam_size: int = 1,
-                   prior: dict[str, float] | None = None) -> Heard | None:
+                   prior: dict[str, float] | None = None, retry_beam: int = 0) -> Heard | None:
         """`audio`: mono, float32, 16 kHz. `language`: si ya se sabe, no se detecta. `prior`: peso extra de algunos
         idiomas al detectarlo (los que se vienen escuchando). None si no había voz."""
         import ctranslate2
@@ -138,17 +145,27 @@ class FastWhisper:
                 language, probability = _pick_language(self._model.model.detect_language(encoded)[0], prior or {})
             tokenizer = self._tokenizer(language)
             prompt = [tokenizer.sot, tokenizer.language, tokenizer.transcribe, tokenizer.no_timestamps]
-            result = self._model.model.generate(
-                encoded, [prompt], beam_size=beam_size,
-                max_length=min(440, int((DENSE_TOKENS_PER_S if language in DENSE_SCRIPTS else TOKENS_PER_S) * seconds)
-                               + 12),
-                suppress_blank=True, repetition_penalty=1.1, return_scores=True, return_no_speech_prob=True,
-            )[0]
+            limit = min(440, int((DENSE_TOKENS_PER_S if language in DENSE_SCRIPTS else TOKENS_PER_S) * seconds) + 12)
+
+            def decode(beams: int):
+                return self._model.model.generate(
+                    encoded, [prompt], beam_size=beams, max_length=limit, suppress_blank=True,
+                    repetition_penalty=1.1, return_scores=True, return_no_speech_prob=True,
+                )[0]
+
+            result = decode(beam_size)
+            if retry_beam > beam_size and _unsure(result):
+                # Salió dudosa (voces rápidas, gritos, música del juego): se prueba con varias hipótesis, reusando lo
+                # ya calculado. La voz clara no paga ese costo (el doble de procesador y de demora, medido).
+                # En frases largas, menos hipótesis: con 5 el final de un monólogo tardaba 2 s (medido).
+                result = decode(retry_beam if seconds <= 5 else min(retry_beam, 3))
         tokens = result.sequences_ids[0]
         text = cut_repetitions(tokenizer.decode(tokens).strip())
         logprob = float(result.scores[0]) if result.scores else 0.0
         heard = Heard(text, language, float(probability), float(result.no_speech_prob), logprob, seconds,
                       time.perf_counter() - started)
-        if not text or is_hallucination(text) or (heard.no_speech > 0.6 and logprob < -0.8):
+        # Solo se descarta con evidencia fuerte de que no había voz: el detector de voz ya dijo que alguien hablaba, y
+        # con la música y los efectos del juego Whisper duda más (se tiraban frases enteras de verdad).
+        if not text or is_hallucination(text) or (heard.no_speech > 0.8 and logprob < -1.0):
             return None
         return heard

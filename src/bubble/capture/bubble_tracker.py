@@ -299,7 +299,7 @@ def _bubble_in(
 
 
 _WORDS = re.compile(r"[^\W\d_]+")
-_ICON_LETTERS = set("cilrjt")  # el ícono de parlante de quien habla por voz se lee "clil", "c(ll", "rill"
+_ICON_LETTERS = set("ceilrjt")  # el ícono de parlante de quien habla por voz se lee "clil", "elil", "c(ll", "rill"
 
 
 def _words(text: str) -> list[str]:

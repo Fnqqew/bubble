@@ -62,7 +62,7 @@ class FakeWhisper:
     def __init__(self, text="anyone wanna trade?", language="en"):
         self.text, self.language, self.calls = text, language, []
 
-    def transcribe(self, audio, language=None, beam_size=1, prior=None):
+    def transcribe(self, audio, language=None, beam_size=1, prior=None, retry_beam=0):
         from bubble.voice.asr import Heard
 
         self.calls.append(len(audio) / SAMPLE_RATE)
@@ -362,3 +362,21 @@ def test_tap_without_talking_is_cancelled():
     speaker.on_event = lambda kind, text: events.append(kind)
     assert speaker._record() is None and "error" in events
     assert VoiceSpeaker.NO_SPEECH_S > 3
+
+
+def test_only_the_latest_synthetic_voices_stay_loaded(monkeypatch):
+    import sys
+    import types
+
+    from bubble.voice import tts
+
+    monkeypatch.setitem(sys.modules, "piper", types.SimpleNamespace(
+        PiperVoice=types.SimpleNamespace(load=lambda model, config_path=None: model)))
+    monkeypatch.setattr(tts, "download", lambda url, path, *args: str(path))
+    voices = tts.Voices()
+    catalog = {n: {"files": {f"{n}.onnx": {}, f"{n}.onnx.json": {}}} for n in "abcd"}
+    monkeypatch.setattr(voices, "catalog", lambda: catalog)
+    for name in "abca":  # "a" se vuelve a usar: pasa a ser la más reciente
+        voices._load(name)
+    voices._load("d")
+    assert list(voices._loaded) == ["c", "a", "d"]  # "b", la menos usada hace más tiempo, se liberó

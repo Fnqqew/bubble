@@ -180,7 +180,7 @@ def test_partial_reads_never_replace_the_whole_bubble():
 def test_things_that_are_not_bubbles_are_ignored():
     from bubble.capture.bubble_tracker import usable_bubble_text
 
-    for junk in ("clil", "c(ll", "rill", "$333 (06S4)", "$333 (05S2)", "GRO (+3", "I GRO", "GR04", "IGNO (+3,",
+    for junk in ("clil", "elil", "c(ll", "rill", "$333 (06S4)", "$333 (05S2)", "GRO (+3", "I GRO", "GR04", "IGNO (+3,",
                  "GRO("):
         assert not usable_bubble_text(junk), junk
     for message in ("Lucha de Brazo", "hi", "gg", "sus", "lol", "ok", "who wants to trade?", "hola",

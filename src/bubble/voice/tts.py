@@ -19,6 +19,7 @@ CATALOG_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.j
 FILE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/{path}"
 QUALITY_ORDER = {"medium": 0, "high": 1, "low": 2, "x_low": 3}
 # Idiomas cuya voz de Piper necesita programas extra que no vienen instalados (tailandés: tltk; japonés: pyopenjtalk).
+MAX_LOADED = 3  # voces sintéticas cargadas a la vez (la tuya, la femenina y la masculina, casi siempre)
 NO_VOICE = {"th", "ja"}
 # Variante preferida por idioma (la más neutra / más hablada entre jugadores).
 PREFERRED_REGION = {"en": "en_US", "es": "es_MX", "pt": "pt_BR", "fr": "fr_FR", "de": "de_DE", "zh": "zh_CN",
@@ -104,6 +105,12 @@ class Voices:
             model = next(p for key, p in paths.items() if key.endswith(".onnx"))
             config = next(p for key, p in paths.items() if key.endswith(".onnx.json"))
             self._loaded[name] = PiperVoice.load(model, config_path=config)
+            # Cada voz ocupa 60-100 MB: quedan cargadas las últimas usadas (las demás se vuelven a cargar si hacen
+            # falta, en ~1 s). Antes quedaban todas las que alguna vez se usaron.
+            while len(self._loaded) > MAX_LOADED:
+                del self._loaded[next(iter(self._loaded))]
+        else:
+            self._loaded[name] = self._loaded.pop(name)  # la más reciente, al final
         return self._loaded[name]
 
     def is_loaded(self, language: str, gender: str | None = None) -> bool:

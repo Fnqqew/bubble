@@ -377,7 +377,7 @@ class LiveListener:
                     and covered >= len(audio) - int(0.15 * SAMPLE_RATE)):
                 heard = quick
         if heard is None:
-            heard = self.final_asr.transcribe(audio, language=self.language, beam_size=1, prior=self._prior(0.5))
+            heard = self.final_asr.transcribe(audio, language=self.language, prior=self._prior(0.5), retry_beam=5)
         if self.speakers:
             # Si no alcanza el audio para reconocer la voz, queda la que se supo mientras hablaba (o "Voz").
             utterance.speaker = self.speakers.identify(audio, hint=utterance.speaker)

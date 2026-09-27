@@ -1,6 +1,6 @@
 [project]
 name = "bubble"
-version = "2.2.1"
+version = "2.3.0"
 description = "Traductor en tiempo real para Roblox: el chat, las burbujas, lo que escribís y la voz, con la suscripción de Claude del jugador."
 requires-python = ">=3.12"
 dependencies = [
@@ -26,6 +26,8 @@ dependencies = [
 # Voz: reconocimiento de voz local (Whisper), voces sintéticas locales (Piper) y audio de Windows.
 voz = ["faster-whisper>=1.2", "piper-tts>=1.3", "soundcard>=0.4"]
 dev = ["pytest>=9", "pytest-asyncio>=1.4"]
+# Pruebas con grabaciones de Roblox (python -m bubble.tools.recording_lab) y el GIF del README: ffmpeg incluido.
+pruebas = ["imageio-ffmpeg>=0.5"]
 
 [project.scripts]
 bubble = "bubble.__main__:main"

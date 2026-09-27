@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 2.2" src="https://img.shields.io/badge/versión-2.2-4a90e2?style=flat-square">
+  <img alt="Versión 2.3" src="https://img.shields.io/badge/versión-2.3-4a90e2?style=flat-square">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
   <img alt="Con tu suscripción de Claude" src="https://img.shields.io/badge/con%20tu%20suscripción-Claude-d97757?style=flat-square">
 </p>
@@ -86,6 +86,7 @@ cómo se ven los subtítulos.
 
 Bubble corre en tu computadora y traduce con **tu propia suscripción de Claude**, a través de Claude Code. No hay
 claves que pegar ni servidores de por medio. La voz se reconoce y se sintetiza en tu PC: Claude solo ve texto.
+Cada traducción usa muy poco (medido: [cuánto usa de tu suscripción](docs/USO-DE-CLAUDE.md)).
 
 Nunca toca el programa de Roblox: solo mira la pantalla, como una app de grabación, y escribe como lo harías vos.
 
@@ -118,6 +119,14 @@ Medido con el simulador de pruebas, con chats lentos, rápidos y en ráfagas:
 | Traducción lista | **~2 s** desde que aparece el mensaje |
 | Parpadeos y traducciones fuera de lugar | **0** |
 | Mensajes en tu idioma enviados a traducir | **ninguno** |
+
+Y con grabaciones reales de Roblox (chat sin fondo, burbujas apiladas y voces con ruido del juego):
+
+| | |
+|---|---|
+| Mensajes del chat encontrados | **17 a 18 de 18**, ninguna traducción fuera del chat |
+| Burbujas | el texto entero siempre (aunque la burbuja quede tapada), sin tomar íconos ni carteles |
+| Voces del juego | todas las frases; la mitad de errores que antes en voces rápidas y con ruido |
 
 Y con el laboratorio de voz (varias personas, siete idiomas, música de fondo):
 

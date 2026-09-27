@@ -305,6 +305,27 @@ tests/          tests con proveedores falsos (no gastan tu suscripción)
 
 ## Probarlo sin Roblox
 
+**Con tus grabaciones de Roblox.** El grabador de Roblox (Esc → Grabar) guarda el juego sin las traducciones encima.
+Bubble puede "jugar" ese video a su velocidad real, con el mismo código que usa en el juego, y medir cómo le fue:
+
+```powershell
+python -m bubble.tools.recording_lab chat     "$env:USERPROFILE\Videos\Roblox\Roblox-....mp4"
+python -m bubble.tools.recording_lab burbujas "$env:USERPROFILE\Videos\Roblox\Roblox-....mp4"
+python -m bubble.tools.recording_lab voz      "$env:USERPROFILE\Videos\Roblox\Roblox-....mp4" --referencia ref.json
+```
+
+- **chat:** mensajes encontrados (con `--esperados`, una lista de los que había de verdad), repetidos o basura,
+  traducciones fuera del chat y parpadeos.
+- **burbujas:** cuántas burbujas tienen su traducción, cuántas quedan fuera de lugar y cada texto que se leyó (así se
+  ve si alguno salió cortado).
+- **voz:** lo que entendió de cada frase, cuánto tarda y, con una transcripción de referencia, cuántas palabras
+  entendió mal.
+
+Guarda cómo se vería en `%LOCALAPPDATA%\Bubble\recording_lab`. Las grabaciones tienen nombres de otros jugadores: no
+se suben a ningún lado.
+
+**Con el simulador.**
+
 ```powershell
 python -m bubble.tools.realtime_benchmark lento medio rapido rafagas
 ```
