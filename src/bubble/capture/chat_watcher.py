@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable
 
 import numpy as np
@@ -45,14 +45,26 @@ def text_fingerprint(image: Image.Image) -> bytes:
     return np.packbits(blocks).tobytes()
 
 
-def _uncovered(image: Image.Image, items: list[ChatItem]) -> bool:
-    """Hay una línea con letras blancas que no salió como mensaje (ni aviso del sistema): la lectura quedó incompleta."""
+def _uncovered_bands(image: Image.Image, items: list[ChatItem]) -> list[tuple[int, int]]:
+    """Franjas con letras blancas que no salieron como mensaje (ni aviso del sistema)."""
+    bands = []
     for top, bottom in white_text_bands(image):
         center = (top + bottom) / 2
         # Una lectura dudosa no cuenta como cubierta: se vuelve a leer para confirmarla (o descartarla).
         if not any(row.top - 4 <= center <= row.bottom + 4 for item in items if not item.uncertain for row in item.rows):
-            return True
-    return False
+            bands.append((top, bottom))
+    return bands
+
+
+def _uncovered(image: Image.Image, items: list[ChatItem]) -> bool:
+    """Hay una línea con letras blancas que no salió como mensaje: la lectura quedó incompleta."""
+    return bool(_uncovered_bands(image, items))
+
+
+def _moved_rows(rows, dy: int):
+    """Filas leídas en un recorte, llevadas a la posición en la captura entera."""
+    return [replace(row, top=row.top + dy, words=tuple(replace(word, top=word.top + dy) for word in row.words))
+            for row in rows]
 
 
 def _grab_fingerprint(region: Rect) -> tuple[Image.Image, bytes]:
@@ -166,6 +178,24 @@ class ChatWatcher:
             self._wrap_right = max([self._wrap_right, *(r.right for r in rows if r.words)])
         wrap = self._wrap_right if self._wrap_right >= 0.5 * image.width else 0
         parsed = parse_chat_items(rows, self.tracker.is_known_name, image.width, wrap)
+        bands = await asyncio.to_thread(_uncovered_bands, image, parsed)
+        if bands:
+            # Renglones con texto que el OCR no devolvió: pasa sobre todo con dos mensajes idénticos seguidos (el
+            # OCR de Windows devuelve uno solo; la otra traducción se apagaba o quedaba corrida un renglón). Se lee
+            # cada franja sola: así sale.
+            found = []
+            heights = sorted(row.height for item in parsed for row in item.rows) or [18.0]
+            reach = heights[len(heights) // 2] * 0.8  # un renglón entero alrededor del centro (no media letra)
+            for top, bottom in bands[:4]:
+                center = (top + bottom) / 2
+                y0, y1 = max(0, int(center - reach)), min(prepared.height, int(center + reach))
+                band_rows = await self.ocr.recognize(prepared.crop((0, y0, prepared.width, y1)))
+                found += parse_chat_items(_moved_rows(band_rows, y0), self.tracker.is_known_name, image.width, wrap)
+            extra = [item for item in found if not any(abs(item.top - known.top) < 9 for known in parsed)]
+            for item in extra:
+                item.uncertain = True  # leído aparte: un mensaje nuevo así se confirma en otra captura
+            if extra:
+                parsed = sorted(parsed + extra, key=lambda item: item.top)
         if faded and await asyncio.to_thread(_uncovered, image, parsed):
             # Solo si a la primera lectura le faltó algo: la segunda cuesta otro OCR entero.
             other = await asyncio.to_thread(binarize_local_background, image)

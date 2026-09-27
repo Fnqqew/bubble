@@ -61,6 +61,34 @@ def _is_system_name(name: str) -> bool:
     )
 
 
+_INNER_PUNCT = re.compile(r"[^\W\d_][.,;:!?$#%&*|/\\][^\W\d_]")  # "dom.te", "bg$d": signo pegado entre letras
+_CASE_FLIPS = re.compile(r"[a-zà-ÿ][A-ZÀ-Þ]")
+_VOWELS = set("aeiouyáéíóúàèìòùâêîôûäëïöüãõ")
+
+
+def _odd_word(word: str) -> bool:
+    core = word.strip("¡¿!?.,;:\"'()[]«»“”…-")
+    if len(core) < 3:
+        return False
+    if _INNER_PUNCT.search(core):
+        return True
+    if len(_CASE_FLIPS.findall(core)) >= 2:  # "jiPCgmôtTt" (un "xXShadowXx" de nombre está en el nombre, no acá)
+        return True
+    letters = [c for c in core.lower() if c.isalpha()]
+    # Muchas letras distintas y ninguna vocal ("xkcdtrwq"); "kkkkk" o "wkwkwk" son risas, no basura.
+    return len(set(letters)) >= 4 and all(c.isascii() for c in letters) and not _VOWELS & set(letters)
+
+
+def looks_garbled(text: str) -> bool:
+    """¿El OCR leyó mal este mensaje? (pasa sobre todo en su primer instante en pantalla, mientras aparece).
+    Palabras con signos en el medio o mayúsculas salteadas: la mitad o más de las palabras así es basura."""
+    words = [word for word in text.split() if any(c.isalpha() for c in word)]
+    if not words:
+        return False
+    odd = sum(_odd_word(word) for word in words)
+    return odd >= 1 and odd * 2 >= len(words)
+
+
 def is_system_message(name: str, text: str, raw: str = "") -> bool:
     if _is_system_name(name) or _SYSTEM_CONTENT.search(text):
         return True
@@ -548,6 +576,8 @@ class ChatTracker:
         new = []
         for line, entry in zip(canonical, assigned):
             if entry.announce and not entry.announced and entry.frames >= max(self.confirm_frames, entry.needed):
+                if looks_garbled(line.text):
+                    continue  # lectura rota: se espera a leerlo bien (si no, se traducía basura)
                 entry.announced = True
                 # Queda como se leyó al confirmarse (si la primera lectura fue dudosa, esta suele ser mejor).
                 entry.line, entry.name_key, entry.text_key = line, _name_key(line.speaker), _text_key(line.text)

@@ -266,7 +266,9 @@ def draw_chat(canvas: Image.Image, t: float) -> None:
         line = message.text if waiting else message.translation
         spot = PillSpot(left=int(text_left) - 5, top=int(y) - 1, bottom=int(y + ROW_H) + 1,
                         cover_right=int(text_left + CHAT_FONT.getlength(message.text)) + 4, max_right=PANEL[2] + 6)
-        pills.append((InlineChatView._pill(spot, line, 15, waiting), spot.left, spot.top))
+        if waiting:
+            continue  # como en la app: la píldora aparece con la traducción terminada
+        pills.append((InlineChatView._pill(spot, line, 15), spot.left, spot.top))
     canvas.alpha_composite(layer)
     for pill, px, py in pills:
         canvas.alpha_composite(pill, (px, py))

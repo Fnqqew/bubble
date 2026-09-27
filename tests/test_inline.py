@@ -202,3 +202,26 @@ def test_find_bubbles_in_synthetic_scene():
     bubbles = find_bubbles(scene, [bubble_row, sign_row])
     assert [b.text for b in bubbles] == ["wanna trade?"]
     assert bubbles[0].background[0] > 230 and bubbles[0].foreground[0] < 90
+
+
+def test_short_translation_is_spread_over_every_row_of_the_message():
+    slots = [Slot(0, 0, 300, 20), Slot(0, 20, 300, 40)]
+    size, lines = layout_text("alguém sabe onde fica o boss", slots, 16, balance=True)
+    assert all(lines) and " ".join(lines) == "alguém sabe onde fica o boss"  # ninguna línea vacía
+    size, lines = layout_text("alguém sabe onde fica o boss", slots, 16)
+    assert lines[1] == ""  # sin repartir (los subtítulos): una sola línea
+
+
+def test_ocr_garbage_is_never_announced():
+    from bubble.capture.chat_parser import ChatTracker, looks_garbled
+    from bubble.translate.base import ChatLine
+
+    assert looks_garbled("fdr.jiPCgmôtTt on-áit") and looks_garbled(": Ples dom.te")
+    assert not any(looks_garbled(t) for t in ("mdr jsp comment on fait", "kkkkkkk", "wkwkwk", "LOL xD", "gg ez"))
+    tracker = ChatTracker()
+    tracker.update([ChatLine("Juan", "hola")])
+    assert tracker.update([ChatLine("Juan", "hola"), ChatLine("tuc", "fdr.jiPCgmôtTt on-áit")]) == []
+    assert tracker.update([ChatLine("Juan", "hola"), ChatLine("tuc", "fdr.jiPCgmôtTt on-áit")]) == []
+    assert tracker.update([ChatLine("Juan", "hola"), ChatLine("Luc", "mdr jsp comment on fait")]) == [
+        ChatLine("Luc", "mdr jsp comment on fait")]
+

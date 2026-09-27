@@ -142,7 +142,7 @@ def run_app(log_path: Path, max_seconds: float, sends: bool = False, detect: boo
                   "_ev_chat_shift", "_ev_chat_frame", "_compose_send")}
 
     def compose_send(self, key):
-        messages, _own = self._compose_results[key]
+        messages, *_rest = self._compose_results[key]
         write("enviando", text=key[0], target=key[1], messages=messages)
         originals["_compose_send"](self, key)
 

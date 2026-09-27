@@ -264,9 +264,20 @@ Otros escenarios:
 
 Cada 3 s guarda una imagen de lo que ve el jugador en `%LOCALAPPDATA%\Bubble\benchmark\`.
 
+**Laboratorio del chat, sin pantalla y sin gastar:**
+
+```powershell
+python -m bubble.tools.chat_lab medio_transparente rafagas_transparente medio rafagas
+```
+
+Corre el ciclo real de lectura (captura, OCR, seguidor del chat, píldoras) contra el simulador dibujado en memoria,
+con traducciones falsas instantáneas. Como sabe dónde está cada mensaje en cada momento, mide parpadeos,
+píldoras fuera de lugar, mensajes sin tapar y basura. Tarda un minuto por escenario.
+
 **Otras herramientas:**
 
 - `python -m pytest` corre los tests.
+- `python -m bubble.tools.voice_lab` es el laboratorio de voz (ver [Voz](#voz-beta-20)).
 - `python -m bubble.tools.bench_latency --models opus sonnet` mide la latencia por modelo.
 - `python -m bubble --console` traduce por consola (`Nombre: mensaje`, o `> lo que escribís`).
 
