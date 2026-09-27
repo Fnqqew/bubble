@@ -85,22 +85,39 @@ class _INPUT(ctypes.Structure):
     _fields_ = [("type", wintypes.DWORD), ("u", _U)]
 
 
+MOVE, LEFT_DOWN, LEFT_UP, ABSOLUTE, VIRTUAL_DESK = 0x0001, 0x0002, 0x0004, 0x8000, 0x4000
+
+
+def _send_mouse(flags: int, x: int = 0, y: int = 0) -> None:
+    event = _INPUT()
+    event.type = 0  # INPUT_MOUSE
+    event.u.mi = _MOUSEINPUT(x, y, 0, flags, 0, 0)
+    ctypes.windll.user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(_INPUT))
+
+
+def _move(x: int, y: int) -> None:
+    """Mueve el mouse como un mouse de verdad (con evento de movimiento): Roblox sigue el mouse por esos eventos, y si
+    el cursor solo "aparecía" en el botón, el clic le llegaba donde creía que estaba antes."""
+    metrics = ctypes.windll.user32.GetSystemMetrics
+    left, top, width, height = metrics(76), metrics(77), metrics(78), metrics(79)  # el escritorio entero
+    nx = round((x - left) * 65535 / max(1, width - 1))
+    ny = round((y - top) * 65535 / max(1, height - 1))
+    _send_mouse(MOVE | ABSOLUTE | VIRTUAL_DESK, nx, ny)
+
+
 def _click(x: int, y: int) -> None:
     """Clic en (x, y) de la pantalla y el mouse vuelve a donde estaba."""
-    user32 = ctypes.windll.user32
     before = wintypes.POINT()
-    user32.GetCursorPos(ctypes.byref(before))
-    user32.SetCursorPos(x, y)
-    time.sleep(0.04)  # que Roblox vea el mouse encima del botón
-    events = (_INPUT * 2)()
-    for event, flag in zip(events, (0x0002, 0x0004)):  # botón izquierdo abajo, arriba
-        event.type = 0  # INPUT_MOUSE
-        event.u.mi = _MOUSEINPUT(0, 0, 0, flag, 0, 0)
-    user32.SendInput(1, ctypes.byref(events[0]), ctypes.sizeof(_INPUT))
+    ctypes.windll.user32.GetCursorPos(ctypes.byref(before))
+    _move(x + 4, y + 3)  # llega al botón y se apoya encima (Roblox resalta el botón antes de aceptar el clic)
     time.sleep(0.03)
-    user32.SendInput(1, ctypes.byref(events[1]), ctypes.sizeof(_INPUT))
-    time.sleep(0.04)
-    user32.SetCursorPos(before.x, before.y)
+    _move(x, y)
+    time.sleep(0.06)
+    _send_mouse(LEFT_DOWN)
+    time.sleep(0.05)
+    _send_mouse(LEFT_UP)
+    time.sleep(0.05)
+    _move(before.x, before.y)
 
 
 class RobloxMic:
@@ -136,9 +153,10 @@ class RobloxMic:
             log.info("Micrófono de Roblox: %s", "no se vio el botón" if seen is None else "ya estaba activo")
             return False
         state, top = seen
-        log.info("Micrófono de Roblox muteado: se desmutea para la frase")
+        log.info("Micrófono de Roblox muteado (botón en %s, %s): se desmutea para la frase",
+                 top.left + state.x, top.top + state.y)
         _click(top.left + state.x, top.top + state.y)
-        time.sleep(0.15)
+        time.sleep(0.35)  # Roblox cambia el ícono un momento después
         after = self._look()
         if after is not None and after[0].muted:
             self.last_error = "No pude desmutearte en Roblox: desmuteate a mano"
