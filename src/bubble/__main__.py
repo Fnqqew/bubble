@@ -95,9 +95,9 @@ def main() -> None:
     if args.console:
         asyncio.run(_console(config))
     else:
-        from .ui.main_window import run_main_window
+        from .ui.launch import launch
 
-        run_main_window(config)
+        launch(config)
 
 
 if __name__ == "__main__":

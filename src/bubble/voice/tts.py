@@ -21,6 +21,26 @@ QUALITY_ORDER = {"medium": 0, "high": 1, "low": 2, "x_low": 3}
 # Variante preferida por idioma (la más neutra / más hablada entre jugadores).
 PREFERRED_REGION = {"en": "en_US", "es": "es_MX", "pt": "pt_BR", "fr": "fr_FR", "de": "de_DE", "zh": "zh_CN",
                     "ar": "ar_JO", "hi": "hi_IN", "nl": "nl_NL"}
+# Voces elegidas a mano para los idiomas base: (femenina, masculina). Suenan naturales y claras; si un idioma no tiene
+# voz de uno de los dos, se usa la otra.
+CURATED: dict[str, tuple[str | None, str | None]] = {
+    "es": ("es_AR-daniela-high", "es_MX-ald-medium"),
+    "en": ("en_US-amy-medium", "en_US-ryan-high"),
+    "pt": (None, "pt_BR-faber-medium"),
+    "fr": ("fr_FR-siwis-medium", "fr_FR-tom-medium"),
+    "de": ("de_DE-kerstin-low", "de_DE-thorsten-medium"),
+    "it": ("it_IT-paola-medium", "it_IT-riccardo-x_low"),
+    "ru": ("ru_RU-irina-medium", "ru_RU-dmitri-medium"),
+    "pl": ("pl_PL-gosia-medium", "pl_PL-darkman-medium"),
+    "nl": ("nl_BE-nathalie-medium", "nl_NL-pim-medium"),
+    "zh": ("zh_CN-huayan-medium", "zh_CN-chaowen-medium"),
+    "hi": ("hi_IN-priyamvada-medium", "hi_IN-pratham-medium"),
+    "tr": (None, "tr_TR-dfki-medium"),
+    "ar": (None, "ar_JO-kareem-medium"),
+    "ko": ("ko_KR-kss-medium", None),
+    "id": ("id_ID-news_tts-medium", None),
+    "vi": ("vi_VN-vais1000-medium", None),
+}
 
 
 @dataclass
@@ -33,6 +53,8 @@ class Voices:
     def __init__(self, folder: Path | None = None, progress: Progress | None = None) -> None:
         self.folder = folder or models_dir() / "piper"
         self.progress = progress
+        self.gender = "femenina"  # o "masculina"
+        self.speed = 1.0
         self._catalog: dict | None = None
         self._loaded: dict[str, object] = {}
         self._lock = threading.Lock()
@@ -43,9 +65,15 @@ class Voices:
             self._catalog = json.loads(path.read_text(encoding="utf-8"))
         return self._catalog
 
-    def voice_for(self, language: str) -> str | None:
-        """Nombre de la mejor voz para `language` ("en", "pt", "es-AR"...), o None si Piper no tiene ese idioma."""
+    def voice_for(self, language: str, gender: str = "femenina") -> str | None:
+        """Nombre de la mejor voz para `language` ("en", "pt", "es-AR"...) con ese género ("femenina" o
+        "masculina"), o None si Piper no tiene ese idioma."""
         family = language.split("-")[0].lower()
+        female, male = CURATED.get(family, (None, None))
+        wanted, other = (male, female) if gender.startswith("m") else (female, male)
+        for name in (wanted, other):
+            if name and name in self.catalog():
+                return name
         region = PREFERRED_REGION.get(family, "")
         candidates = [(key, info) for key, info in self.catalog().items()
                       if info.get("language", {}).get("family") == family]
@@ -74,14 +102,20 @@ class Voices:
             self._loaded[name] = PiperVoice.load(model, config_path=config)
         return self._loaded[name]
 
-    def synthesize(self, text: str, language: str) -> Speech | None:
+    def synthesize(self, text: str, language: str, gender: str | None = None, speed: float | None = None
+                   ) -> Speech | None:
         """Dice `text` con una voz de `language`. None si no hay voz para ese idioma."""
-        name = self.voice_for(language)
+        name = self.voice_for(language, gender or self.gender)
         if name is None or not text.strip():
             return None
+        from piper.config import SynthesisConfig
+
+        # Un poco de variación natural (no monótona) y la velocidad elegida.
+        config = SynthesisConfig(length_scale=1.0 / max(0.6, min(1.6, speed or self.speed)), noise_scale=0.7,
+                                 noise_w_scale=0.85)
         with self._lock:  # una síntesis a la vez por voz
             voice = self._load(name)
-            chunks = list(voice.synthesize(text))
+            chunks = list(voice.synthesize(text, config))
         if not chunks:
             return None
         audio = np.concatenate([chunk.audio_float_array for chunk in chunks]).astype(np.float32)

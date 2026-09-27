@@ -28,10 +28,35 @@ MIN_SCALE = 0.6  # la letra se achica hasta 60% antes de cortar con "…"
 MAX_BUBBLE_SPEED = 1800  # px/s: más rápido que esto es un giro brusco de cámara
 RENDER_DELAY_S = 0.03  # lo que tarda en verse la ventana después de moverla
 
-# Estilo de las píldoras del chat.
+# Estilo de las píldoras del chat (los valores por defecto; se pueden cambiar en Ajustes, ver `set_style`).
 CHAT_FILL = (17, 19, 24, 252)  # casi opaca: con menos se transparentaba el texto original debajo
 CHAT_TEXT = (246, 247, 250)
 ACCENT = (84, 152, 255, 240)
+PILL_COLORS = {"grafito": (17, 19, 24), "medianoche": (14, 24, 48), "violeta": (38, 22, 56),
+               "bosque": (14, 34, 28), "negro": (0, 0, 0)}
+ACCENTS = {"azul": (84, 152, 255), "verde": (92, 214, 140), "rosa": (255, 120, 180), "naranja": (255, 164, 72),
+           "ninguno": None}
+
+
+@dataclass
+class Style:
+    fill: tuple = CHAT_FILL
+    accent: tuple | None = ACCENT
+    scale: float = 1.0  # tamaño de la letra
+    version: int = 0  # cambia con cada ajuste: las imágenes guardadas se redibujan
+
+
+STYLE = Style()
+
+
+def set_style(color: str = "grafito", opacity: float = 0.98, accent: str = "azul", scale: float = 1.0) -> None:
+    """Aplica los ajustes de apariencia a las traducciones (se ven en la próxima captura)."""
+    rgb = PILL_COLORS.get(color, PILL_COLORS["grafito"])
+    STYLE.fill = (*rgb, int(255 * max(0.6, min(1.0, opacity))))
+    tint = ACCENTS.get(accent, ACCENTS["azul"])
+    STYLE.accent = (*tint, 240) if tint else None
+    STYLE.scale = max(0.8, min(1.5, scale))
+    STYLE.version += 1
 SHADOW = (0, 0, 0, 170)
 PILL_BEFORE_TEXT = 5  # la píldora arranca un poco antes del texto (tapa el espacio después de "Nombre:")
 TEXT_INSET = 10  # dentro de la píldora: rayita azul + espacio
@@ -518,16 +543,18 @@ class InlineChatView:
             text = entry.text
             slots = [spot.text_slot() for spot in spots]
             # Acomodar el texto (probar tamaños, medir palabras) es lo más caro del dibujo: se recuerda.
-            layout_key = (text, base, tuple(slot.width for slot in slots))
+            size_wanted = int(round(base * STYLE.scale))
+            layout_key = (text, size_wanted, tuple(slot.width for slot in slots))
             if layout_key not in self._layouts:
                 if len(self._layouts) > 600:
                     self._layouts.clear()
-                self._layouts[layout_key] = layout_text(text, slots, base, balance=True)
+                self._layouts[layout_key] = layout_text(text, slots, size_wanted, balance=True)
             size, lines = self._layouts[layout_key]
             for index, (spot, line) in enumerate(zip(spots, lines)):
                 image = self.images.get(
                     (entry.key, index),
-                    (line, size, spot.height, spot.cover_right - spot.left, spot.max_right - spot.left),
+                    (line, size, spot.height, spot.cover_right - spot.left, spot.max_right - spot.left,
+                     STYLE.version),
                     lambda spot=spot, line=line: self._pill(spot, line, size),
                 )
                 key = (*pill, index)
@@ -589,7 +616,7 @@ class InlineChatView:
         text_width = _font(size, line).getlength(line) if line else 0
         width = max(spot.cover_right - spot.left, int(text_width) + TEXT_INSET + RIGHT_PAD)
         width = min(width, spot.max_right - spot.left)
-        return render_pill(width, spot.height, line, size, fill=CHAT_FILL, text_color=CHAT_TEXT, accent=ACCENT)
+        return render_pill(width, spot.height, line, size, fill=STYLE.fill, text_color=CHAT_TEXT, accent=STYLE.accent)
 
     def preview(self) -> Image.Image | None:
         """Cómo se ve el chat con las traducciones encima. Las traducciones no salen en capturas de pantalla

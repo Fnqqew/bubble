@@ -1,4 +1,4 @@
-"""Ventana principal de Bubble (diseño base; se rediseña más adelante)."""
+"""Ventana principal de Bubble: la lógica (chat, burbujas, escribir, voz). Lo que se ve se arma en app_view.py."""
 
 from __future__ import annotations
 
@@ -31,7 +31,8 @@ from ..translate.languages import LOCALE_CHOICES
 from ..state import load_state, update_state
 from .inline import BubbleView, Entry, InlineChatView
 from .overlays import CalibrationOverlay, ComposeBar, HotkeyCaptureDialog, TranslationOverlay
-from .theme import MUTED, apply_theme, scrolled_text, strong_font
+from . import app_view
+from .theme import apply_theme
 from .tutorial import TutorialWindow, build_steps
 from .voice_panel import VoicePanel
 
@@ -46,11 +47,12 @@ STATUS_TEXT = {
     "cache": "desde cache",
     "error": "ERROR",
 }
-LANG_CHOICES = [f"{code} - {name}" for code, name in LOCALE_CHOICES]
-AUTO_CHOICE = "auto - Idioma del chat"
+LANG_CHOICES = [name for _code_, name in LOCALE_CHOICES]  # en la lista se ve solo el nombre
+_BY_NAME = {name: code for code, name in LOCALE_CHOICES}
+AUTO_CHOICE = "Automático (el del chat)"
 MULTI = "*"  # destino especial: todos los idiomas principales del chat
 MULTI_MAX = 3
-TONE_CHOICES = [f"{level} - {name}" for level, name in TONE_NAMES.items()]
+TONE_CHOICES = [name for _level, name in sorted(TONE_NAMES.items())]
 TONE_HINTS = {
     1: "Claro y correcto, sin jerga: el que menos confusiones genera.",
     2: "Natural y cálido, con palabras completas.",
@@ -71,13 +73,17 @@ def _unchanged(original: str, translation: str) -> bool:
 
 
 def _code(choice: str) -> str:
-    return choice.split(" - ", 1)[0]
+    if choice == AUTO_CHOICE:
+        return "auto"
+    return _BY_NAME.get(choice, choice.split(" - ", 1)[0])
 
 
 def _choice(code: str) -> str:
     if code == "auto":
         return AUTO_CHOICE
-    return next((c for c in LANG_CHOICES if _code(c) == code), code)
+    exact = next((name for known, name in LOCALE_CHOICES if known == code), None)
+    # "es-PE" (no está en la lista): el de su idioma sin región.
+    return exact or next((name for known, name in LOCALE_CHOICES if known == code.split("-")[0]), code)
 
 
 def _debug_dir() -> Path:
@@ -88,10 +94,11 @@ def _debug_dir() -> Path:
 
 
 class BubbleWindow:
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, root: tk.Tk | None = None) -> None:
         self.config = config
         self.runner = AsyncRunner()
-        self.translator = build_translator(config)
+        # El traductor (el SDK de Claude tarda ~2 s en cargarse) se arma en segundo plano, con la ventana ya abierta.
+        self.translator = None
         self.tracker = ChatTracker(username=config.roblox.username)
         self.spam = SpamFilter()
         self.ocr: WindowsOcr | None = None
@@ -116,14 +123,19 @@ class BubbleWindow:
 
         win32.enable_dpi_awareness()
         win32.set_app_id("Bubble.Translator")
-        self.root = tk.Tk()
+        # La ventana se arma escondida y aparece entera de una vez (antes se veía armarse por partes).
+        self.root = root or tk.Tk()
+        self.root.withdraw()
         self.root.title("Bubble")
-        self.root.geometry("1000x800")
-        self.root.minsize(760, 600)
+        self.root.geometry("600x820")
+        self.root.minsize(540, 620)
         if ICON_PATH.exists():
             self.root.iconbitmap(default=str(ICON_PATH))
-        apply_theme(self.root)
-        self._build()
+        apply_theme(self.root, config.appearance.theme)
+        self.voice_panel = VoicePanel(self)
+        app_view.build(self)
+        app_view.apply_overlay_style(self)
+        self._refresh_hotkey_label()
         self.overlay = TranslationOverlay(
             self.root, config.roblox.overlay_seconds, self._overlay_anchor, self._overlay_visible
         )
@@ -142,112 +154,25 @@ class BubbleWindow:
         self.tutorial: TutorialWindow | None = None
         if not load_state().get("tutorial_seen"):
             self.root.after(600, self.open_tutorial)
-        self._set_status("Conectando con tu suscripción de Claude...")
+        self._set_status("Conectando con tu suscripción de Claude…")
         future = self.runner.submit(self._startup())
         future.add_done_callback(lambda f: self.events.put(("started", f.exception())))
 
-    # ================= interfaz =================
-    def _build(self) -> None:
-        pad = {"padx": 8, "pady": 4}
-        top = ttk.Frame(self.root)
-        top.pack(fill="x", **pad)
-        ttk.Label(top, text="Tu idioma:").pack(side="left")
-        self.my_lang = ttk.Combobox(top, values=LANG_CHOICES, state="readonly", width=30)
-        self.my_lang.set(_choice(self.config.user.language))
-        self.my_lang.bind("<<ComboboxSelected>>", self._on_lang_change)
-        self.my_lang.pack(side="left", padx=(4, 16))
-        ttk.Label(top, text="Enviar en:").pack(side="left")
-        self.out_lang = ttk.Combobox(top, values=[AUTO_CHOICE, *LANG_CHOICES], state="readonly", width=30)
-        self.out_lang.set(_choice(self.config.user.outgoing_language))
-        self.out_lang.bind("<<ComboboxSelected>>", self._on_lang_change)
-        self.out_lang.pack(side="left", padx=4)
+    def show(self) -> None:
+        """Muestra la ventana ya armada (una sola vez, completa)."""
+        self.root.update_idletasks()
+        self.root.deiconify()
+        self.root.lift()
 
-        tone_row = ttk.Frame(self.root)
-        tone_row.pack(fill="x", **pad)
-        ttk.Label(tone_row, text="Tono al enviar:").pack(side="left")
-        self.tone = ttk.Combobox(tone_row, values=TONE_CHOICES, state="readonly", width=22)
-        self.tone.set(TONE_CHOICES[clamp_tone(self.config.user.tone) - 1])
-        self.tone.bind("<<ComboboxSelected>>", self._on_tone_change)
-        self.tone.pack(side="left", padx=(4, 8))
-        self.tone_hint = ttk.Label(tone_row, text=TONE_HINTS[clamp_tone(self.config.user.tone)], foreground=MUTED)
-        self.tone_hint.pack(side="left")
-        ttk.Button(tone_row, text="Tutorial", command=self.open_tutorial).pack(side="right")
-        ttk.Label(tone_row, text=f"Modelo: {self.config.claude.model} ({self.config.claude.effort})").pack(
-            side="right", padx=(0, 12)
-        )
-
-        rbx = ttk.LabelFrame(self.root, text="Roblox")
-        rbx.pack(fill="x", **pad)
-        self.roblox_status = ttk.Label(rbx, text="Buscando Roblox...")
-        self.roblox_status.grid(row=0, column=0, columnspan=4, sticky="w", padx=6, pady=(4, 2))
-        find_row = ttk.Frame(rbx)
-        find_row.grid(row=1, column=0, padx=6, pady=4)
-        ttk.Button(find_row, text="1. Detectar chat", command=self._detect_chat).pack(side="left")
-        ttk.Button(find_row, text="a mano…", width=8, command=self._calibrate).pack(side="left", padx=(4, 0))
-        ttk.Button(rbx, text="2. Probar captura", command=self._capture_test).grid(row=1, column=1, padx=6)
-        self.read_var = tk.BooleanVar(value=self.config.roblox.read_chat)
-        ttk.Checkbutton(rbx, text="Leer y traducir el chat", variable=self.read_var, command=self._toggle_reading).grid(
-            row=1, column=2, padx=6
-        )
-        self.bubbles_var = tk.BooleanVar(value=self.config.roblox.translate_bubbles)
-        ttk.Checkbutton(
-            rbx, text="Traducir burbujas de los jugadores", variable=self.bubbles_var, command=self._toggle_bubbles
-        ).grid(row=1, column=3, padx=6)
-        self.region_label = ttk.Label(rbx, text=self._region_text(), foreground=MUTED)
-        self.region_label.grid(row=2, column=0, columnspan=4, sticky="w", padx=6)
-        hotkey_row = ttk.Frame(rbx)
-        hotkey_row.grid(row=3, column=0, columnspan=4, sticky="w", padx=6, pady=(2, 6))
-        ttk.Label(hotkey_row, text="Para escribir en otro idioma, en el juego apretá").pack(side="left")
-        self.hotkey_label = ttk.Label(hotkey_row, text="", font=strong_font())
-        self.hotkey_label.pack(side="left", padx=(6, 10))
-        ttk.Button(hotkey_row, text="Cambiar…", command=self._change_hotkey).pack(side="left")
-        ttk.Label(hotkey_row, text="(escribís y Enter lo manda traducido).",
-                  foreground=MUTED).pack(side="left", padx=6)
-        self._refresh_hotkey_label()
-        self.perf_label = ttk.Label(rbx, text="Detectando tu PC...", foreground=MUTED, wraplength=940,
-                                    justify="left")
-        self.perf_label.grid(row=4, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 6))
-
-        self.voice_panel = VoicePanel(self, self.root)
-
-        sim = ttk.LabelFrame(self.root, text="Prueba sin Roblox")
-        sim.pack(fill="x", **pad)
-        ttk.Label(sim, text="Jugador:").grid(row=0, column=0, sticky="w", padx=4, pady=4)
-        self.speaker = ttk.Entry(sim, width=14)
-        self.speaker.insert(0, "Player1")
-        self.speaker.grid(row=0, column=1, sticky="w", padx=4)
-        self.incoming_text = ttk.Entry(sim)
-        self.incoming_text.grid(row=0, column=2, sticky="ew", padx=4)
-        self.incoming_text.bind("<Return>", lambda _e: self._send_incoming())
-        ttk.Button(sim, text="Traducir entrante", command=self._send_incoming).grid(row=0, column=3, padx=4)
-        ttk.Label(sim, text="Vos:").grid(row=1, column=0, sticky="w", padx=4, pady=4)
-        self.outgoing_text = ttk.Entry(sim)
-        self.outgoing_text.grid(row=1, column=1, columnspan=2, sticky="ew", padx=4)
-        self.outgoing_text.bind("<Return>", lambda _e: self._send_outgoing())
-        ttk.Button(sim, text="Traducir y copiar", command=self._send_outgoing).grid(row=1, column=3, padx=4)
-        sim.columnconfigure(2, weight=1)
-
-        self.live = ttk.Label(self.root, text="", foreground=MUTED)
-        self.live.pack(fill="x", **pad)
-        log_frame, self.log = scrolled_text(self.root, wrap="word", state="disabled", font=("Segoe UI", 10))
-        log_frame.pack(fill="both", expand=True, **pad)
-        self.log.tag_configure("in", foreground="#7cc4ff")
-        self.log.tag_configure("out", foreground="#8be28b")
-        self.log.tag_configure("meta", foreground="#8a8f98", font=("Segoe UI", 8))
-        self.log.tag_configure("error", foreground="#ff8a8a")
-        self.log.tag_configure("info", foreground="#ffcc66")
-        self.status = ttk.Label(self.root, text="", anchor="w", relief="sunken")
-        self.status.pack(fill="x", side="bottom")
-
+    # ================= interfaz (ver app_view.py) =================
     def _region_text(self) -> str:
-        r = self.saved_region
-        if not r:
-            return "Todavía no encontré el chat: abrí Roblox (se busca solo) o tocá «Detectar chat»."
-        where = "relativo a la ventana de Roblox" if r.get("relative") else "posición fija en pantalla"
-        return f"Chat calibrado: {r['w']}x{r['h']} px ({where})."
+        if not self.saved_region:
+            return "Todavía no vi el chat: abrí Roblox y lo busco solo."
+        return "Ya sé dónde está el chat. Si cambiás de juego y no lo encuentro, buscalo en Ajustes."
 
     # ================= arranque y cierre =================
     async def _startup(self) -> None:
+        self.translator = await asyncio.to_thread(build_translator, self.config)
         await self.translator.start()
         for provider in self.translator.router.providers:
             if hasattr(provider, "keep_warm_when"):
@@ -337,7 +262,8 @@ class BubbleWindow:
             self.watcher.stop()
         if self.bubble_watcher:
             self.bubble_watcher.stop()
-        await self.translator.close()
+        if self.translator is not None:
+            await self.translator.close()
 
     def _on_close(self) -> None:
         self._set_status("Cerrando...")
@@ -366,23 +292,38 @@ class BubbleWindow:
         return win32.roblox_is_foreground() or self.compose.visible
 
     def _poll_roblox(self) -> None:
+        from .widgets import palette
+
         hwnd = win32.find_roblox_window()
+        colors = palette()
         if hwnd:
-            rect = win32.client_rect(hwnd)
-            self.roblox_status.configure(text=f"Roblox detectado ({rect.width}x{rect.height})", foreground="#6cd46c")
+            self.roblox_status.configure(text="Roblox está abierto.", foreground=colors["good"])
         else:
-            self.roblox_status.configure(text="Roblox no está abierto (o está minimizado)", foreground="#ff6b6b")
+            self.roblox_status.configure(text="Roblox está cerrado (o minimizado).", foreground=colors["muted"])
+        self._refresh_header(bool(hwnd))
         # Sin chat calibrado: se busca solo mientras jugás (apenas haya un par de mensajes a la vista).
         if self.ready and not self.saved_region and hwnd and win32.roblox_is_foreground():
             self._detect_chat(quiet=True)
         self._refresh_perf_label()
         self.root.after(2000, self._poll_roblox)
 
+    def _refresh_header(self, roblox_open: bool | None = None) -> None:
+        if roblox_open is None:
+            roblox_open = win32.find_roblox_window() is not None
+        if getattr(self, "_start_error", None):
+            app_view.set_state(self, "bad", "No pude conectarme con Claude. Mirá «Actividad».", "Sin conexión")
+        elif not self.ready:
+            app_view.set_state(self, "warn", "Preparando todo… dame un segundito.", "Conectando")
+        elif roblox_open:
+            app_view.set_state(self, "good", "Todo listo. ¡A jugar!", "Traduciendo")
+        else:
+            app_view.set_state(self, "good", "Listo. Abrí Roblox y yo me encargo del resto.", "Listo")
+
     def _refresh_perf_label(self) -> None:
         hardware = getattr(self, "hardware", None)
         if hardware is None:
             return
-        text = f"Tu PC: {hardware.summary()}"
+        text = f"{hardware.summary()}"
         paces = []
         if self.watcher and self.watcher.running and self.watcher.pacer and self.watcher.pacer.cost:
             paces.append(f"chat cada {self.watcher.pacer.sleep:.2f} s")
@@ -450,16 +391,16 @@ class BubbleWindow:
                                  "o marcalo «a mano…».")
             return
         self._on_calibrated(guess.region.offset(client.left, client.top), client)
-        self._append(f"Chat encontrado automáticamente ({guess.lines} mensajes a la vista).\n", "info")
+        self._append(f"Encontré el chat de este juego ({guess.lines} mensajes a la vista).\n", "info")
 
     def _on_calibrated(self, rect: Rect | None, client: Rect | None) -> None:
         if rect is None:
-            self._set_status("Calibración cancelada.")
+            self._set_status("Listo, no cambié nada.")
             return
         roblox.save_chat_region(rect, client)
         self.saved_region = roblox.load_chat_region()
         self.region_label.configure(text=self._region_text())
-        self._set_status("Chat calibrado. Tocá 'Probar captura' para verificar la lectura.")
+        self._set_status("¡Encontré el chat! Ya lo estoy leyendo.")
 
     def _toggle_reading(self) -> None:
         enabled = self.read_var.get()
@@ -469,7 +410,8 @@ class BubbleWindow:
                 self.watcher.start() if enabled else self.watcher.stop()
 
         self.runner.submit(apply())
-        self._set_status("Leyendo el chat de Roblox." if enabled else "Lectura del chat pausada.")
+        save_setting("roblox", "read_chat", enabled)
+        self._set_status("Traduciendo el chat." if enabled else "Pausé la traducción del chat.")
 
     def _toggle_bubbles(self) -> None:
         enabled = self.bubbles_var.get()
@@ -480,7 +422,7 @@ class BubbleWindow:
                 self.bubble_watcher.start() if enabled else self.bubble_watcher.stop()
 
         self.runner.submit(apply())
-        self._set_status("Traduciendo burbujas de los jugadores." if enabled else "Burbujas sin traducir.")
+        self._set_status("Traduciendo las burbujas." if enabled else "Pausé la traducción de las burbujas.")
 
     def _game_area(self) -> Rect | None:
         """Pantalla del juego (para buscar burbujas), solo con Roblox en primer plano."""
@@ -694,7 +636,7 @@ class BubbleWindow:
         save_setting("user", "outgoing_language", self.config.user.outgoing_language)
 
     def _on_tone_change(self, _event=None) -> None:
-        self.config.user.tone = int(_code(self.tone.get()))
+        self.config.user.tone = TONE_CHOICES.index(self.tone.get()) + 1
         self.tone_hint.configure(text=TONE_HINTS[self.config.user.tone])
         save_setting("user", "tone", self.config.user.tone)
 
@@ -787,17 +729,28 @@ class BubbleWindow:
 
     def _ev_started(self, error: BaseException | None) -> None:
         if error:
+            self._start_error = error
             self._set_status(f"No se pudo iniciar: {error}")
             self._append(f"{error}\n", "error")
+            self._refresh_header()
             return
         self.ready = True
-        ocr_lang = self.ocr.language if self.ocr else "?"
-        self._set_status(f"Listo. OCR de Windows en {ocr_lang}.")
+        self._set_status("")
+        self._refresh_header()
         self.voice_panel.start()
 
     # --- voz (beta)
     def _ev_voice_status(self, text: str) -> None:
-        self.voice_panel.status.configure(text=text)
+        if self.voice_panel.status is not None:
+            self.voice_panel.status.configure(text=text)
+        if text:
+            self._set_status(text)
+
+    def _ev_voice_devices(self, payload) -> None:
+        self.voice_panel.show_devices(*payload)
+
+    def _ev_voice_cable_done(self, _payload) -> None:
+        self.voice_panel.cable_done()
 
     def _ev_voice_ready(self, then) -> None:
         then()
@@ -928,8 +881,10 @@ class BubbleWindow:
         self.log.configure(state="disabled")
 
     def _set_status(self, text: str) -> None:
-        self.status.configure(text=f" {text}")
+        self.status.configure(text=text)
 
 
 def run_main_window(config: Config) -> None:
-    BubbleWindow(config).run()
+    window = BubbleWindow(config)
+    window.show()
+    window.run()

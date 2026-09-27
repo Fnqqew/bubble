@@ -1,0 +1,375 @@
+"""La ventana de Bubble: simple a primera vista (tu idioma y cuatro interruptores) y personalizable en Ajustes.
+
+    ┌ Bubble ─────────────── ● Todo listo ┐
+    │ Inicio · Voz · Ajustes · Actividad   │
+    │ ┌ Hablo ───────── Español (AR) ▾ ┐  │
+    │ │ Chat del juego            ( ●) │  │
+    │ │ Burbujas                  ( ●) │  │
+    │ │ Lo que te dicen por voz   (● ) │  │
+    │ │ Tu voz para los demás     (● ) │  │
+    │ └────────────────────────────────┘  │
+    └──────────────────────────────────────┘
+
+Arma los mismos controles que usa la lógica de `BubbleWindow` (idiomas, tono, estado de Roblox, registro…).
+"""
+
+from __future__ import annotations
+
+import tkinter as tk
+from pathlib import Path
+from tkinter import ttk
+from typing import TYPE_CHECKING
+
+from ..config import save_setting
+from ..translate.base import clamp_tone
+from . import inline, subtitles, theme, widgets
+
+if TYPE_CHECKING:
+    from .main_window import BubbleWindow
+
+LOGO = Path(__file__).resolve().parent.parent / "assets" / "bubble.png"
+PAGES = {"inicio": "Inicio", "voz": "Voz", "ajustes": "Ajustes", "actividad": "Actividad"}
+PILL_NAMES = {"grafito": "Grafito", "medianoche": "Medianoche", "violeta": "Violeta", "bosque": "Bosque",
+              "negro": "Negro"}
+ACCENT_NAMES = {"azul": "Azul", "verde": "Verde", "rosa": "Rosa", "naranja": "Naranja", "ninguno": "Sin color"}
+TEXT_SIZES = {"1.0": "Como el chat", "1.15": "Más grande", "1.3": "Grande"}
+SUB_SIZES = {"0.85": "Chicos", "1.0": "Normales", "1.2": "Grandes"}
+POSITIONS = {"abajo": "Abajo", "arriba": "Arriba"}
+THEMES = {"oscuro": "Oscuro", "claro": "Claro"}
+PERFORMANCE = {"auto": "Automático", "alta": "Máxima", "media": "Equilibrado", "baja": "Liviano"}
+
+
+def build(app: BubbleWindow) -> None:
+    root = app.root
+    root.configure(background=widgets.palette()["bg"])
+    shell = ttk.Frame(root, padding=(22, 18, 22, 10))
+    shell.pack(fill="both", expand=True)
+    _header(app, shell)
+
+    nav = ttk.Frame(shell)
+    nav.pack(fill="x", pady=(16, 14))
+    app.page_var = tk.StringVar(value="inicio")
+    for key, name in PAGES.items():
+        ttk.Radiobutton(nav, text=name, value=key, variable=app.page_var, style="Toggle.TButton",
+                        command=lambda: _show_page(app)).pack(side="left", padx=(0, 6))
+
+    app.pages = {}
+    stack = ttk.Frame(shell)
+    stack.pack(fill="both", expand=True)
+    builders = {"inicio": lambda page: _home(app, page), "voz": app.voice_panel.build_page,
+                "ajustes": lambda page: _settings(app, page), "actividad": lambda page: _activity(app, page)}
+    for key in PAGES:
+        if key == "actividad":
+            parent = app.pages[key] = ttk.Frame(stack)
+        else:
+            scroll = app.pages[key] = widgets.Scrollable(stack)  # se desplaza si la ventana es chica
+            parent = scroll.body
+        builders[key](parent)
+
+    footer = ttk.Frame(shell)
+    footer.pack(fill="x", side="bottom", pady=(8, 0))
+    app.status = ttk.Label(footer, text="", font="SunValleyCaptionFont", foreground=widgets.palette()["muted"],
+                           anchor="w")
+    app.status.pack(fill="x")
+    _show_page(app)
+
+
+# ---------------------------------------------------------------- encabezado
+def _header(app: BubbleWindow, parent) -> None:
+    head = ttk.Frame(parent)
+    head.pack(fill="x")
+    if LOGO.exists():
+        from PIL import Image, ImageTk
+
+        app._logo = ImageTk.PhotoImage(Image.open(LOGO).convert("RGBA").resize((40, 40), Image.Resampling.LANCZOS))
+        ttk.Label(head, image=app._logo).pack(side="left", padx=(0, 12))
+    texts = ttk.Frame(head)
+    texts.pack(side="left", fill="x", expand=True)
+    ttk.Label(texts, text="Bubble", font="SunValleySubtitleFont").pack(anchor="w")
+    app.greeting = ttk.Label(texts, text="Preparando todo… dame un segundito.", font="SunValleyCaptionFont",
+                             foreground=widgets.palette()["muted"])
+    app.greeting.pack(anchor="w")
+    app.state_chip = ttk.Label(head, text="●  Conectando", font="SunValleyCaptionFont",
+                               foreground=widgets.palette()["warn"])
+    app.state_chip.pack(side="right", anchor="n", pady=(6, 0))
+
+
+def set_state(app: BubbleWindow, kind: str, greeting: str, chip: str) -> None:
+    colors = widgets.palette()
+    app.greeting.configure(text=greeting)
+    app.state_chip.configure(text=f"●  {chip}", foreground=colors.get(kind, colors["muted"]))
+
+
+def _show_page(app: BubbleWindow) -> None:
+    for key, page in app.pages.items():
+        if key == app.page_var.get():
+            page.pack(fill="both", expand=True)
+        else:
+            page.pack_forget()
+
+
+# ---------------------------------------------------------------- Inicio
+def _home(app: BubbleWindow, page) -> None:
+    from .main_window import LANG_CHOICES, _choice
+
+    box = widgets.card(page, "Hablo", "Te muestro todo en este idioma.")
+    app.my_lang = ttk.Combobox(box, values=LANG_CHOICES, state="readonly")
+    app.my_lang.set(_choice(app.config.user.language))
+    app.my_lang.bind("<<ComboboxSelected>>", app._on_lang_change)
+    app.my_lang.pack(fill="x")
+
+    box = widgets.card(page, "Qué traduzco")
+    app.read_var = tk.BooleanVar(value=app.config.roblox.read_chat)
+    widgets.switch_row(box, "chat", "Chat del juego", "Cada mensaje en tu idioma, encima del original.",
+                       app.read_var, app._toggle_reading)
+    app.bubbles_var = tk.BooleanVar(value=app.config.roblox.translate_bubbles)
+    widgets.switch_row(box, "bubbles", "Burbujas", "Lo que dicen sobre la cabeza de los jugadores.",
+                       app.bubbles_var, app._toggle_bubbles)
+    voice = app.voice_panel
+    widgets.switch_row(box, "listen", "Lo que te dicen por voz", "Subtítulos de quién habla y qué dice.",
+                       voice.subtitles_var, voice._toggle_subtitles)
+    widgets.switch_row(box, "mic", "Tu voz para los demás", "Hablás en tu idioma y te escuchan en el suyo.",
+                       voice.speak_var, voice._toggle_speak)
+
+    box = widgets.card(page, "Para escribir en otro idioma")
+    row = ttk.Frame(box)
+    row.pack(fill="x")
+    ttk.Label(row, text="En el juego apretá").pack(side="left")
+    app.hotkey_label = ttk.Label(row, text="", font="SunValleyBodyStrongFont")
+    app.hotkey_label.pack(side="left", padx=8)
+    ttk.Button(row, text="Cambiar", command=app._change_hotkey).pack(side="right")
+    widgets.muted(box, "Escribís como hablás. Enter lo manda al chat traducido; Ctrl+Enter lo dice en voz.")
+
+    info = ttk.Frame(page)
+    info.pack(fill="x", pady=(2, 0))
+    app.roblox_status = ttk.Label(info, text="Buscando Roblox…", font="SunValleyCaptionFont",
+                                  foreground=widgets.palette()["muted"])
+    app.roblox_status.pack(anchor="w")
+    app.region_label = ttk.Label(info, text=app._region_text(), font="SunValleyCaptionFont",
+                                 foreground=widgets.palette()["faint"], wraplength=460, justify="left")
+    app.region_label.pack(anchor="w")
+
+
+# ---------------------------------------------------------------- Ajustes
+def _settings(app: BubbleWindow, page) -> None:
+    from .main_window import AUTO_CHOICE, LANG_CHOICES, TONE_CHOICES, TONE_HINTS, _choice
+
+    look = app.config.appearance
+    box = widgets.card(page, "Apariencia")
+    app.theme_var = tk.StringVar(value=look.theme)
+    row = widgets.label_row(box, "Tema", pady=(0, 2))
+    widgets.segmented(row, app.theme_var, THEMES, lambda: _change_theme(app)).pack(side="right")
+
+    box = widgets.card(page, "Traducciones en el juego", "Cómo se ven las traducciones encima del chat.")
+    app.pill_var = tk.StringVar(value=look.pill_color)
+    row = widgets.label_row(box, "Fondo")
+    _option_menu(row, app.pill_var, PILL_NAMES, lambda: _change_look(app))
+    app.accent_var = tk.StringVar(value=look.accent)
+    row = widgets.label_row(box, "Detalle de color")
+    _option_menu(row, app.accent_var, ACCENT_NAMES, lambda: _change_look(app))
+    app.opacity_var = tk.DoubleVar(value=look.pill_opacity)
+    row = widgets.label_row(box, "Opacidad")
+    ttk.Scale(row, from_=0.7, to=1.0, variable=app.opacity_var, length=180,
+              command=lambda _v: _change_look(app, redraw_preview=True)).pack(side="right")
+    app.text_var = tk.StringVar(value=_closest(look.text_scale, TEXT_SIZES))
+    row = widgets.label_row(box, "Letra")
+    _option_menu(row, app.text_var, TEXT_SIZES, lambda: _change_look(app))
+    app.look_preview = ttk.Label(box)
+    app.look_preview.pack(anchor="w", pady=(12, 0))
+    _render_preview(app)
+
+    box = widgets.card(page, "Subtítulos de voz")
+    app.sub_size_var = tk.StringVar(value=_closest(look.subtitle_size, SUB_SIZES))
+    row = widgets.label_row(box, "Tamaño")
+    widgets.segmented(row, app.sub_size_var, SUB_SIZES, lambda: _change_subtitles(app)).pack(side="right")
+    app.sub_pos_var = tk.StringVar(value=look.subtitle_position)
+    row = widgets.label_row(box, "Dónde")
+    widgets.segmented(row, app.sub_pos_var, POSITIONS, lambda: _change_subtitles(app)).pack(side="right")
+    app.sub_original_var = tk.BooleanVar(value=look.subtitle_original)
+    ttk.Checkbutton(box, text="Mostrar también lo que dijeron en su idioma", variable=app.sub_original_var,
+                    style="Switch.TCheckbutton", command=lambda: _change_subtitles(app)).pack(anchor="w", pady=(10, 0))
+
+    box = widgets.card(page, "Al escribir")
+    row = widgets.label_row(box, "Mandar en")
+    app.out_lang = ttk.Combobox(row, values=[AUTO_CHOICE, *LANG_CHOICES], state="readonly", width=30)
+    app.out_lang.set(_choice(app.config.user.outgoing_language))
+    app.out_lang.bind("<<ComboboxSelected>>", app._on_lang_change)
+    app.out_lang.pack(side="right")
+    row = widgets.label_row(box, "Tono")
+    app.tone = ttk.Combobox(row, values=TONE_CHOICES, state="readonly", width=22)
+    app.tone.set(TONE_CHOICES[clamp_tone(app.config.user.tone) - 1])
+    app.tone.bind("<<ComboboxSelected>>", app._on_tone_change)
+    app.tone.pack(side="right")
+    app.tone_hint = widgets.muted(box, TONE_HINTS[clamp_tone(app.config.user.tone)])
+
+    box = widgets.card(page, "Chat de Roblox", "Bubble encuentra el chat solo. Si en algún juego no lo encuentra, "
+                                              "marcalo a mano.")
+    row = ttk.Frame(box)
+    row.pack(fill="x")
+    ttk.Button(row, text="Buscar el chat", command=app._detect_chat).pack(side="left")
+    ttk.Button(row, text="Marcarlo a mano", command=app._calibrate).pack(side="left", padx=8)
+    ttk.Button(row, text="Probar lectura", command=app._capture_test).pack(side="left")
+
+    box = widgets.card(page, "Rendimiento")
+    app.perf_var = tk.StringVar(value=app.config.roblox.performance
+                                if app.config.roblox.performance in PERFORMANCE else "auto")
+    row = widgets.label_row(box, "Modo", pady=(0, 2))
+    _option_menu(row, app.perf_var, PERFORMANCE, lambda: _change_performance(app))
+    app.perf_label = widgets.muted(box, "Detectando tu PC…")
+
+    box = widgets.card(page, "Ayuda")
+    row = ttk.Frame(box)
+    row.pack(fill="x")
+    ttk.Button(row, text="Ver el tutorial", command=app.open_tutorial).pack(side="left")
+    ttk.Label(row, text=f"Traduce: Claude {app.config.claude.model}", font="SunValleyCaptionFont",
+              foreground=widgets.palette()["faint"]).pack(side="right")
+
+
+def _option_menu(parent, variable: tk.StringVar, options: dict[str, str], command) -> ttk.Combobox:
+    """Lista desplegable que muestra nombres lindos y guarda el valor."""
+    box = ttk.Combobox(parent, values=list(options.values()), state="readonly", width=16)
+    box.set(options.get(variable.get(), next(iter(options.values()))))
+
+    def chosen(_event=None):
+        label = box.get()
+        variable.set(next(key for key, text in options.items() if text == label))
+        command()
+
+    box.bind("<<ComboboxSelected>>", chosen)
+    box.pack(side="right")
+    return box
+
+
+def _closest(value: float, options: dict[str, str]) -> str:
+    return min(options, key=lambda key: abs(float(key) - value))
+
+
+def _change_theme(app: BubbleWindow) -> None:
+    app.config.appearance.theme = app.theme_var.get()
+    save_setting("appearance", "theme", app.config.appearance.theme)
+    theme.apply_theme(app.root, app.config.appearance.theme)
+    recolor(app)
+
+
+def recolor(app: BubbleWindow) -> None:
+    """Después de cambiar el tema: lo que no es del tema (textos grises, registro, fondos) toma los colores nuevos."""
+    colors = widgets.palette()
+    app.root.configure(background=colors["bg"])
+    for page in app.pages.values():
+        if isinstance(page, widgets.Scrollable):
+            page.recolor()
+
+    def walk(widget):
+        for child in widget.winfo_children():
+            if isinstance(child, ttk.Label):
+                current = str(child.cget("foreground"))
+                for old in widgets.PALETTES.values():
+                    for key in ("muted", "faint", "accent", "good", "warn", "bad"):
+                        if current == old[key]:
+                            child.configure(foreground=colors[key])
+            walk(child)
+
+    walk(app.root)
+    theme.style_text(app.log)
+    _log_tags(app)
+
+
+def _change_look(app: BubbleWindow, redraw_preview: bool = True) -> None:
+    look = app.config.appearance
+    look.pill_color, look.accent = app.pill_var.get(), app.accent_var.get()
+    look.pill_opacity = round(float(app.opacity_var.get()), 2)
+    look.text_scale = float(app.text_var.get())
+    for key in ("pill_color", "accent", "pill_opacity", "text_scale"):
+        save_setting("appearance", key, getattr(look, key))
+    apply_overlay_style(app)
+    if redraw_preview:
+        _render_preview(app)
+
+
+def apply_overlay_style(app: BubbleWindow) -> None:
+    look = app.config.appearance
+    inline.set_style(look.pill_color, look.pill_opacity, look.accent, look.text_scale)
+    subtitles.set_subtitles(look.subtitle_size, look.subtitle_position, look.subtitle_original)
+
+
+def _render_preview(app: BubbleWindow) -> None:
+    """Muestra cómo queda una traducción con los ajustes elegidos, sobre un pedacito de "juego"."""
+    from PIL import Image, ImageDraw, ImageTk
+
+    width, height = 440, 64
+    scene = Image.new("RGBA", (width, height), (118, 170, 228, 255))
+    draw = ImageDraw.Draw(scene)
+    draw.rectangle((0, 40, width, height), fill=(72, 132, 62, 255))
+    draw.ellipse((300, 6, 380, 56), fill=(46, 110, 50, 255))
+    size = int(round(16 * inline.STYLE.scale))
+    name_font = inline._font(15)
+    draw.text((12, 32), "Pedro_BR:", font=name_font, fill=(120, 200, 255), anchor="lm", stroke_width=1,
+              stroke_fill=(0, 0, 0))
+    left = 16 + int(name_font.getlength("Pedro_BR: "))
+    text = "¿alguien sabe dónde está el jefe?"
+    pill_width = min(width - left - 8, int(inline._font(size, text).getlength(text)) + inline.TEXT_INSET + 12)
+    pill = inline.render_pill(pill_width, max(24, size + 10), text, size, fill=inline.STYLE.fill,
+                              text_color=inline.CHAT_TEXT, accent=inline.STYLE.accent)
+    scene.alpha_composite(pill, (left - inline.PILL_BEFORE_TEXT, 32 - pill.height // 2))
+    rounded = Image.new("L", scene.size, 0)
+    ImageDraw.Draw(rounded).rounded_rectangle((0, 0, width - 1, height - 1), 10, fill=255)
+    scene.putalpha(rounded)
+    background = Image.new("RGBA", scene.size, widgets.palette()["card"])
+    background.alpha_composite(scene)
+    app._look_image = ImageTk.PhotoImage(background.convert("RGB"))
+    app.look_preview.configure(image=app._look_image)
+
+
+def _change_subtitles(app: BubbleWindow) -> None:
+    look = app.config.appearance
+    look.subtitle_size = float(app.sub_size_var.get())
+    look.subtitle_position = app.sub_pos_var.get()
+    look.subtitle_original = bool(app.sub_original_var.get())
+    for key in ("subtitle_size", "subtitle_position", "subtitle_original"):
+        save_setting("appearance", key, getattr(look, key))
+    apply_overlay_style(app)
+
+
+def _change_performance(app: BubbleWindow) -> None:
+    app.config.roblox.performance = app.perf_var.get()
+    save_setting("roblox", "performance", app.config.roblox.performance)
+    app._set_status("Listo: el modo de rendimiento nuevo se usa la próxima vez que abras Bubble.")
+
+
+# ---------------------------------------------------------------- Actividad
+def _activity(app: BubbleWindow, page) -> None:
+    ttk.Label(page, text="Lo que fui traduciendo", font="SunValleyBodyStrongFont").pack(anchor="w")
+    widgets.muted(page, "Lo último abajo. Azul: lo que te dicen; verde: lo que mandás.", pady=(2, 8))
+    frame, app.log = theme.scrolled_text(page, wrap="word", state="disabled", font=("Segoe UI", 10), height=14)
+    frame.pack(fill="both", expand=True)
+    _log_tags(app)
+    app.live = ttk.Label(page, text="", font="SunValleyCaptionFont", foreground=widgets.palette()["muted"])
+    app.live.pack(fill="x", pady=(6, 0))
+
+    box = widgets.card(page, "Probar sin Roblox", "Escribí un mensaje como si fuera de otro jugador, o uno tuyo.",
+                       pady=(10, 0))
+    row = ttk.Frame(box)
+    row.pack(fill="x", pady=(0, 6))
+    app.speaker = ttk.Entry(row, width=12)
+    app.speaker.insert(0, "Player1")
+    app.speaker.pack(side="left")
+    app.incoming_text = ttk.Entry(row)
+    app.incoming_text.pack(side="left", fill="x", expand=True, padx=8)
+    app.incoming_text.bind("<Return>", lambda _e: app._send_incoming())
+    ttk.Button(row, text="Traducir", command=app._send_incoming).pack(side="right")
+    row = ttk.Frame(box)
+    row.pack(fill="x")
+    ttk.Label(row, text="Vos:", width=12).pack(side="left")
+    app.outgoing_text = ttk.Entry(row)
+    app.outgoing_text.pack(side="left", fill="x", expand=True, padx=8)
+    app.outgoing_text.bind("<Return>", lambda _e: app._send_outgoing())
+    ttk.Button(row, text="Traducir", command=app._send_outgoing).pack(side="right")
+
+
+def _log_tags(app: BubbleWindow) -> None:
+    colors = widgets.palette()
+    app.log.tag_configure("in", foreground=colors["in"])
+    app.log.tag_configure("out", foreground=colors["out"])
+    app.log.tag_configure("meta", foreground=colors["meta"], font=("Segoe UI", 8))
+    app.log.tag_configure("error", foreground=colors["error"])
+    app.log.tag_configure("info", foreground=colors["info"])

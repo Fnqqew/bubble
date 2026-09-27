@@ -35,9 +35,11 @@ Translate = Callable[[str], tuple[str, str] | None]  # texto en tu idioma -> (tr
 class VoiceOut:
     """Dice un texto con voz sintética: al micrófono virtual y (si querés) a tus auriculares."""
 
-    def __init__(self, voices: Voices, hear_myself: bool = True, output: audio_io.Output | None = None) -> None:
+    def __init__(self, voices: Voices, hear_myself: bool = True, output: audio_io.Output | None = None,
+                 bridge=None) -> None:
         self.voices = voices
         self.output = output or audio_io.voice_output()
+        self.bridge = bridge  # tu micrófono pasando al virtual (ver bridge.py): baja mientras suena la traducida
         # Con el micrófono virtual, tu voz traducida va a Roblox y vos no la escucharías: también suena, más bajo,
         # en tus auriculares (sin micrófono virtual ya sale por ahí).
         self.hear_myself = hear_myself
@@ -59,6 +61,8 @@ class VoiceOut:
             seconds = len(speech.audio) / speech.sample_rate
             for listener in self.listeners:
                 listener(seconds)
+            if self.bridge is not None and self.bridge.running:
+                self.bridge.duck(seconds + 0.25)
             if self.hear_myself and self.output.is_cable:
                 threading.Thread(target=self._monitor, args=(speech,), name="bubble-tu-voz-escucha",
                                  daemon=True).start()

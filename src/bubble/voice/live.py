@@ -128,6 +128,7 @@ class LiveListener:
         settings: Settings | None = None,
         vad=None,
         language: str | None = None,
+        native: str = "",
     ) -> None:
         self.final_asr = final_asr
         self.partial_asr = partial_asr
@@ -139,6 +140,9 @@ class LiveListener:
         self.muted_until = 0.0  # mientras suena tu propia voz traducida por los parlantes, no se escucha
         self._vad = vad or StreamingVad()
         self.language = language.split("-")[0].lower() if language else None  # si se sabe (tu voz), no se detecta
+        # Tu idioma: pesa más al detectar (el español rioplatense a veces sale como portugués), así lo que se dice
+        # en tu idioma no se subtitula.
+        self.native = native.split("-")[0].lower()
         self._running = threading.Event()
         self._wake = threading.Condition()
         self._lock = threading.Lock()
@@ -334,7 +338,10 @@ class LiveListener:
     def _prior(self, strength: float) -> dict[str, float]:
         """Peso de cada idioma al detectarlo: los que se vienen escuchando valen más (con poco audio, Whisper duda)."""
         total = sum(self._languages.values()) or 1.0
-        return {language: 1.0 + strength * count / total for language, count in self._languages.items()}
+        prior = {language: 1.0 + strength * count / total for language, count in self._languages.items()}
+        if self.native:
+            prior[self.native] = prior.get(self.native, 1.0) + 1.0
+        return prior
 
     def _partial(self, utterance: _Utterance, audio: np.ndarray, tail: bool = False) -> None:
         strength = 3.0 if len(audio) < 2 * SAMPLE_RATE else 1.0

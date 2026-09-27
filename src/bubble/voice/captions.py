@@ -35,7 +35,8 @@ class Line:
     generation: int = 0  # cada pedido de traducción nuevo invalida los pedazos de los anteriores
 
 
-# translate(texto, idioma, voz, al_llegar_un_pedazo, al_terminar(traducción o None si falló))
+# translate(texto, idioma, voz, al_llegar_un_pedazo, al_terminar(traducción o None si falló, native=ya estaba en
+# tu idioma))
 Translate = Callable[[str, str, int, Callable[[str], None], Callable[[str | None], None]], None]
 
 
@@ -88,7 +89,7 @@ class CaptionBoard:
         if ask:
             self.translate(caption.text, language, line.speaker,
                            lambda piece: self._piece(line, piece, generation),
-                           lambda text: self._done(line, text, generation))
+                           lambda text, native=False: self._done(line, text, generation, native))
 
     def _piece(self, line: Line, piece: str, generation: int) -> None:
         with self._lock:
@@ -98,7 +99,20 @@ class CaptionBoard:
             line.updated = time.monotonic()
         self._changed()
 
-    def _done(self, line: Line, text: str | None, generation: int) -> None:
+    def _done(self, line: Line, text: str | None, generation: int, native: bool = False) -> None:
+        with self._lock:
+            if generation != line.generation:
+                return
+            if native:
+                # Claude confirmó que ya estaba en tu idioma (Whisper lo había detectado como otro): no se subtitula.
+                if line in self.lines:
+                    self.lines.remove(line)
+                changed = True
+            else:
+                changed = False
+        if changed:
+            self._changed()
+            return
         with self._lock:
             if generation != line.generation:
                 return

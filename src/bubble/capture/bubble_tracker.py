@@ -20,7 +20,6 @@ from typing import Callable
 
 import numpy as np
 from PIL import Image, ImageChops
-from scipy import ndimage
 
 from ..geometry import Rect
 from ..performance import Pacer, Stopwatch
@@ -34,6 +33,13 @@ SCALE = 0.5  # la búsqueda de formas se hace a media resolución (4 veces menos
 SIGNATURE_SIZE = (24, 6)
 # Diferencia de huella a partir de la cual el texto de la burbuja cambió (el jugador dijo otra cosa).
 SIGNATURE_CHANGED = 0.08  # misma burbuja movida: 0; agrandada/achicada (zoom): ~0.04-0.065; otro texto: >= 0.17
+
+
+def _ndimage():
+    """scipy tarda ~1 s en cargarse: se carga recién cuando hace falta (así Bubble abre rápido)."""
+    from scipy import ndimage
+
+    return ndimage
 
 
 @dataclass
@@ -108,7 +114,7 @@ def _same_fill(pixels: np.ndarray, luma: np.ndarray, mask: np.ndarray, tolerance
 def _fill_holes(mask: np.ndarray) -> np.ndarray:
     """Rellena lo encerrado por la mancha (el texto dentro de la burbuja). Una sola pasada de etiquetado: mucho
     más rápido que `binary_fill_holes`, que dilata una y otra vez."""
-    outside, _count = ndimage.label(~np.pad(mask, 1))
+    outside, _count = _ndimage().label(~np.pad(mask, 1))
     border = np.unique(np.concatenate((outside[0], outside[-1], outside[:, 0], outside[:, -1])))
     return ~np.isin(outside, border)[1:-1, 1:-1] | mask
 
@@ -127,11 +133,11 @@ def find_bubble_boxes(image: Image.Image, exclude: Rect | None = None) -> list[B
     bright = (luma > 190) & (saturation < 45)
     dark = luma < 140
     # Cerrar los cortes que deja el texto oscuro dentro de la burbuja (el relleno fino se hace por zona).
-    closed = ndimage.binary_closing(bright, structure=np.ones((3, 3)))
-    labels, _count = ndimage.label(closed)
+    closed = _ndimage().binary_closing(bright, structure=np.ones((3, 3)))
+    labels, _count = _ndimage().label(closed)
     min_width = int(28 * SCALE)
     boxes = []
-    for index, region in enumerate(ndimage.find_objects(labels), start=1):
+    for index, region in enumerate(_ndimage().find_objects(labels), start=1):
         if region is None:
             continue
         rows, cols = region

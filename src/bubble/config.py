@@ -91,6 +91,26 @@ class VoiceConfig:
     hear_myself: bool = True
     # Reconocimiento de voz: "auto" elige según tu procesador ("base" o "small"); también "tiny", "base", "small".
     model: str = "auto"
+    # Cómo suena tu voz traducida: "femenina" o "masculina", y su velocidad (1 = normal).
+    gender: str = "femenina"
+    speed: float = 1.0
+    # Tu micrófono real ("" = el predeterminado de Windows): pasa al micrófono virtual junto con la voz traducida.
+    mic: str = ""
+    pass_my_voice: bool = True
+
+
+@dataclass
+class AppearanceConfig:
+    """Cómo se ve Bubble: la ventana y las traducciones en el juego."""
+
+    theme: str = "oscuro"  # "oscuro" | "claro"
+    pill_color: str = "grafito"  # fondo de las traducciones del chat (ver ui/inline.py: PILL_COLORS)
+    pill_opacity: float = 0.98
+    accent: str = "azul"  # la rayita de color de cada traducción ("ninguno" para sacarla)
+    text_scale: float = 1.0  # tamaño de la letra de las traducciones
+    subtitle_size: float = 1.0
+    subtitle_position: str = "abajo"  # "abajo" | "arriba"
+    subtitle_original: bool = True  # mostrar chiquito lo que dijeron en su idioma
 
 
 @dataclass
@@ -100,6 +120,7 @@ class Config:
     claude: ClaudeConfig = field(default_factory=ClaudeConfig)
     roblox: RobloxConfig = field(default_factory=RobloxConfig)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
+    appearance: AppearanceConfig = field(default_factory=AppearanceConfig)
 
 
 def _merge(section, values: dict) -> None:
@@ -109,7 +130,7 @@ def _merge(section, values: dict) -> None:
             setattr(section, key, value)
 
 
-SECTIONS = ("user", "translation", "claude", "roblox", "voice")
+SECTIONS = ("user", "translation", "claude", "roblox", "voice", "appearance")
 
 
 def save_setting(section: str, key: str, value) -> None:

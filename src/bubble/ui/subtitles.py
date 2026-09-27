@@ -23,6 +23,25 @@ BODY = 22
 LINE_H = 30
 
 
+class Settings:
+    """Ajustes de los subtítulos (se cambian desde la ventana)."""
+
+    scale = 1.0
+    position = "abajo"  # "abajo" | "arriba"
+    show_original = True
+    version = 0
+
+
+SETTINGS = Settings()
+
+
+def set_subtitles(scale: float = 1.0, position: str = "abajo", show_original: bool = True) -> None:
+    SETTINGS.scale = max(0.8, min(1.5, scale))
+    SETTINGS.position = position
+    SETTINGS.show_original = show_original
+    SETTINGS.version += 1
+
+
 def speaker_color(number: int) -> tuple[int, int, int]:
     if number == MINE:
         return (255, 255, 255)
@@ -41,35 +60,41 @@ def _body(line: Line) -> tuple[str, tuple]:
     return (line.original + ("" if line.final else " …")).strip(), PENDING
 
 
-def render_subtitles(lines: list[Line]) -> Image.Image:
+def render_subtitles(lines: list[Line], scale: float | None = None, show_original: bool | None = None
+                     ) -> Image.Image:
     """Tarjeta con las frases (la más nueva abajo)."""
+    k = SETTINGS.scale if scale is None else scale
+    original_too = SETTINGS.show_original if show_original is None else show_original
+    width, line_h, body, head = int(WIDTH * k), int(LINE_H * k), int(BODY * k), int(24 * k)
     blocks = []
     for line in lines:
         text, color = _body(line)
-        size, wrapped = layout_text(text, [Slot(0, 0, WIDTH - 60, LINE_H)] * 2, BODY)
+        size, wrapped = layout_text(text, [Slot(0, 0, width - int(60 * k), line_h)] * 2, body)
         blocks.append((line, text, color, size, [w for w in wrapped if w] or [text[:40]]))
-    height = 14 + sum(24 + LINE_H * len(wrapped) + 10 for *_rest, wrapped in blocks)
-    big = Image.new("RGBA", (WIDTH * SUPERSAMPLE, height * SUPERSAMPLE), (0, 0, 0, 0))
-    ImageDraw.Draw(big).rounded_rectangle((0, 0, big.width - 1, big.height - 1), 16 * SUPERSAMPLE, fill=FILL)
-    image = big.resize((WIDTH, height), Image.Resampling.LANCZOS)
+    height = int(14 * k) + sum(head + line_h * len(wrapped) + int(10 * k) for *_rest, wrapped in blocks)
+    big = Image.new("RGBA", (width * SUPERSAMPLE, height * SUPERSAMPLE), (0, 0, 0, 0))
+    ImageDraw.Draw(big).rounded_rectangle((0, 0, big.width - 1, big.height - 1), int(16 * k) * SUPERSAMPLE, fill=FILL)
+    image = big.resize((width, height), Image.Resampling.LANCZOS)
     draw = ImageDraw.Draw(image)
-    y = 12
-    label_font = _font(14)
+    y = int(12 * k)
+    label_font = _font(int(14 * k))
     for line, _text, color, size, wrapped in blocks:
         accent = speaker_color(line.speaker)
-        draw.ellipse((22, y + 5, 31, y + 14), fill=(*accent, 255))
+        dot = int(22 * k)
+        draw.ellipse((dot, y + int(5 * k), dot + int(9 * k), y + int(14 * k)), fill=(*accent, 255))
         name = speaker_name(line.speaker)
-        draw.text((39, y + 10), name, font=label_font, fill=(*accent, 255), anchor="lm")
-        x = 39 + label_font.getlength(name) + 8
-        details = f"· {line.language.upper()}" if line.language else ""
-        if line.translation.strip():
+        name_x = int(39 * k)
+        draw.text((name_x, y + int(10 * k)), name, font=label_font, fill=(*accent, 255), anchor="lm")
+        x = name_x + label_font.getlength(name) + 8
+        details = f"· {line.language.upper()}" if line.language and line.language != "→" else ""
+        if line.translation.strip() and original_too:
             details += f"   {line.original}"
-        draw.text((x, y + 10), details[:120], font=_font(13, details), fill=MUTED, anchor="lm")
-        y += 24
+        draw.text((x, y + int(10 * k)), details[:120], font=_font(int(13 * k), details), fill=MUTED, anchor="lm")
+        y += head
         for text in wrapped:
-            draw.text((WIDTH / 2, y + LINE_H / 2), text, font=_font(size, text), fill=color, anchor="mm")
-            y += LINE_H
-        y += 10
+            draw.text((width / 2, y + line_h / 2), text, font=_font(size, text), fill=color, anchor="mm")
+            y += line_h
+        y += int(10 * k)
     return image
 
 
@@ -87,8 +112,8 @@ class SubtitleView:
             self.window.hide()
             self._key = None
             return
-        key = tuple((line.id, line.speaker, line.language, line.original, line.translation, line.final)
-                    for line in lines)
+        key = (SETTINGS.version, *((line.id, line.speaker, line.language, line.original, line.translation,
+                                     line.final) for line in lines))
         if key != self._key:
             self._image = render_subtitles(lines)
             self._key = key
@@ -96,7 +121,10 @@ class SubtitleView:
         else:
             drawn = False
         x = area.left + (area.width - self._image.width) // 2
-        y = area.bottom - self._image.height - int(area.height * 0.16)
+        if SETTINGS.position == "arriba":
+            y = area.top + int(area.height * 0.12)
+        else:
+            y = area.bottom - self._image.height - int(area.height * 0.16)
         if drawn:
             self.window.update(self._image, x, y)
         else:
