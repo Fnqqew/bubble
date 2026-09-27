@@ -20,7 +20,8 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 sys.path.insert(0, "src")
 from bubble.ui.inline import InlineChatView, PillSpot, render_bubble, fit_bubble_text  # noqa: E402
-from bubble.ui.subtitles import _Line, render_subtitles  # noqa: E402
+from bubble.ui.subtitles import render_subtitles  # noqa: E402
+from bubble.voice.captions import Line  # noqa: E402
 
 W, H = 960, 540
 FPS = 20
@@ -416,8 +417,8 @@ def draw_voice(canvas: Image.Image, t: float) -> None:
         chip.putalpha(chip.getchannel("A").point(lambda v: int(v * fade)))
         canvas.alpha_composite(chip, (hx - 29, hy - 40))
     if VOICE_SUB <= t < VOICE_END:
-        card = render_subtitles([_Line("oi, alguém quer ir comigo no boss?",
-                                       "che, ¿alguien quiere venir conmigo al jefe?", "pt", 0)])
+        card = render_subtitles([Line(1, 2, "pt", "oi, alguém quer ir comigo no boss?",
+                                      "che, ¿alguien quiere venir conmigo al jefe?", True, True)])
         card = card.resize((int(card.width * 0.8), int(card.height * 0.8)), Image.Resampling.LANCZOS)
         fade = ease((t - VOICE_SUB) / 0.25) * (1 - ease((t - (VOICE_END - 0.35)) / 0.35))
         rise = int(10 * (1 - ease((t - VOICE_SUB) / 0.25)))

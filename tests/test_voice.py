@@ -1,93 +1,217 @@
 import numpy as np
 
 from bubble.voice import audio as audio_io
-from bubble.voice.pipelines import VoiceListener, VoiceSpeaker
-from bubble.voice.segmenter import SAMPLE_RATE, SpeechSegmenter
-from bubble.voice.stt import Transcript, is_hallucination, pick_model
+from bubble.voice.asr import cut_repetitions, pick_models
+from bubble.voice.captions import MINE, CaptionBoard, same_words
+from bubble.voice.live import FRAME, SAMPLE_RATE, Caption, LiveListener, Settings, drop_overlap
+from bubble.voice.pipelines import DirectVoice, VoiceOut, VoiceSpeaker
+from bubble.voice.speakers import fbank
+from bubble.voice.stt import is_hallucination
 from bubble.voice.tts import Speech
-
-RNG = np.random.default_rng(3)
-
-
-def noise(seconds: float, level: float = 0.002) -> np.ndarray:
-    return (RNG.standard_normal(int(seconds * SAMPLE_RATE)) * level).astype(np.float32)
-
-
-def voice_like(seconds: float) -> np.ndarray:
-    """Algo con la forma de una frase: tono con sílabas (energía que sube y baja rápido)."""
-    t = np.arange(int(seconds * SAMPLE_RATE)) / SAMPLE_RATE
-    syllables = 0.5 + 0.5 * np.sin(2 * np.pi * 4 * t)
-    return (0.2 * syllables * np.sin(2 * np.pi * 180 * t)).astype(np.float32) + noise(seconds)
-
-
-def feed_in_blocks(segmenter: SpeechSegmenter, stream: np.ndarray) -> list[np.ndarray]:
-    phrases = []
-    for start in range(0, len(stream), 480):
-        phrases += segmenter.feed(stream[start:start + 480])
-    return phrases
-
-
-def test_segmenter_cuts_phrases_at_pauses():
-    stream = np.concatenate([noise(1.0), voice_like(1.6), noise(1.0), voice_like(2.2), noise(1.2)])
-    phrases = feed_in_blocks(SpeechSegmenter(), stream)
-    assert len(phrases) == 2
-    assert 1.4 <= len(phrases[0]) / SAMPLE_RATE <= 2.3  # la frase entera, con un poco de antes y sin el silencio
-    assert 2.0 <= len(phrases[1]) / SAMPLE_RATE <= 2.9
-
-
-def test_segmenter_ignores_steady_background_and_short_clicks():
-    music = (0.02 * np.sin(2 * np.pi * 220 * np.arange(5 * SAMPLE_RATE) / SAMPLE_RATE)).astype(np.float32)
-    click = np.concatenate([noise(0.5), 0.3 * np.ones(int(0.06 * SAMPLE_RATE), dtype=np.float32), noise(1.0)])
-    segmenter = SpeechSegmenter()
-    assert feed_in_blocks(segmenter, np.concatenate([music, click])) == []  # fondo parejo y un golpe de 60 ms
-
-
-def test_segmenter_splits_very_long_speech():
-    phrases = feed_in_blocks(SpeechSegmenter(max_seconds=5), np.concatenate([voice_like(12.0), noise(1.0)]))
-    assert len(phrases) >= 2 and all(len(p) <= 5 * SAMPLE_RATE + 480 for p in phrases)
 
 
 def test_whisper_inventions_are_dropped():
     assert is_hallucination("Thank you for watching!")
     assert is_hallucination("Subtítulos realizados por la comunidad de Amara.org")
     assert not is_hallucination("thank you bro, that was sick")
-    assert pick_model(12) == "base" and pick_model(24) == "small"
 
 
-class FakeTranscriber:
-    def __init__(self, text="hola a todos"):
-        self.text = text
-        self.calls = []
-
-    def transcribe(self, audio, language=None):
-        self.calls.append(language)
-        return Transcript(self.text, language or "en", 0.99, len(audio) / SAMPLE_RATE) if self.text else None
+def test_repetitions_from_the_short_window_are_cut():
+    assert cut_repetitions("Bro you just stole my kill. Bro, you just stole my kill that") == "Bro you just stole my kill."
+    assert cut_repetitions("with the map you can find it for it for it for it for it") == "with the map you can find it for it"
+    assert cut_repetitions("Galera, alguém quer trocar pets comigo? Galera") == "Galera, alguém quer trocar pets comigo?"
+    assert cut_repetitions("no no no wait for me") == "no no no wait for me"  # repetir a propósito está bien
 
 
-def test_listener_turns_phrases_into_transcripts_and_mutes_itself():
-    heard = []
-    listener = VoiceListener(FakeTranscriber("anyone wanna trade?"), heard.append)
-    segmenter = SpeechSegmenter()
-    listener.feed(np.concatenate([noise(0.8), voice_like(1.5), noise(1.0)]), segmenter)
-    assert listener._phrases.qsize() == 1
-    listener.muted_until = 1e18  # suena tu voz traducida por los parlantes: no se escucha como si fuera de otro
-    listener.feed(np.concatenate([noise(0.8), voice_like(1.5), noise(1.0)]), SpeechSegmenter())
-    assert listener._phrases.qsize() == 1
+def test_models_follow_the_processor():
+    assert pick_models(12) == ("base", "small")
+    assert pick_models(8) == ("tiny", "base")
+    assert pick_models(4) == ("", "base")
 
 
-def test_speaker_says_the_translation_in_the_other_language(monkeypatch):
-    played, events = [], []
-    monkeypatch.setattr(audio_io, "play", lambda output, audio, rate: played.append((len(audio), rate)))
+def test_long_speech_cut_with_overlap_does_not_repeat_words():
+    previous = "and with the map you can find the hidden cave where"
+    assert drop_overlap(previous, "the hidden cave where the boss is, but be careful") == "the boss is, but be careful"
+    assert drop_overlap(previous, "where the boss is") == "the boss is"  # una palabra larga repetida
+    assert drop_overlap(previous, "the boss is here") == "the boss is here"  # "the" sola no alcanza
 
-    class FakeVoices:
-        def synthesize(self, text, language):
-            return Speech(np.zeros(22050, dtype=np.float32), 22050) if language == "en" else None
 
-    transcriber = FakeTranscriber("hola a todos, alguien quiere cambiar mascotas?")
-    speaker = VoiceSpeaker(transcriber, FakeVoices(), lambda text: ("hey everyone, anyone wanna trade pets?", "en"),
+def test_fbank_has_80_bands_every_10_ms():
+    feats = fbank(np.zeros(SAMPLE_RATE, dtype=np.float32) + 0.01)
+    assert feats.shape == (98, 80)
+
+
+# ---------------------------------------------------------------- escucha en vivo (sin modelos de verdad)
+class ScriptedVad:
+    """Detector de voz de mentira: la probabilidad sale de una función del tiempo."""
+
+    def __init__(self, speaking):
+        self.speaking = speaking
+        self.samples = 0
+
+    def feed(self, samples):
+        count = len(samples) // FRAME
+        probs = []
+        for _ in range(count):
+            probs.append(0.9 if self.speaking(self.samples / SAMPLE_RATE) else 0.05)
+            self.samples += FRAME
+        return np.array(probs, dtype=np.float32)
+
+
+class FakeWhisper:
+    def __init__(self, text="anyone wanna trade?", language="en"):
+        self.text, self.language, self.calls = text, language, []
+
+    def transcribe(self, audio, language=None, beam_size=1, prior=None):
+        from bubble.voice.asr import Heard
+
+        self.calls.append(len(audio) / SAMPLE_RATE)
+        return Heard(self.text, language or self.language, 0.99, 0.01, -0.2, len(audio) / SAMPLE_RATE, 0.0)
+
+
+def run_listener(seconds, speaking, settings=None, partial=True):
+    captions = []
+    final, quick = FakeWhisper(), FakeWhisper() if partial else None
+    listener = LiveListener(final, captions.append, partial_asr=quick, vad=ScriptedVad(speaking),
+                            settings=settings)
+    stream = np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
+    for start in range(0, len(stream), FRAME * 3):
+        listener.feed(stream[start:start + FRAME * 3])
+        while (job := listener._next_job()) is not None:  # el trabajo del hilo de texto, en el acto
+            job()
+    return captions, final, quick
+
+
+def test_a_phrase_shows_text_while_speaking_and_then_the_final():
+    captions, final, quick = run_listener(4.0, lambda t: 0.5 <= t < 2.5)
+    assert any(not c.final for c in captions)  # texto mientras habla
+    finals = [c for c in captions if c.final]
+    assert len(finals) == 1 and finals[0].text == "anyone wanna trade?"
+    assert 1.8 <= finals[0].end - finals[0].start <= 2.6  # la frase, con un poco de antes y sin el silencio
+    stable = [c for c in captions if c.stable]
+    assert stable and captions.index(stable[0]) < captions.index(finals[0])  # se puede traducir antes del final
+    assert final.calls == []  # en inglés alcanza la última lectura rápida: no hace falta el modelo preciso
+
+
+def test_two_phrases_with_a_pause_are_separate():
+    captions, *_ = run_listener(6.0, lambda t: 0.5 <= t < 2.0 or 2.8 <= t < 4.5)
+    assert len([c for c in captions if c.final]) == 2
+
+
+def test_very_long_speech_is_cut_into_pieces():
+    captions, *_ = run_listener(20.0, lambda t: 0.5 <= t < 18.0, Settings(max_seconds=6.0))
+    finals = [c for c in captions if c.final]
+    assert len(finals) >= 3 and all(c.end - c.start <= 6.5 for c in finals)
+
+
+def test_muted_while_your_own_translated_voice_plays():
+    captions, *_ = run_listener(0.1, lambda t: False)
+    listener = LiveListener(FakeWhisper(), captions.append, vad=ScriptedVad(lambda t: True))
+    listener.muted_until = 1e18
+    listener.feed(np.ones(SAMPLE_RATE * 2, dtype=np.float32) * 0.1)
+    assert listener._current is None and not listener._finished
+
+
+# ---------------------------------------------------------------- subtítulos y traducción
+def test_translation_starts_early_and_is_not_repeated():
+    asked = []
+    board = CaptionBoard("es-AR", lambda text, lang, voice, piece, done: asked.append((text, piece, done)))
+    board.caption(Caption(1, 0.0, 1.0, "hey guys does anyone", "en", 1))
+    board.caption(Caption(1, 0.0, 2.0, "Hey guys, does anyone know?", "en", 1, stable=True))
+    assert [a[0] for a in asked] == ["Hey guys, does anyone know?"]  # ya se pidió en la pausa
+    board.caption(Caption(1, 0.0, 2.0, "Hey guys does anyone know", "en", 1, final=True))
+    assert len(asked) == 1  # el final dice lo mismo: se usa la traducción que ya viene
+    asked[0][1]("Che, ¿alguien ")
+    asked[0][2]("Che, ¿alguien sabe?")
+    line = board.visible()[0]
+    assert line.translation == "Che, ¿alguien sabe?" and line.done
+
+
+def test_final_text_that_changed_is_translated_again():
+    asked = []
+    board = CaptionBoard("es", lambda text, lang, voice, piece, done: asked.append((text, piece, done)))
+    board.caption(Caption(1, 0.0, 1.0, "wake where is it", "en", 2, stable=True))
+    board.caption(Caption(1, 0.0, 1.0, "Wait, where is the left side?", "en", 2, final=True))
+    assert [a[0] for a in asked] == ["wake where is it", "Wait, where is the left side?"]
+    asked[0][2]("despertá")  # llega tarde la traducción vieja: no pisa a la nueva
+    asked[1][2]("Pará, ¿dónde queda el lado izquierdo?")
+    assert board.visible()[0].translation == "Pará, ¿dónde queda el lado izquierdo?"
+
+
+def test_speech_in_your_language_is_not_subtitled():
+    asked = []
+    board = CaptionBoard("es-AR", lambda *a: asked.append(a))
+    board.caption(Caption(1, 0.0, 1.0, "yo me sumo, ¿dónde están?", "es", 3, final=True))
+    assert board.visible() == [] and asked == []
+
+
+def test_your_translated_voice_shows_as_yours():
+    board = CaptionBoard("es", lambda *a: None)
+    board.mine("dale, voy", "sure, coming", "en")
+    line = board.visible()[0]
+    assert line.speaker == MINE and line.translation == "sure, coming"
+
+
+def test_same_words_ignores_case_and_punctuation():
+    assert same_words("Hey guys, does anyone know?", "hey guys does anyone know")
+    assert not same_words("wake where is it", "Wait, where is the left side?")
+
+
+# ---------------------------------------------------------------- tu voz
+class FakeVoices:
+    def synthesize(self, text, language):
+        return Speech(np.zeros(22050, dtype=np.float32), 22050) if language == "en" else None
+
+
+def fake_devices(monkeypatch):
+    played = []
+    monkeypatch.setattr(audio_io, "play", lambda output, audio, rate: played.append((output.is_cable, len(audio))))
+    monkeypatch.setattr(audio_io, "voice_output", lambda: audio_io.Output(object(), True))  # micrófono virtual
+    monkeypatch.setattr(audio_io, "monitor_output", lambda: audio_io.Output(object(), False))
+    return played
+
+
+def test_speaker_says_the_translation_and_you_hear_it_too(monkeypatch):
+    import time
+
+    played, events = fake_devices(monkeypatch), []
+    whisper = FakeWhisper("hola a todos, alguien quiere cambiar mascotas?")
+    speaker = VoiceSpeaker(whisper, VoiceOut(FakeVoices()), lambda text: ("hey everyone, anyone wanna trade pets?", "en"),
                            push_to_talk_vk=0x06, my_language="es-AR",
                            on_event=lambda kind, text: events.append((kind, text)))
-    speaker.speak(voice_like(2.0))
-    assert transcriber.calls == ["es-AR"]  # tu voz: se le dice a Whisper en qué idioma hablás
+    speaker.speak(np.zeros(SAMPLE_RATE * 2, dtype=np.float32))
     assert [kind for kind, _ in events] == ["entendi", "traduccion"]
-    assert played == [(22050, 22050)]
+    time.sleep(0.2)  # tu copia suena en otro hilo
+    assert sorted(played) == [(False, 22050), (True, 22050)]  # a Roblox (micrófono virtual) y a tus auriculares
+
+
+def test_hearing_yourself_can_be_turned_off(monkeypatch):
+    played = fake_devices(monkeypatch)
+    out = VoiceOut(FakeVoices(), hear_myself=False)
+    assert out.say("hey", "en") and played == [(True, 22050)]
+    assert not out.say("hola", "xx")  # sin voz para ese idioma
+
+
+def test_direct_voice_translates_each_phrase_early_and_in_order(monkeypatch):
+    import time
+
+    played, events, asked = fake_devices(monkeypatch), [], []
+
+    def translate(text):
+        asked.append(text)
+        return f"EN: {text}", "en"
+
+    direct = DirectVoice(FakeWhisper(), VoiceOut(FakeVoices()), translate, "es-AR",
+                         on_event=lambda kind, text: events.append((kind, text)))
+    direct._running.set()
+    import threading
+
+    threading.Thread(target=direct._speak_in_order, daemon=True).start()
+    direct._caption(Caption(1, 0.0, 1.5, "dale, esperame en la torre", "es", 0, stable=True))
+    direct._caption(Caption(1, 0.0, 1.6, "Dale, esperame en la torre.", "es", 0, final=True))
+    direct._caption(Caption(2, 2.0, 3.0, "ya voy", "es", 0, final=True))
+    time.sleep(0.4)
+    direct.stop()
+    assert asked == ["dale, esperame en la torre", "ya voy"]  # la primera se pidió en la pausa, una sola vez
+    assert [text for kind, text in events if kind == "traduccion"] == ["EN: dale, esperame en la torre", "EN: ya voy"]
+    assert direct.listener.language == "es"  # tu idioma ya se sabe: no se detecta

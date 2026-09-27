@@ -80,5 +80,7 @@ subtitles = false
 # VB-Audio Virtual Cable (gratis) y elegir «CABLE Output» como micrófono en Roblox.
 speak = false
 push_to_talk = "mouse5"
-# Reconocimiento de voz: "auto" (según tu procesador), "tiny", "base" o "small".
+# Escuchar vos también tu voz traducida (en tus auriculares, un poco más bajo).
+hear_myself = true
+# Reconocimiento de voz (texto final): "auto" (según tu procesador), "tiny", "base" o "small".
 model = "auto"

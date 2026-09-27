@@ -76,3 +76,8 @@ def voice_output(prefer_cable: bool = True) -> Output:
 def play(output: Output, audio: np.ndarray, rate: int) -> None:
     """Reproduce (bloquea hasta terminar)."""
     output.device.play(np.clip(audio, -1, 1).astype(np.float32), samplerate=rate)
+
+
+def monitor_output() -> Output:
+    """Tus parlantes o auriculares: para que escuches lo que dijo tu voz traducida."""
+    return Output(default_speaker(), False)

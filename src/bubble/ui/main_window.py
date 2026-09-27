@@ -104,6 +104,7 @@ class BubbleWindow:
         self._compose_results: dict[tuple[str, str, int], tuple[list[str], list[str]]] = {}
         self._compose_running: set[tuple[str, str, int]] = set()
         self._send_when_ready: tuple[str, str, int] | None = None
+        self._send_as_voice = False  # Ctrl+Enter: se dice en voz en vez de mandarse al chat
         self.saved_region = roblox.load_chat_region()
         self.events: queue.Queue = queue.Queue()
         self.ready = False
@@ -580,7 +581,7 @@ class BubbleWindow:
         """Traducción para ver mientras escribís (y que al apretar Enter ya esté lista)."""
         key = (text, target, tone)
         if key in self._compose_results:
-            messages, _own = self._compose_results[key]
+            messages, _own, _pairs = self._compose_results[key]
             self.compose.show_preview(key, " / ".join(messages), "done")
         elif key not in self._compose_running:
             self._compose_running.add(key)
@@ -611,16 +612,17 @@ class BubbleWindow:
                 if result.status == "error":
                     raise RuntimeError(result.error or "No se pudo traducir")
                 messages = own = [result.translation]
-            self.events.put(("compose_done", (key, messages, own, "")))
+                ok = [(result.target_lang or target, result.translation)]
+            self.events.put(("compose_done", (key, messages, own, ok, "")))
         except Exception as exc:  # noqa: BLE001 - se muestra en la barra
-            self.events.put(("compose_done", (key, [], [], str(exc) or "No se pudo traducir")))
+            self.events.put(("compose_done", (key, [], [], [], str(exc) or "No se pudo traducir")))
 
     def _ev_compose_partial(self, payload) -> None:
         key, text = payload
         self.compose.show_preview(key, text, "working")
 
     def _ev_compose_done(self, payload) -> None:
-        key, messages, own, error = payload
+        key, messages, own, pairs, error = payload
         self._compose_running.discard(key)
         if error:
             self.compose.show_preview(key, error, "error")
@@ -630,13 +632,14 @@ class BubbleWindow:
             return
         if len(self._compose_results) > 60:
             self._compose_results.clear()
-        self._compose_results[key] = (messages, own)
+        self._compose_results[key] = (messages, own, pairs)
         self.compose.show_preview(key, " / ".join(messages), "done")
         if self._send_when_ready == key:
             self._compose_send(key)
 
-    def _compose_submit(self, text: str, target: str, tone: int) -> None:
+    def _compose_submit(self, text: str, target: str, tone: int, voice: bool = False) -> None:
         key = (text, target, tone)
+        self._send_as_voice = voice
         if key in self._compose_results:
             self._compose_send(key)  # la vista previa ya estaba lista: se manda al instante
             return
@@ -648,8 +651,14 @@ class BubbleWindow:
 
     def _compose_send(self, key: tuple[str, str, int]) -> None:
         self._send_when_ready = None
-        messages, own = self._compose_results[key]
+        messages, own, pairs = self._compose_results[key]
         self.compose.close(sent=True)
+        if self._send_as_voice:
+            # Escrito a voz: la traducción se dice con la voz sintética (la escucha quien tengas cerca en el juego).
+            self.voice_panel.say(pairs, key[0])
+            if self.roblox_hwnd:
+                win32.force_foreground(self.roblox_hwnd)  # volver al juego
+            return
         for text in own:
             self.tracker.mark_sent(text)  # que tu propio mensaje no se traduzca al aparecer en el chat
         self._append(f"Vos: {key[0]}\n   → {' / '.join(messages)}\n", "out")
@@ -796,7 +805,14 @@ class BubbleWindow:
     def _ev_voice_subtitle(self, payload) -> None:
         original, translation, language = payload
         self.voice_panel.show(original, translation, language)
-        self._append(f"🔊 {original}\n   → {translation}\n", "out" if original == "(vos)" else "in")
+        said = "" if original == "(vos)" else f": {original}"
+        self._append(f"🎙 Vos (en voz){said}\n   → {translation}\n", "out")
+
+    def _ev_voice_line(self, line) -> None:
+        from .subtitles import speaker_name
+
+        self._append(f"🔊 {speaker_name(line.speaker)} ({line.language.upper()}): {line.original}\n"
+                     f"   → {line.translation}\n", "in")
 
     def _ev_hardware(self, hardware) -> None:
         self.hardware = hardware

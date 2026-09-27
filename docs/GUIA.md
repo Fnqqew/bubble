@@ -87,32 +87,37 @@ El idioma de destino se elige solo: el que más se usa en el chat. Si el servido
 
 ## Voz (beta 2.0)
 
-Todo el audio se procesa en tu PC: Whisper entiende la voz y Piper habla, los dos locales. Claude solo traduce el
-texto.
+Todo el audio se procesa en tu PC: Whisper entiende la voz, un modelo chico reconoce quién habla y Piper habla. Los
+tres son locales. Claude solo traduce el texto.
 
 ```powershell
 .venv\Scripts\python.exe -m pip install -e ".[voz]"
 ```
 
-La primera vez se descargan el reconocimiento de voz (~150 MB) y una voz por idioma (~60 MB). Quedan en
-`%LOCALAPPDATA%\Bubble\models`.
+La primera vez se descargan el reconocimiento de voz (hasta ~500 MB, según tu PC), el de voces (~30 MB) y una voz
+por idioma (~60 MB). Quedan en `%LOCALAPPDATA%\Bubble\models`.
 
 **Subtítulos de lo que te dicen.** Activá la casilla en la sección **Voz · beta**.
 
-1. Bubble escucha lo que suena en la PC y detecta cuándo alguien habla. Separa las frases de la música del juego:
-   la voz sube y baja con las sílabas y la música suena pareja.
-2. Transcribe la frase y reconoce el idioma solo.
-3. Si no está en tu idioma, la traduce y la muestra abajo al centro del juego: la traducción grande y el original
-   chico. Tarda ~3,5 s desde que la persona termina de hablar.
+- Mientras la persona habla ya ves lo que va diciendo, en gris (aparece ~0,5 s después de que empieza).
+- Apenas hace una pausa se pide la traducción, que llega palabra por palabra y reemplaza al gris, en blanco.
+  Tarda ~2 s desde que termina de hablar; casi todo es lo que tarda Claude.
+- Cada persona tiene su color y su número (**Voz 1**, **Voz 2**…) y Bubble la reconoce cuando vuelve a hablar. No
+  sabe su nombre de Roblox: la numera en el orden en que aparece.
+- Lo que ya está en tu idioma no se subtitula.
 
 En esta beta se subtitula todo lo que suena en la PC. Si tenés Discord o un video abierto, también.
 
-**Tu voz, traducida.**
+**Tu voz, traducida.** Activá **Traducir mi voz** y elegí cómo:
 
-1. Activá **Traducir mi voz**.
-2. Mantené apretado el botón (por defecto el **botón lateral del mouse, adelante**), hablá y soltalo.
-3. Bubble entiende lo que dijiste, lo traduce al idioma del chat y lo dice con una voz natural en ese idioma, ~3 s
-   después de soltar.
+- **Mientras mantengo apretado:** apretás el botón (por defecto el **botón lateral del mouse, adelante**), hablás y
+  lo soltás.
+- **Directo:** hablás normal, sin botón. Cada frase que decís sale traducida en voz ~2 s después de que terminás.
+  Ojo: traduce todo lo que diga tu micrófono.
+- **Escribiendo:** en la barra para escribir, **Ctrl+Enter** en vez de Enter. Lo que escribiste se dice en voz en
+  vez de mandarse al chat.
+
+Con **Escucharla yo también**, tu voz traducida suena también en tus auriculares, más bajo, así sabés qué dijo.
 
 Para que **los demás** lo escuchen, Roblox tiene que recibir esa voz como si fuera tu micrófono:
 
@@ -126,11 +131,20 @@ por tus parlantes: sirve para probar.
 El chat de voz de Roblox pide verificación de edad. Usar voz sintética puede ir contra sus reglas en algunos
 casos: usala con cuidado, para comunicarte.
 
-| Modelo de voz | 5 s de voz en un Ryzen 5 5650U | Uso |
-|---|---|---|
-| `tiny` | 0,9 s | PCs lentas |
-| `base` | 1,9 s | el normal (`auto` en procesadores de hasta 15 hilos) |
-| `small` | 5,4 s | más preciso (`auto` desde 16 hilos) |
+**Cómo es tan rápido.** Whisper se entrenó con ventanas de 30 s y, de la forma normal, procesa siempre 30 s aunque la
+frase dure 2. Bubble le pasa solo la frase: tarda 10 a 40 veces menos. Mientras alguien habla usa un modelo rápido
+(`base`) y para el texto final uno más preciso (`small`); en inglés alcanza con el rápido. En procesadores chicos
+se usan modelos más livianos solos.
+
+**Probarlo sin Roblox.** El laboratorio de voz arma conversaciones con voces sintéticas (una persona, gente
+hablando rápido, un grupo que se pisa, siete idiomas, música y explosiones de fondo, un monólogo largo) y mide
+cuánto tarda y cuánto entiende:
+
+```powershell
+.venv\Scripts\python.exe -m bubble.tools.voice_lab --sin-claude   # solo escuchar (gratis)
+.venv\Scripts\python.exe -m bubble.tools.voice_lab                # con traducción
+.venv\Scripts\python.exe -m bubble.tools.voice_lab --directo       # tu voz, traducción directa
+```
 
 ## Jerga, dialectos y tono
 

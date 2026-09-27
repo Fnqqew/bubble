@@ -12,6 +12,7 @@ se reutilizan: mover una traducción es solo mover su ventana.
 from __future__ import annotations
 
 import itertools
+import re
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -38,21 +39,33 @@ TEXT_INSET = 10  # dentro de la píldora: rayita azul + espacio
 RIGHT_PAD = 8
 SUPERSAMPLE = 3  # bordes redondeados suaves: se dibujan 3 veces más grandes y se achican
 
-_fonts: dict[int, ImageFont.FreeTypeFont] = {}
+# Letras de Windows para otras escrituras (la del chat no tiene hindi, coreano, chino…).
+SCRIPT_FONTS = [
+    (re.compile(r"[\u0900-\u0DFF]"), ["Nirmala.ttc"]),  # hindi, bengalí, tamil… (indias)
+    (re.compile(r"[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]"), ["malgunbd.ttf", "malgun.ttf"]),  # coreano
+    (re.compile(r"[\u3040-\u30FF]"), ["YuGothB.ttc", "msyhbd.ttc"]),  # japonés
+    (re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF]"), ["msyhbd.ttc", "msyh.ttc"]),  # chino
+    (re.compile(r"[\u0E00-\u0E7F]"), ["LeelaUIb.ttf", "LeelawUI.ttf"]),  # tailandés
+]
+
+_fonts: dict[tuple[int, str], ImageFont.FreeTypeFont] = {}
 
 
-def _font(size: int) -> ImageFont.FreeTypeFont:
+def _font(size: int, text: str = "") -> ImageFont.FreeTypeFont:
+    """La letra del chat en ese tamaño; si `text` usa otra escritura, una letra de Windows que la tenga."""
     size = max(6, size)
-    if size not in _fonts:
-        for name in FONT_FILES:
+    files = next((names for pattern, names in SCRIPT_FONTS if text and pattern.search(text)), FONT_FILES)
+    key = (size, files[0])
+    if key not in _fonts:
+        for name in [*files, *FONT_FILES]:
             try:
-                _fonts[size] = ImageFont.truetype(name, size)
+                _fonts[key] = ImageFont.truetype(name, size)
                 break
             except OSError:
                 continue
         else:
-            _fonts[size] = ImageFont.load_default()
-    return _fonts[size]
+            _fonts[key] = ImageFont.load_default()
+    return _fonts[key]
 
 
 # ---------------------------------------------------------------- disposición del texto
@@ -83,7 +96,7 @@ def layout_text(text: str, slots: list[Slot], base_size: int) -> tuple[int, list
     size = base_size
     min_size = max(8, int(base_size * MIN_SCALE))
     while True:
-        font = _font(size)
+        font = _font(size, text)
         lines = _fill(words, slots, font)
         if lines is not None or size <= min_size:
             break
@@ -147,7 +160,7 @@ def render_pill(width: int, height: int, text: str, size: int, *, fill: tuple, t
     image = big.resize((width, height), Image.Resampling.LANCZOS)
     if text:
         draw = ImageDraw.Draw(image)
-        font = _font(size)
+        font = _font(size, text)
         x, anchor = (TEXT_INSET, "lm") if align == "left" else (width / 2, "mm")
         y = height / 2
         if shadow:
@@ -179,7 +192,7 @@ def fit_bubble_text(text: str, width: int, height: int, rows: int) -> tuple[int,
     base = int(max(10, min(30, line_height * 0.72)))  # letra parecida a la original
     widest = max(width, min(int(width * 1.8), 460))
     for size in (base, max(10, int(base * 0.9))):
-        font = _font(size)
+        font = _font(size, text)
         for count in range(max(1, rows), 4):
             target = max(width - 24, font.getlength(text) / count + size)  # líneas parejas
             if target > widest - 24:
@@ -202,7 +215,7 @@ def render_bubble(size_px: tuple[int, int], text_lines: list[str], font_size: in
     base = render_pill(width, height, "", font_size, fill=(*background[:3], 255), text_color=foreground,
                        radius=radius, shadow=False)
     draw = ImageDraw.Draw(base)
-    font = _font(font_size)
+    font = _font(font_size, " ".join(text_lines))
     line_height = height / max(1, len(text_lines))
     for index, line in enumerate(text_lines):
         draw.text((width / 2, line_height * (index + 0.5)), line, font=font, fill=(*foreground[:3], 255), anchor="mm")
@@ -541,7 +554,7 @@ class InlineChatView:
 
     @staticmethod
     def _pill(spot: PillSpot, line: str, size: int, waiting: bool) -> Image.Image:
-        text_width = _font(size).getlength(line) if line else 0
+        text_width = _font(size, line).getlength(line) if line else 0
         width = max(spot.cover_right - spot.left, int(text_width) + TEXT_INSET + RIGHT_PAD)
         width = min(width, spot.max_right - spot.left)
         return render_pill(

@@ -85,6 +85,10 @@ class VoiceConfig:
     # Tu voz traducida: mantené apretada la tecla, hablá y soltala. Sale por el micrófono virtual (VB-Audio Cable).
     speak: bool = False
     push_to_talk: str = "mouse5"
+    # Cómo se traduce tu voz: "boton" (mientras mantenés apretado push_to_talk) o "directo" (cada frase que decís).
+    speak_mode: str = "boton"
+    # Escuchar vos también tu voz traducida (en tus auriculares, más bajo), además de mandarla a Roblox.
+    hear_myself: bool = True
     # Reconocimiento de voz: "auto" elige según tu procesador ("base" o "small"); también "tiny", "base", "small".
     model: str = "auto"
 

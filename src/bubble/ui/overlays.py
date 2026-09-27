@@ -150,11 +150,11 @@ class ComposeBar:
         self,
         root: tk.Tk,
         on_preview: Callable[[str, str, int], None],
-        on_submit: Callable[[str, str, int], None],
+        on_submit: Callable[..., None],
         on_close: Callable[[], None],
     ) -> None:
         self.on_preview = on_preview  # pedir la traducción de (texto, idioma, tono) para mostrarla
-        self.on_submit = on_submit  # traducir (si hace falta) y enviar
+        self.on_submit = on_submit  # traducir (si hace falta) y enviar: (texto, idioma, tono, voice=en voz)
         self.on_close = on_close  # se cerró sin enviar
         self.targets: list[str] = []
         self.labels: dict[str, str] = {}
@@ -201,6 +201,7 @@ class ComposeBar:
 
         self.entry.bind("<Return>", self._submit)
         self.entry.bind("<KP_Enter>", self._submit)
+        self.entry.bind("<Control-Return>", lambda _e: self._submit(voice=True))  # decirlo en voz
         self.entry.bind("<Escape>", self._cancel)
         self.entry.bind("<Tab>", self._next_target)
         self.entry.bind("<Up>", lambda _e: self._change_tone(+1))
@@ -318,8 +319,8 @@ class ComposeBar:
         self._images["tone"] = _tone_image(self.tone, _rgb(self.FIELD))
         self.tone_view.configure(image=self._images["tone"])
         name = self.labels.get(code) or DISPLAY_NAMES.get(code, code)
-        self.hint.configure(text=f"Enter  enviar en {name.split(' (')[0].lower()}   ·   Tab  idioma   ·   "
-                                 f"↑↓  tono: {TONE_NAMES[self.tone].lower()}   ·   Esc  cerrar")
+        self.hint.configure(text=f"Enter  chat en {name.split(' (')[0].lower()}   ·   Ctrl+Enter  en voz   ·   "
+                                 f"Tab  idioma   ·   ↑↓  tono: {TONE_NAMES[self.tone].lower()}   ·   Esc")
 
     def _on_edit(self, event=None) -> None:
         self._update_placeholder()
@@ -357,7 +358,7 @@ class ComposeBar:
             self._schedule_preview()
         return "break"
 
-    def _submit(self, _event=None) -> str:
+    def _submit(self, _event=None, voice: bool = False) -> str:
         if self.busy:
             return "break"
         key = self.current()
@@ -369,7 +370,7 @@ class ComposeBar:
             self._after = None
         self.busy = True
         self.entry.configure(state="disabled")
-        self.on_submit(*key)
+        self.on_submit(*key, voice=voice)
         return "break"
 
     def _cancel(self, _event=None) -> str:
