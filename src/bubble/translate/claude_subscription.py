@@ -31,6 +31,7 @@ from ..claude_cli import find_claude_cli
 from ..config import ClaudeConfig
 from .base import TranslationRequest
 from .prompt import SYSTEM_PROMPT, OutputFilter, build_user_prompt
+from .router import SENT
 
 log = logging.getLogger(__name__)
 hidden_processes.install()  # sin ventanas negras de claude.exe
@@ -55,6 +56,8 @@ class _Session:
         self.options = options
         self.client: ClaudeSDKClient | None = None
         self.turns = 0
+        self.refreshing = False  # ya se está abriendo la que la reemplaza
+        self.retired = False  # ya hay otra en su lugar: se cierra apenas quede libre
 
     async def open(self) -> None:
         client = ClaudeSDKClient(options=self.options)
@@ -117,13 +120,21 @@ class UsageStats:
 
 class ClaudeSubscriptionProvider:
     name = "claude"
+    reports_sent = True  # avisa (SENT) cuando el pedido sale: la espera de turno no cuenta como sesión colgada
 
-    def __init__(self, config: ClaudeConfig, system_prompt: str = SYSTEM_PROMPT) -> None:
+    def __init__(self, config: ClaudeConfig, system_prompt: str = SYSTEM_PROMPT, model: str = "",
+                 min_sessions: int = 1, thinking: bool = True, name: str = "claude") -> None:
+        """`model`: otro modelo que el configurado (la voz usa uno más rápido). `thinking=False`: responde sin
+        pensar antes (para traducir no hace falta y la primera palabra llega antes)."""
         self.config = config
+        self.name = name
+        self.model = model or config.model
+        self.min_sessions = max(1, min_sessions)
         self._options = ClaudeAgentOptions(
             cli_path=find_claude_cli(config.cli_path),
-            model=config.model,
+            model=self.model,
             effort=config.effort,
+            thinking=None if thinking else {"type": "disabled"},
             system_prompt=system_prompt,
             tools=[],
             setting_sources=[],
@@ -144,6 +155,7 @@ class ClaudeSubscriptionProvider:
         self.usage = UsageStats()
         self._idle: asyncio.Queue[_Session] = asyncio.Queue()
         self._all: set[_Session] = set()
+        self._retired: set[_Session] = set()
         self._replacing: set[asyncio.Task] = set()
         # Mantener "caliente" el prompt cacheado mientras esta función diga que se está jugando.
         self.keep_warm_when: Callable[[], bool] | None = None
@@ -170,7 +182,23 @@ class ClaudeSubscriptionProvider:
             break
         else:
             raise ProviderError(f"No se pudo iniciar Claude: {error}") from error
+        for _extra in range(self.min_sessions - 1):
+            self._opening += 1
+            self._spawn(self._open_extra())
         self._keepalive = asyncio.get_running_loop().create_task(self._keep_warm())
+
+    async def warm_up(self) -> None:
+        """Un pedido mínimo: deja el prompt en el caché de este modelo, así el primer pedido de verdad no espera."""
+        try:
+            async for _ in self.stream(TranslationRequest("ok", "en", "incoming")):
+                pass
+        except Exception:  # noqa: BLE001 - es solo una optimización
+            log.debug("No se pudo precalentar %s", self.name, exc_info=True)
+
+    def _spawn(self, coro) -> None:
+        task = asyncio.get_running_loop().create_task(coro)
+        self._replacing.add(task)
+        task.add_done_callback(self._replacing.discard)
 
     def _grow(self) -> None:
         """Todas ocupadas: se abre otra en segundo plano. El pedido toma la primera que se libere (o la nueva)."""
@@ -178,9 +206,7 @@ class ClaudeSubscriptionProvider:
         if len(self._all) + self._opening >= max(1, self.config.pool_size):
             return
         self._opening += 1
-        task = asyncio.get_running_loop().create_task(self._open_extra())
-        self._replacing.add(task)
-        task.add_done_callback(self._replacing.discard)
+        self._spawn(self._open_extra())
 
     async def _open_extra(self) -> None:
         session = _Session(self._options)
@@ -198,9 +224,9 @@ class ClaudeSubscriptionProvider:
 
     async def _shrink(self) -> None:
         """Después de un rato sin pedidos superpuestos, queda una sola sesión abierta (menos memoria)."""
-        if len(self._all) <= 1 or time.monotonic() - self._last_crowded < SHRINK_AFTER_S:
+        if len(self._all) <= self.min_sessions or time.monotonic() - self._last_crowded < SHRINK_AFTER_S:
             return
-        while len(self._all) > 1 and not self._idle.empty():
+        while len(self._all) > self.min_sessions and not self._idle.empty():
             session = self._idle.get_nowait()
             self._all.discard(session)
             await self._close_quietly(session)
@@ -228,25 +254,28 @@ class ClaudeSubscriptionProvider:
             self._keepalive.cancel()
         for task in list(self._replacing):
             task.cancel()
-        await asyncio.gather(*(s.close() for s in self._all), return_exceptions=True)
+        await asyncio.gather(*(s.close() for s in self._all | self._retired), return_exceptions=True)
         self._all.clear()
+        self._retired.clear()
 
     async def stream(self, request: TranslationRequest) -> AsyncIterator[str]:
-        async for _index, text in self.stream_batch([request]):
-            yield text
+        async for index, text in self.stream_batch([request]):
+            if index != SENT:
+                yield text
 
     async def stream_batch(self, requests: list[TranslationRequest]) -> AsyncIterator[tuple[int, str]]:
         """Traduce varios mensajes en un solo pedido; devuelve (índice, fragmento) a medida que llegan."""
         self._last_used = time.monotonic()
         if self._idle.empty():
             self._grow()
-        session = await self._idle.get()
+        session = await self._take()
         healthy = False
         try:
             if session.client is None:
                 async with asyncio.timeout(30):
                     await session.open()
             await session.client.query(build_user_prompt(requests))
+            yield SENT, ""
             streamed = False
             fallback_text: list[str] = []
             output = OutputFilter(len(requests))  # solo lo que viene dentro de <tN>...</tN>
@@ -274,13 +303,44 @@ class ClaudeSubscriptionProvider:
             session.turns += 1
             healthy = True
         finally:
-            if healthy and session.turns < self.config.session_max_turns:
-                self._idle.put_nowait(session)
+            if not healthy:
+                self._spawn(self._replace(session))  # cortada a mitad de respuesta: se reemplaza
+            elif session.retired:
+                self._retire(session)
             else:
-                # Sesión cortada a mitad de respuesta o con historial largo: se reemplaza en segundo plano.
-                task = asyncio.get_running_loop().create_task(self._replace(session))
-                self._replacing.add(task)
-                task.add_done_callback(self._replacing.discard)
+                self._idle.put_nowait(session)
+                if session.turns >= self.config.session_max_turns and not session.refreshing:
+                    # Historial largo: se abre la que la reemplaza MIENTRAS esta sigue atendiendo. Antes se cerraba
+                    # primero y, con una sola sesión, el pedido siguiente esperaba a que arranque otro claude.exe.
+                    session.refreshing = True
+                    self._spawn(self._refresh(session))
+
+    async def _take(self) -> _Session:
+        while True:
+            session = await self._idle.get()
+            if not session.retired:
+                return session
+            self._retire(session)
+
+    def _retire(self, session: _Session) -> None:
+        self._retired.discard(session)
+        self._spawn(self._close_quietly(session))
+
+    async def _refresh(self, old: _Session) -> None:
+        new = _Session(self._options)
+        try:
+            async with asyncio.timeout(30):
+                await new.open()
+        except Exception:  # noqa: BLE001 - se sigue con la vieja; se intenta de nuevo más adelante
+            log.warning("No se pudo abrir la sesión de reemplazo", exc_info=True)
+            await self._close_quietly(new)
+            old.refreshing = False
+            return
+        self._all.add(new)
+        self._idle.put_nowait(new)
+        self._all.discard(old)
+        self._retired.add(old)
+        old.retired = True  # si está libre, se cierra cuando alguien la saque de la fila
 
     async def _replace(self, old: _Session) -> None:
         # La sesión vieja puede estar colgada (por eso se reemplaza) y cerrarla también puede colgarse: se cierra

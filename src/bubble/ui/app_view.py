@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from .main_window import BubbleWindow
 
 LOGO = Path(__file__).resolve().parent.parent / "assets" / "bubble.png"
-PAGES = {"inicio": "Inicio", "voz": "Voz", "ajustes": "Ajustes", "actividad": "Actividad"}
+PAGES = {"inicio": "Inicio", "voz": "Voz", "pruebas": "Pruebas", "ajustes": "Ajustes", "actividad": "Actividad"}
 PILL_NAMES = {"grafito": "Grafito", "medianoche": "Medianoche", "violeta": "Violeta", "bosque": "Bosque",
               "negro": "Negro"}
 ACCENT_NAMES = {"azul": "Azul", "verde": "Verde", "rosa": "Rosa", "naranja": "Naranja", "ninguno": "Sin color"}
@@ -65,6 +65,7 @@ def build(app: BubbleWindow) -> None:
     stack = ttk.Frame(shell)
     stack.pack(fill="both", expand=True)
     builders = {"inicio": lambda page: _home(app, page), "voz": app.voice_panel.build_page,
+                "pruebas": app.tests_panel.build_page,
                 "ajustes": lambda page: _settings(app, page), "actividad": lambda page: _activity(app, page)}
     for key in PAGES:
         if key == "actividad":
@@ -119,8 +120,12 @@ def _show_page(app: BubbleWindow) -> None:
             page.pack(fill="both", expand=True)
         else:
             page.pack_forget()
-    if app.page_var.get() == "voz":
+    if app.page_var.get() in ("voz", "pruebas"):
         app.voice_panel.warm_up()  # que «Probar voz» (y tu voz traducida) salga enseguida
+    if app.page_var.get() == "pruebas":
+        app.tests_panel.refresh_learned()
+        if app.ready:
+            app.voice_panel._open_voice_lane()  # el carril rápido de Claude, listo para probar
 
 
 # ---------------------------------------------------------------- Inicio

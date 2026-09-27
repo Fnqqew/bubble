@@ -79,7 +79,9 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
             "La voz",
             "En la página «Voz»:\n\n"
             "• Subtítulos: ves quién habla (Voz 1, Voz 2…) y qué dice, en tu idioma.\n"
-            "• Tu voz para los demás: hablás en tu idioma y te escuchan en el suyo, con un botón o en modo directo.\n\n"
+            "• Tu voz para los demás: hablás en tu idioma y te escuchan en el suyo, con un botón o en modo directo. "
+            "«Te escuchan en» es el mismo idioma que elegís en la barra para escribir (Tab).\n\n"
+            "En «Pruebas» probás tu micrófono y tu voz traducida sin jugar, y le enseñás tu forma de hablar.\n\n"
             "Para que te escuchen, Bubble habla por un micrófono virtual (como Soundpad). Mirá el paso siguiente.",
         ),
         Step(
@@ -91,9 +93,11 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
             "reiniciá la PC.\n"
             "2. Abrí Bubble: si el instalador te cambió el micrófono o los parlantes de Windows, los vuelvo a poner "
             "como estaban solo.\n"
-            "3. Listo: mientras Bubble está abierto, el micrófono virtual es tu micrófono de Windows (Roblox lo usa) y "
-            "Bubble le pasa tu voz; al cerrar Bubble vuelve el tuyo. En Roblox tenés que estar desmuteado: si ya lo "
-            "estabas, muteate y desmuteate una vez.\n\n"
+            "3. Listo: mientras Bubble está abierto, el micrófono virtual es tu micrófono de Windows y Bubble le pasa "
+            "tu voz; al cerrar Bubble vuelve el tuyo.\n\n"
+            "Abrí Bubble antes que Roblox: Roblox elige su micrófono al abrirse y así toma el de Bubble solo. Si "
+            "Roblox ya estaba abierto, te aviso: elegí «CABLE Output» en Roblox (Esc → Configuración → Dispositivo de "
+            "entrada) o volvé a abrirlo. En Roblox tenés que estar desmuteado.\n\n"
             "¿Algo quedó raro? «Arreglar Windows» deja todo como estaba.",
             "Arreglar Windows" if fix_windows else "",
             fix_windows,

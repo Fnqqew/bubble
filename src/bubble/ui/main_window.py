@@ -34,6 +34,7 @@ from .overlays import CalibrationOverlay, ComposeBar, HotkeyCaptureDialog, Trans
 from . import app_view
 from .theme import apply_theme
 from .tutorial import TutorialWindow, build_steps
+from .tests_panel import TestsPanel
 from .voice_panel import VoicePanel
 
 log = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ STATUS_TEXT = {
 }
 LANG_CHOICES = [name for _code_, name in LOCALE_CHOICES]  # en la lista se ve solo el nombre
 _BY_NAME = {name: code for code, name in LOCALE_CHOICES}
-AUTO_CHOICE = "Automático (el del chat)"
+AUTO_CHOICE = "Automático (el último que usaste)"
 MULTI = "*"  # destino especial: todos los idiomas principales del chat
 MULTI_MAX = 3
 TONE_CHOICES = [name for _level, name in sorted(TONE_NAMES.items())]
@@ -83,8 +84,10 @@ def _choice(code: str) -> str:
     if code == "auto":
         return AUTO_CHOICE
     exact = next((name for known, name in LOCALE_CHOICES if known == code), None)
-    # "es-PE" (no está en la lista): el de su idioma sin región.
-    return exact or next((name for known, name in LOCALE_CHOICES if known == code.split("-")[0]), code)
+    # "es-PE" (no está en la lista): el de su idioma sin región; "en" (elegido con Tab): el primero de ese idioma.
+    language = code.split("-")[0]
+    return exact or next((name for known, name in LOCALE_CHOICES if known == language), None) or next(
+        (name for known, name in LOCALE_CHOICES if known.split("-")[0] == language), code)
 
 
 def _debug_dir() -> Path:
@@ -134,6 +137,7 @@ class BubbleWindow:
             self.root.iconbitmap(default=str(ICON_PATH))
         apply_theme(self.root, config.appearance.theme)
         self.voice_panel = VoicePanel(self)
+        self.tests_panel = TestsPanel(self)
         app_view.build(self)
         app_view.apply_overlay_style(self)
         self._refresh_hotkey_label()
@@ -141,6 +145,10 @@ class BubbleWindow:
             self.root, config.roblox.overlay_seconds, self._overlay_anchor, self._overlay_visible
         )
         self.compose = ComposeBar(self.root, self._compose_preview, self._compose_submit, self._compose_closed)
+        self._compose_multi = False  # la última vez mandaste a "todos los del chat"
+        self.compose.on_target = self._use_language  # cambiar el idioma con Tab cambia también el de tu voz
+        # El micrófono virtual pasa a ser el de Windows ya (Roblox elige su micrófono al abrirse).
+        self.voice_panel.early_start()
         self.inline_chat = InlineChatView(self.root, self.tracker.same_message)
         self.bubbles = BubbleView(self.root, self.tracker.same_message)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -636,9 +644,39 @@ class BubbleWindow:
         targets = [c for c in dict.fromkeys(ordered) if c != mine] or ["en"]
         labels = {}
         if len(in_chat) >= 2:
-            targets.insert(1, MULTI)
+            # La barra abre en lo último que usaste: si fue "todos los del chat", ese va primero.
+            targets.insert(0 if self._compose_multi else 1, MULTI)
             labels[MULTI] = "Todos los del chat (" + " + ".join(c.upper() for c in in_chat[:MULTI_MAX]) + ")"
         return targets, labels
+
+    def _use_language(self, target: str) -> None:
+        """Mandaste (o dijiste) algo en este idioma: la próxima vez la barra y tu voz arrancan en ese. Antes, en
+        "automático", se elegía de nuevo cada vez según el chat y cambiaba solo."""
+        self._compose_multi = target == MULTI
+        if self.translator is None:
+            return
+        if target == MULTI:
+            # "Todos los del chat": tu voz no puede hablar en varios a la vez; usa el principal del chat.
+            languages = self.translator.chat_languages()
+            if languages:
+                self.translator.remember_target(languages[0])
+            return
+        self.translator.remember_target(target)
+        configured = self.config.user.outgoing_language
+        if configured != "auto" and configured.split("-")[0] != target.split("-")[0]:
+            self._set_outgoing(target.split("-")[0])  # elegiste otro con Tab: queda ese
+        self.voice_panel.language_changed()
+
+    def _set_outgoing(self, code: str) -> None:
+        """El idioma en que te leen y te escuchan (el mismo para la barra, tu voz y Ctrl+Enter)."""
+        self.config.user.outgoing_language = code
+        save_setting("user", "outgoing_language", code)
+        if self.translator is not None:
+            self.translator.last_target = None if code == "auto" else code.split("-")[0]
+        for box in (getattr(self, "out_lang", None), self.voice_panel.lang_box):
+            if box is not None:
+                box.set(_choice(code))
+        self.voice_panel.language_changed()
 
     def _on_hotkey(self) -> None:
         """El atajo abre la barra para escribir. No toca el juego: ninguna tecla le llega a Roblox hasta que
@@ -716,6 +754,10 @@ class BubbleWindow:
     def _compose_submit(self, text: str, target: str, tone: int, voice: bool = False) -> None:
         key = (text, target, tone)
         self._send_as_voice = voice
+        self._use_language(target)
+        if voice:
+            self._compose_speak(key)
+            return
         if key in self._compose_results:
             self._compose_send(key)  # la vista previa ya estaba lista: se manda al instante
             return
@@ -725,28 +767,40 @@ class BubbleWindow:
             self._compose_running.add(key)
             self.runner.submit(self._compose_translate(key))
 
+    def _compose_speak(self, key: tuple[str, str, int]) -> None:
+        """Ctrl+Enter: se pide directamente la versión para decir (sin "vc", "kkkk"…, que la voz leería letra por letra)
+        por el carril rápido y se dice. Antes se esperaba primero la traducción del chat y después se pedía esta: dos
+        pedidos seguidos."""
+        self._send_when_ready = None
+        self.compose.close(sent=True)
+        if self.roblox_hwnd:
+            win32.force_foreground(self.roblox_hwnd)  # volver al juego
+        text, target, tone = key
+        languages = (self.translator.chat_languages()[:MULTI_MAX] or ["en"]) if target == MULTI else [target]
+
+        async def speak() -> None:
+            results = await asyncio.gather(
+                *(self.translator.translate_outgoing(text, language, tone=tone, spoken=True) for language in languages),
+                return_exceptions=True)
+            spoken = [(result.target_lang or language, result.translation)
+                      for language, result in zip(languages, results)
+                      if not isinstance(result, BaseException) and result.status != "error"
+                      and result.translation.strip()]
+            if not spoken:
+                self.events.put(("status", "No se pudo traducir para decirlo en voz. Probá de nuevo."))
+                return
+            for _language, said in spoken:
+                self.tracker.mark_sent(said)
+            self.voice_panel.say(spoken, text)
+
+        self.runner.submit(speak())
+
     def _compose_send(self, key: tuple[str, str, int]) -> None:
         self._send_when_ready = None
         messages, own, pairs = self._compose_results[key]
         self.compose.close(sent=True)
         if self._send_as_voice:
-            # Escrito a voz: se pide la versión para decir (sin "vc", "kkkk"…, que la voz leería letra por letra) y se
-            # dice con la voz sintética.
-            if self.roblox_hwnd:
-                win32.force_foreground(self.roblox_hwnd)  # volver al juego
-
-            async def speak() -> None:
-                spoken = []
-                for language, text in pairs:
-                    try:
-                        result = await self.translator.translate_outgoing(key[0], language, tone=key[2], spoken=True)
-                        ok = result.status != "error" and result.translation.strip()
-                        spoken.append((result.target_lang or language, result.translation if ok else text))
-                    except Exception:  # noqa: BLE001 - se dice la traducción del chat, que ya estaba
-                        spoken.append((language, text))
-                self.voice_panel.say(spoken, key[0])
-
-            self.runner.submit(speak())
+            self._compose_speak(key)
             return
         for text in own:
             self.tracker.mark_sent(text)  # que tu propio mensaje no se traduzca al aparecer en el chat
@@ -778,9 +832,10 @@ class BubbleWindow:
     # ================= prueba sin Roblox =================
     def _on_lang_change(self, _event=None) -> None:
         self.config.user.language = _code(self.my_lang.get())
-        self.config.user.outgoing_language = _code(self.out_lang.get())
         save_setting("user", "language", self.config.user.language)
-        save_setting("user", "outgoing_language", self.config.user.outgoing_language)
+        outgoing = _code(self.out_lang.get())
+        if outgoing != self.config.user.outgoing_language:
+            self._set_outgoing(outgoing)
 
     def _on_tone_change(self, _event=None) -> None:
         self.config.user.tone = TONE_CHOICES.index(self.tone.get()) + 1
@@ -821,16 +876,26 @@ class BubbleWindow:
                     continue
                 if kind == "chat_shift":
                     latest.pop("chat_frame", None)  # una lectura anterior al desplazamiento ya quedó vieja
-                handler = getattr(self, f"_ev_{kind}", None)
-                if handler:
-                    handler(payload)
+                self._handle(kind, payload)
         except queue.Empty:
             pass
-        for kind, payload in latest.items():
-            getattr(self, f"_ev_{kind}")(payload)
-        if "bubbles" not in latest:
-            self.bubbles.animate()  # entre detecciones, la traducción sigue a la burbuja
-        self.root.after(15, self._drain_events)  # rápido: las burbujas se mueven con la cámara
+        try:
+            for kind, payload in latest.items():
+                self._handle(kind, payload)
+            if "bubbles" not in latest:
+                self.bubbles.animate()  # entre detecciones, la traducción sigue a la burbuja
+        finally:
+            self.root.after(15, self._drain_events)  # rápido: las burbujas se mueven con la cámara
+
+    def _handle(self, kind: str, payload) -> None:
+        """Un evento que falla se anota y no frena a los demás (antes, un error dejaba la ventana sin novedades)."""
+        handler = getattr(self, f"_ev_{kind}", None)
+        if handler is None:
+            return
+        try:
+            handler(payload)
+        except Exception:  # noqa: BLE001
+            log.exception("Falló el evento %s", kind)
 
     def _ev_chat_frame(self, frame) -> None:
         if self.inline_mode:
@@ -928,6 +993,12 @@ class BubbleWindow:
 
     def _ev_hotkey(self, _payload) -> None:
         self._on_hotkey()
+
+    def _ev_call(self, action) -> None:
+        action()  # algo para hacer en el hilo de la ventana (página Pruebas)
+
+    def _ev_voice_notice(self, text: str) -> None:
+        self.voice_panel.notice(text)
 
     def _ev_info(self, message: str) -> None:
         self._append(f"{message}\n", "info")

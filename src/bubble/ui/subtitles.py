@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from PIL import Image, ImageDraw
 
-from ..voice.captions import MINE, Line
+from ..voice.captions import MINE, NOTICE, Line
 from .inline import SUPERSAMPLE, Slot, _font, layout_text
 
 WIDTH = 760
@@ -51,6 +51,8 @@ def speaker_color(number: int) -> tuple[int, int, int]:
 def speaker_name(number: int) -> str:
     if number == MINE:
         return "Vos"
+    if number == NOTICE:
+        return "Bubble"
     return f"Voz {number}" if number > 0 else "Voz"
 
 

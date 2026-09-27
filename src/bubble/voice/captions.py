@@ -17,6 +17,7 @@ from .live import Caption
 
 KEEP = 3  # frases a la vista
 MINE = -1  # "voz" de las frases que dijiste vos
+NOTICE = -2  # avisos de Bubble en el juego (ej. "Roblox está usando otro micrófono")
 SHOW_S = 7.0  # cuánto queda cada frase después de la última novedad
 
 
@@ -36,8 +37,8 @@ class Line:
 
 
 # translate(texto, idioma, voz, al_llegar_un_pedazo, al_terminar(traducción o None si falló, native=ya estaba en
-# tu idioma))
-Translate = Callable[[str, str, int, Callable[[str], None], Callable[[str | None], None]], None]
+# tu idioma), cómo lo dijo: "question", "shout"…)
+Translate = Callable[[str, str, int, Callable[[str], None], Callable[[str | None], None], str], None]
 
 
 class CaptionBoard:
@@ -89,7 +90,8 @@ class CaptionBoard:
         if ask:
             self.translate(caption.text, language, line.speaker,
                            lambda piece: self._piece(line, piece, generation),
-                           lambda text, native=False: self._done(line, text, generation, native))
+                           lambda text, native=False: self._done(line, text, generation, native),
+                           caption.intonation)
 
     def _piece(self, line: Line, piece: str, generation: int) -> None:
         with self._lock:
@@ -131,6 +133,16 @@ class CaptionBoard:
             self._own_ids -= 1
             now = time.monotonic()
             self.lines.append(Line(self._own_ids, MINE, language, original, translation, True, True, now, now))
+            self.lines = self.lines[-self.keep:]
+        self._changed()
+
+    def notice(self, text: str, seconds: float = 14.0) -> None:
+        """Un aviso de Bubble en el juego, como un subtítulo."""
+        with self._lock:
+            self._own_ids -= 1
+            now = time.monotonic()
+            later = now + seconds - self.show_s  # se ve más que un subtítulo común
+            self.lines.append(Line(self._own_ids, NOTICE, "", "", text, True, True, later, now))
             self.lines = self.lines[-self.keep:]
         self._changed()
 

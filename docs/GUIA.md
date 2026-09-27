@@ -53,12 +53,14 @@ La primera vez aparece un tutorial corto. Se puede saltar, y se reabre desde **A
 
 ## La ventana
 
-Cuatro páginas, arriba:
+Cinco páginas, arriba:
 
 - **Inicio:** en qué idioma hablás y cuatro interruptores: el chat, las burbujas, lo que te dicen por voz y tu voz
   para los demás. Y la tecla para escribir.
-- **Voz:** cómo se traduce tu voz (con botón o directo), cómo suena (femenina o masculina, velocidad) y el
-  micrófono.
+- **Voz:** en qué idioma te escuchan, cómo se traduce tu voz (con botón o directo), cómo suena (femenina o
+  masculina, velocidad) y el micrófono.
+- **Pruebas:** tu micrófono (bien, normal o mal), tu voz traducida, chat a voz, lo que te dicen y tu PC, sin jugar.
+  Y lo que Bubble aprendió de tu forma de hablar (ver [Pruebas](#pruebas)).
 - **Ajustes:** todo lo personalizable:
   - el tema de la ventana (oscuro o claro);
   - cómo se ven las traducciones en el juego: el fondo (grafito, medianoche, violeta, bosque o negro), el detalle de
@@ -114,8 +116,11 @@ En el juego apretá el atajo (**°** por defecto) y se abre una barra para escri
 - El atajo solo funciona con Roblox al frente; en otros programas la tecla escribe normalmente.
 - Para cambiarlo: **Cambiar**, en Inicio, y apretá la tecla o el botón del mouse que quieras.
 
-El idioma de destino se elige solo: el que más se usa en el chat. Si el servidor mezcla idiomas, la opción
-**Todos los del chat** manda el mensaje en varios a la vez.
+**Un solo idioma para todo.** El idioma del chip es el mismo para el chat, para Ctrl+Enter y para tu voz: si
+cambiás a inglés con Tab, tu voz también sale en inglés. Y se mantiene: la próxima vez que abrís la barra (o hablás)
+sigue en ese. En automático, la primera vez se elige el que más se usa en el chat; después, el último que usaste.
+También se elige en **Ajustes → Al escribir** o en **Voz → Te escuchan en**. Si el servidor mezcla idiomas, la
+opción **Todos los del chat** manda el mensaje en varios a la vez (tu voz usa el principal).
 
 ## Voz
 
@@ -133,8 +138,12 @@ que se use (~60 MB). Quedan en `%LOCALAPPDATA%\Bubble\models`.
   Tarda ~2 s desde que termina de hablar; casi todo es lo que tarda Claude.
 - Cada persona tiene su color y su número (**Voz 1**, **Voz 2**…) y Bubble la reconoce cuando vuelve a hablar. No
   sabe su nombre de Roblox: la numera en el orden en que aparece.
-- Lo que ya está en tu idioma no se subtitula ni se traduce: si Whisper dice que es tu idioma (y el texto no dice
-  claramente otro), queda como está.
+- Lo que ya está en tu idioma no se subtitula ni se traduce. Whisper a veces confunde el español rioplatense con
+  portugués o italiano: además de lo que dice Whisper se miran las palabras, y si igual llegara a Claude y volviera
+  igual, no se muestra.
+- Se nota **cómo lo dijeron**: si la voz subió al final (pregunta), si gritaron o exclamaron (comparado con cómo habla
+  esa voz normalmente). Whisper no marca nada de eso; Bubble lo mide en el audio y se lo avisa a Claude, así la
+  traducción tiene los ¿? y ¡! y la emoción que corresponden.
 
 Se escucha **solo el sonido de Roblox** (Windows 11): Discord, un video o la música no se subtitulan, aunque suenen
 fuerte. Si Roblox se reabre o pasás a otro juego (cambia de proceso), Bubble lo sigue solo. En Windows más viejos se
@@ -145,9 +154,30 @@ escucha todo lo que suena en la PC.
 - **Con un botón** (por defecto el **botón lateral del mouse, adelante**):
   - **tocalo y hablá:** cuando terminás de hablar, se traduce y se dice solo (o tocalo otra vez para terminar);
   - o **mantenelo apretado** mientras hablás y soltalo.
-- **Directo, sin botón:** hablás normal. Cada frase que decís sale traducida en voz ~2 s después de que terminás.
+- **Directo, sin botón:** hablás normal. Cada frase que decís sale traducida en voz ~2,5 s después de que terminás.
   Ojo: traduce todo lo que diga tu micrófono.
 - **Escribiendo:** en la barra para escribir, **Ctrl+Enter** en vez de Enter.
+
+**Te escuchan en** (en la página **Voz**) es el idioma de tu voz: el mismo que el de la barra para escribir.
+
+**Tus pausas.** Apenas hacés una pausa, Bubble lee lo que dijiste. Si suena terminado, lo traduce ya (sin esperar
+más silencio ni volver a leerlo); si quedó a medias ("fui a buscar la espada y…", "porque…"), espera a que sigas.
+Así no te corta a mitad de frase y, cuando terminás, sale enseguida.
+
+**Preguntas, gritos y emociones.** En español "¿vamos a la torre?" y "vamos a la torre" tienen las mismas palabras:
+lo que cambia es la entonación. Bubble mide en tu voz si subió al final (pregunta), si gritaste o exclamaste
+(comparado con cómo hablás normalmente, que va aprendiendo) o si hablaste bajito, y se lo pasa a Claude. La voz
+sintética lo acompaña: más rápida y fuerte si gritaste, más suave si hablaste bajito.
+
+**Aprende tu forma de hablar.** Cuanto más lo usás, mejor te entiende y más rápido traduce:
+
+- Whisper recibe ejemplos de cómo hablás (voseo, jerga de juego, con ¿? y ¡!) y tus últimas frases: entiende mejor
+  tus palabras (medido: ~20 % menos palabras mal entendidas con voces rioplatenses, y el doble de ¿? y ¡!).
+- Lo que ya dijiste queda guardado: si volvés a decir lo mismo ("dale, esperame"), sale al instante.
+- En **Pruebas** corregís lo que entendió o cómo lo tradujo: Claude usa esas traducciones de modelo para sonar como
+  vos querés.
+
+Todo queda en `%LOCALAPPDATA%\Bubble\perfil_voz.json` (solo en tu PC); se borra desde **Pruebas**.
 
 Lo que se va a decir en voz se traduce como se habla (palabras completas, sin "vc" ni "kkkk", y en la escritura del
 idioma: el hindi, en devanagari), para que la voz no lea abreviaturas letra por letra.
@@ -168,9 +198,14 @@ un micrófono virtual. Bubble usa **VB-Audio Virtual Cable**, gratis (es el "dri
 
 Mientras Bubble está abierto, el micrófono de Windows es el virtual y Bubble le pasa tu micrófono real en vivo: te
 escuchan igual que siempre y, cuando suena tu voz traducida (con el botón, en modo directo o con Ctrl+Enter), tu voz
-baja. Roblox abre el micrófono de Windows cada vez que te desmuteás: si ya estabas desmuteado cuando abriste Bubble,
-muteate y desmuteate una vez. Al cerrar Bubble, Windows vuelve a tu micrófono (y si Bubble se cerró de golpe, lo
-arregla al abrirse). Si algo queda raro, **Voz → Arreglar Windows**.
+baja. Al cerrar Bubble, Windows vuelve a tu micrófono (y si Bubble se cerró de golpe, lo arregla al abrirse). Si
+algo queda raro, **Voz → Arreglar Windows**.
+
+**Abrí Bubble antes que Roblox.** Roblox arma su lista de micrófonos una sola vez, al abrirse, y usa el que en ese
+momento es el de Windows (se ve en su registro). Bubble pone el micrófono virtual apenas abre (sin esperar a
+conectarse) y no lo saca aunque cierres Roblox: el próximo Roblox lo toma solo. Si Roblox ya estaba abierto, Bubble
+se da cuenta (mira de qué micrófono está grabando Roblox) y te avisa en la ventana y en el juego: elegí **CABLE
+Output** en Roblox (**Esc → Configuración → Dispositivo de entrada**) o volvé a abrir Roblox.
 
 - Con **Pasar también mi voz real** apagado, solo escuchan la voz traducida.
 - Discord usa el micrófono de Windows: mientras está prendido, también escucha la voz traducida. Si no querés, en
@@ -191,6 +226,19 @@ frase dure 2. Bubble le pasa solo la frase: tarda 10 a 40 veces menos. Mientras 
 (`base`) y para el texto final uno más preciso (`small`); en inglés alcanza con el rápido. En procesadores chicos
 se usan modelos más livianos solos.
 
+La voz tiene **su propio carril con Claude**: una sesión aparte (no espera detrás de las traducciones del chat), que
+responde sin "pensar" antes (pensando tardaba de 2 a 4 s; sin pensar, ~1,5 s). Si alguna vez tarda de más, se le
+pregunta también al carril del chat y gana el primero. Medido con frases rioplatenses, desde que terminás de hablar
+hasta que suena tu voz traducida:
+
+| | Antes | Ahora |
+|---|---|---|
+| Saber que terminaste | 0,8 s | 0,2 s (y lo leído ya sirve) |
+| Entender tu voz | 0,9 s | 0,4 s |
+| Traducir | 2,6 s (a veces 15 s o nada) | 1,6 s |
+| Armar la voz | 0,4 s | 0,2 s |
+| **Total** | **~4,7 s** | **~2,5 s** |
+
 **Probarlo sin Roblox.** El laboratorio de voz arma conversaciones con voces sintéticas (una persona, gente
 hablando rápido, un grupo que se pisa, siete idiomas, música y explosiones de fondo, un monólogo largo) y mide
 cuánto tarda y cuánto entiende:
@@ -201,6 +249,23 @@ cuánto tarda y cuánto entiende:
 .venv\Scripts\python.exe -m bubble.tools.voice_lab --directo       # tu voz, traducción directa
 ```
 
+## Pruebas
+
+La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus auriculares: nada le llega a Roblox.
+
+- **Tu micrófono:** leés una frase y te dice si va a andar **bien, normal o mal** para traducir tu voz. Mide el
+  volumen de tu voz, el ruido de fondo, si satura y cuántas palabras entendió, y te dice qué cambiar (subir el
+  volumen, acercarlo, alejarlo del ventilador…).
+- **Tu voz traducida:** tocás **Hablar**, decís algo como en el juego y ves qué entendió, cómo lo dijiste
+  (pregunta, gritando…), cómo lo tradujo y cuánto tardó cada paso; y la escuchás. Si algo salió mal, lo corregís y
+  tocás **Guardar**: aprende tus palabras y cómo querés sonar.
+- **Chat a voz:** como Ctrl+Enter: escribís y escuchás cómo lo dice.
+- **Lo que te dicen:** una voz sintética dice una frase en inglés, como otro jugador, y ves el subtítulo.
+- **Tu PC:** tu procesador, memoria y placa de video, cuánto tarda de verdad en esta PC entender una frase y armar la
+  voz, y cuánto va a tardar tu voz traducida. Te dice si anda excelente, bien, normal o lenta, y qué ajustar.
+- **Lo que aprendió:** cuántas frases tuyas conoce, cuántas traducciones aprobaste, cuántas salen al instante y los
+  tiempos promedio de tu voz. **Borrar lo aprendido** empieza de cero.
+
 ## Jerga, dialectos y tono
 
 **Lo que te llega:**
@@ -209,6 +274,9 @@ cuánto tarda y cuánto entiende:
   cómo hablás vos: "vlw mano, tmj kkkk" → "¡gracias, bro, sos un crack! jajaja".
 - Si alguien escribe en tu idioma pero con jerga de otro país ("no mames wey, neta"), se adapta a tu variante.
 - Las risas se convierten al instante, sin llamar a Claude (kkkk, wkwk, ㅋㅋㅋ, mdr → jajaja).
+- Las palabras de juego que se usan en todos los idiomas ("pvp", "lag", "noob", "loot", "farmear", "tradear",
+  "lobby"…) no dicen nada del idioma: "vamos a hacer pvp" o "tengo lag" son español y no se traducen, y "gg noob"
+  se entiende igual en cualquier idioma.
 - Si una expresión no tiene equivalente, se aclara breve entre paréntesis ("skill issue: problema tuyo").
 
 **Lo que escribís:**

@@ -156,6 +156,8 @@ class ComposeBar:
         self.on_preview = on_preview  # pedir la traducción de (texto, idioma, tono) para mostrarla
         self.on_submit = on_submit  # traducir (si hace falta) y enviar: (texto, idioma, tono, voice=en voz)
         self.on_close = on_close  # se cerró sin enviar
+        # Cambiaste el idioma con Tab (o con un clic en el chip): es el mismo para tu voz y para chat a voz.
+        self.on_target: Callable[[str], None] | None = None
         self.targets: list[str] = []
         self.labels: dict[str, str] = {}
         self.index = 0
@@ -348,6 +350,8 @@ class ComposeBar:
             self.index = (self.index + 1) % len(self.targets)
             self._render_target()
             self._schedule_preview()
+            if self.on_target:
+                self.on_target(self.targets[self.index])
         return "break"
 
     def _change_tone(self, delta: int) -> str:

@@ -52,9 +52,10 @@ ves cómo va a quedar. Bubble solo abre el chat, escribe y envía; no toca ningu
 **Te subtitula la voz.** Lo que te dicen por voz aparece abajo, como en una película: quién habla (Voz 1, Voz 2…)
 y qué dice, en tu idioma, casi al instante. Escucha solo a Roblox: ni Discord ni la música que tengas de fondo.
 
-**Habla por vos.** Tocás un botón, hablás en tu idioma y, cuando terminás, los demás te escuchan en el suyo, con una
-voz femenina o masculina (también en modo directo o escribiendo, con Ctrl+Enter). Como Soundpad, sale por tu
-micrófono en Roblox (con el micrófono de Roblox activado). [Cómo activarla](docs/GUIA.md#voz).
+**Habla por vos.** Tocás un botón, hablás en tu idioma y, ~2,5 s después de que terminás, los demás te escuchan en
+el suyo, con una voz femenina o masculina (también en modo directo o escribiendo, con Ctrl+Enter). Entiende tus
+pausas, tus preguntas y tus gritos, y aprende tu forma de hablar. Como Soundpad, sale por tu micrófono en Roblox.
+[Cómo activarla](docs/GUIA.md#voz).
 
 <br>
 
@@ -68,6 +69,9 @@ Elegís tu idioma y prendés lo que quieras. Después, jugás: Bubble encuentra 
 
 **Hacelo tuyo:** tema oscuro o claro, el color, la opacidad y el tamaño de las traducciones en el juego, y dónde y
 cómo se ven los subtítulos.
+
+**Probalo sin jugar:** en **Pruebas** ves si tu micrófono va a andar bien, normal o mal, cómo entiende y traduce tu
+voz (y cuánto tarda cada paso), y cómo va a andar Bubble en tu PC. [Más](docs/GUIA.md#pruebas).
 
 <br>
 
@@ -134,6 +138,7 @@ Y con el laboratorio de voz (varias personas, siete idiomas, música de fondo):
 |---|---|
 | Ves lo que dicen | a los **0,5 s** de que empiezan a hablar |
 | La traducción | **~2 s** después de que terminan |
+| Tu voz traducida | suena **~2,5 s** después de que terminás (antes ~4,7 s) |
 | Quién habla | acierta **9 de cada 10** frases o más |
 | Tu voz traducida suena | **~2 s** después de que terminás de hablar |
 

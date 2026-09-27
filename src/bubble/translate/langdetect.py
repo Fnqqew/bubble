@@ -16,6 +16,24 @@ UNIVERSAL_TOKENS = {
     "ah", "aa", "oh", "eh", "uh", "ay", "hm", "hmm", "mm", "mmm", "aja", "aha", "ajá", "nah", "nop", "nope", "yep",
     "wow", "uff", "uf", "bruh", "sh", "shh", "ups", "oops", "q",
 }
+# Palabras de juego que se usan igual en todos los idiomas ("vamos a hacer pvp", "tengo lag", "bora farmar"). No dicen
+# nada del idioma del mensaje: antes un "pvp" o un "lag" hacía que un mensaje en español pareciera inglés (y se
+# traducía).
+GAMING_WORDS = set("""
+    pvp pve pvpear lag laggy lagueado lagueo lagea lageando noob noobs nub nubs newbie pro pros hacker hackers hack
+    hacks hacking cheater cheaters cheat cheats bug bugs bugueado buguea bugeado glitch glitches op nerf nerfeo
+    nerfearon
+    buff buffs bufeo loot looteo lootear farm farmear farmeando farmar farming grind grindear grindeando spawn spawns
+    respawn spawnear spawnkill boss bosses item items itens skin skins lvl level levels xp exp hp mp dps tank
+    healer raid raids quest quests drop drops dropea craft crafting crafteo server servers lobby admin admins
+    mod mods owner ban baneo baneado kick kickeo tp tpa tpear teleport obby obbies robux rbx avatar emote emotes
+    gamepass gamepasses pet pets trade trades tradeo tradear tradeando trading rank ranked clan squad team teams crew
+    party carry carrear combo combos speedrun camper campero camping sniper stream streamer youtuber tiktoker ping fps
+    bot bots npc npcs checkpoint stage stages round rounds match lobby map maps game games gamer online offline chat vc
+    mic discord user username link update updates shop coins gems tycoon simulator roleplay rp sus imposter impostor
+    crush random cringe based troll trolleo trollear tryhard sweat sweaty clutch rush rushear main mains smurf ult
+    ultimate cooldown cd aggro kill kills killstreak headshot hs ks respawn afk vip premium event codes code
+""".split())
 _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
@@ -84,13 +102,25 @@ def _chat_forms(token: str) -> set[str]:
     return forms
 
 
+def is_gaming(token: str) -> bool:
+    return bool(_chat_forms(token) & GAMING_WORDS)
+
+
 def lexical_share(text: str, lang: str) -> float:
-    """Fracción de las palabras del mensaje que son comunes en `lang` (0 si no hay lista para ese idioma)."""
+    """Fracción de las palabras del mensaje que son comunes en `lang` (0 si no hay lista para ese idioma). Las palabras
+    de juego ("pvp", "lag") no cuentan para ningún lado."""
     words = COMMON_WORDS.get(lang)
-    tokens = _WORD_TOKEN.findall(text)
+    tokens = [t for t in _WORD_TOKEN.findall(text) if not is_gaming(t) or _chat_forms(t) & (words or set())]
     if not words or not tokens:
         return 0.0
     return sum(bool(_chat_forms(t) & words) for t in tokens) / len(tokens)
+
+
+def without_gaming(text: str) -> str:
+    """El mensaje sin las palabras de juego, para detectar el idioma de lo demás ("hagamos pvp en el lobby" → "hagamos
+    en el"). Si no queda nada, el mensaje entero."""
+    kept = [t for t in text.split() if not all(is_gaming(w) for w in _WORD_TOKEN.findall(t) or ["x"])]
+    return " ".join(kept) if _WORD_TOKEN.search(" ".join(kept)) else text
 
 
 def words_in(text: str) -> list[str]:
@@ -106,7 +136,7 @@ def known_anywhere(token: str) -> bool:
 def foreign_words(text: str, lang: str) -> list[str]:
     """Palabras típicas de OTRO idioma que no existen en `lang` (ej. "você" o "the" en un mensaje en español)."""
     own = COMMON_WORDS.get(lang, set())
-    tokens = {_fold(t) for t in _WORD_TOKEN.findall(text)}
+    tokens = {_fold(t) for t in _WORD_TOKEN.findall(text) if not is_gaming(t)}
     return sorted(
         t for other_lang, words in _DISTINCTIVE.items() if other_lang != lang for t in tokens & words if t not in own
     )
@@ -124,8 +154,9 @@ def is_filtered(text: str, threshold: float = 0.5) -> bool:
 
 
 def is_universal(text: str) -> bool:
-    """True si el mensaje no tiene palabras o solo tiene abreviaturas e interjecciones universales ("Ahhhh")."""
-    return all(_chat_forms(w) & UNIVERSAL_TOKENS for w in _WORD.findall(text))
+    """True si el mensaje no tiene palabras o solo tiene abreviaturas, interjecciones universales ("Ahhhh") y
+    palabras de juego que se entienden en cualquier idioma ("gg noob", "pvp?", "lag")."""
+    return all(_chat_forms(w) & (UNIVERSAL_TOKENS | GAMING_WORDS) for w in _WORD.findall(text))
 
 
 @dataclass(frozen=True)

@@ -23,7 +23,8 @@ class _Item:
 
 def _group_key(request: TranslationRequest) -> tuple:
     # Solo se juntan mensajes que se traducen igual (misma dirección, idioma, variante y tono).
-    return request.direction, request.target_lang, request.target_region, request.tone, request.spoken
+    return (request.direction, request.target_lang, request.target_region, request.tone, request.spoken,
+            request.from_speech, request.intonation, request.examples)
 
 
 class Batcher:

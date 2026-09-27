@@ -62,7 +62,7 @@ class FakeWhisper:
     def __init__(self, text="anyone wanna trade?", language="en"):
         self.text, self.language, self.calls = text, language, []
 
-    def transcribe(self, audio, language=None, beam_size=1, prior=None, retry_beam=0):
+    def transcribe(self, audio, language=None, beam_size=1, prior=None, retry_beam=0, hint=""):
         from bubble.voice.asr import Heard
 
         self.calls.append(len(audio) / SAMPLE_RATE)
@@ -115,7 +115,7 @@ def test_muted_while_your_own_translated_voice_plays():
 # ---------------------------------------------------------------- subtítulos y traducción
 def test_translation_starts_early_and_is_not_repeated():
     asked = []
-    board = CaptionBoard("es-AR", lambda text, lang, voice, piece, done: asked.append((text, piece, done)))
+    board = CaptionBoard("es-AR", lambda text, lang, voice, piece, done, _how="": asked.append((text, piece, done)))
     board.caption(Caption(1, 0.0, 1.0, "hey guys does anyone", "en", 1))
     board.caption(Caption(1, 0.0, 2.0, "Hey guys, does anyone know?", "en", 1, stable=True))
     assert [a[0] for a in asked] == ["Hey guys, does anyone know?"]  # ya se pidió en la pausa
@@ -129,7 +129,7 @@ def test_translation_starts_early_and_is_not_repeated():
 
 def test_final_text_that_changed_is_translated_again():
     asked = []
-    board = CaptionBoard("es", lambda text, lang, voice, piece, done: asked.append((text, piece, done)))
+    board = CaptionBoard("es", lambda text, lang, voice, piece, done, _how="": asked.append((text, piece, done)))
     board.caption(Caption(1, 0.0, 1.0, "wake where is it", "en", 2, stable=True))
     board.caption(Caption(1, 0.0, 1.0, "Wait, where is the left side?", "en", 2, final=True))
     assert [a[0] for a in asked] == ["wake where is it", "Wait, where is the left side?"]
@@ -159,7 +159,7 @@ def test_same_words_ignores_case_and_punctuation():
 
 # ---------------------------------------------------------------- tu voz
 class FakeVoices:
-    def synthesize(self, text, language):
+    def synthesize(self, text, language, style=""):
         return Speech(np.zeros(22050, dtype=np.float32), 22050) if language == "en" else None
 
 
@@ -176,7 +176,7 @@ def test_speaker_says_the_translation_and_you_hear_it_too(monkeypatch):
 
     played, events = fake_devices(monkeypatch), []
     whisper = FakeWhisper("hola a todos, alguien quiere cambiar mascotas?")
-    speaker = VoiceSpeaker(whisper, VoiceOut(FakeVoices()), lambda text: ("hey everyone, anyone wanna trade pets?", "en"),
+    speaker = VoiceSpeaker(whisper, VoiceOut(FakeVoices()), lambda text, _how: ("hey everyone, anyone wanna trade pets?", "en"),
                            push_to_talk_vk=0x06, my_language="es-AR",
                            on_event=lambda kind, text: events.append((kind, text)))
     speaker.speak(np.zeros(SAMPLE_RATE * 2, dtype=np.float32))
@@ -197,7 +197,7 @@ def test_direct_voice_translates_each_phrase_early_and_in_order(monkeypatch):
 
     played, events, asked = fake_devices(monkeypatch), [], []
 
-    def translate(text):
+    def translate(text, _how=""):
         asked.append(text)
         return f"EN: {text}", "en"
 
@@ -328,7 +328,7 @@ def _speaker(held_for: float, speech_s: float):
     from bubble.voice.pipelines import VoiceSpeaker
 
     pressed = _time.monotonic()
-    speaker = VoiceSpeaker(None, None, lambda _t: None, 0, "es", mic_factory=_RealTimeMic,
+    speaker = VoiceSpeaker(FakeWhisper("dale, vamos."), None, lambda _t, _how: None, 0, "es", mic_factory=_RealTimeMic,
                            vad_factory=lambda: _ScriptedVad(speech_s), held=lambda: _time.monotonic() - pressed < held_for)
     speaker._running.set()
     return speaker
@@ -338,18 +338,18 @@ def test_tap_listens_until_you_stop_talking():
     import time as _time
 
     started = _time.monotonic()
-    audio = _speaker(held_for=0.1, speech_s=1.0)._record()
+    audio, early = _speaker(held_for=0.1, speech_s=1.0)._record()
     took = _time.monotonic() - started
-    assert audio is not None
-    # 1 s hablando + 0,8 s de silencio para saber que terminaste
-    assert 1.6 <= took <= 2.6
+    assert audio is not None and early is not None  # lo dicho ya se leyó en la pausa: no hay que leerlo de nuevo
+    # 1 s hablando + la pausa: como lo último suena terminado ("dale, vamos."), no se espera todo el silencio
+    assert 1.1 <= took <= 1.9
 
 
 def test_holding_records_until_release():
     import time as _time
 
     started = _time.monotonic()
-    audio = _speaker(held_for=0.9, speech_s=5.0)._record()
+    audio, _early = _speaker(held_for=0.9, speech_s=5.0)._record()
     assert audio is not None and 0.8 <= _time.monotonic() - started <= 1.2
 
 
@@ -360,7 +360,7 @@ def test_tap_without_talking_is_cancelled():
     speaker = _speaker(held_for=0.1, speech_s=0.0)
     speaker.NO_SPEECH_S = 0.6
     speaker.on_event = lambda kind, text: events.append(kind)
-    assert speaker._record() is None and "error" in events
+    assert speaker._record() == (None, None) and "error" in events
     assert VoiceSpeaker.NO_SPEECH_S > 3
 
 
@@ -380,3 +380,35 @@ def test_only_the_latest_synthetic_voices_stay_loaded(monkeypatch):
         voices._load(name)
     voices._load("d")
     assert list(voices._loaded) == ["c", "a", "d"]  # "b", la menos usada hace más tiempo, se liberó
+
+
+def test_a_pause_in_the_middle_of_your_sentence_does_not_cut_it():
+    """Tu voz (modo directo): hablás, pausa de 0,8 s y seguís. Si lo último sonó a medias ("…y"), es una sola frase;
+    si sonó terminado, son dos (y la primera sale enseguida)."""
+
+    def finals(text):
+        captions = []
+        whisper = FakeWhisper(text, "es")
+        settings = Settings(fast_final_languages=("es",), first_partial_s=60.0, partial_every_s=60.0,
+                            end_silence_s=0.7, quick_end_s=0.3, wait_for_tail=True, unfinished_end_s=1.5)
+        listener = LiveListener(whisper, captions.append, partial_asr=whisper, settings=settings, language="es",
+                                vad=ScriptedVad(lambda t: 0.5 <= t < 2.0 or 2.8 <= t < 4.5))
+        stream = np.zeros(int(7.0 * SAMPLE_RATE), dtype=np.float32)
+        for start in range(0, len(stream), FRAME * 3):
+            listener.feed(stream[start:start + FRAME * 3])
+            while (job := listener._next_job()) is not None:
+                job()
+        return [c for c in captions if c.final]
+
+    assert len(finals("fui a buscar la espada y")) == 1
+    assert len(finals("Dale, vamos a la torre.")) == 2
+
+
+def test_tap_waits_longer_when_you_leave_a_phrase_hanging():
+    import time as _time
+
+    speaker = _speaker(held_for=0.1, speech_s=1.0)
+    speaker.transcriber = FakeWhisper("fui a buscar la espada y", "es")
+    started = _time.monotonic()
+    audio, _early = speaker._record()
+    assert audio is not None and _time.monotonic() - started >= 1.0 + speaker.UNFINISHED_S - 0.15

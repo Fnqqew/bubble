@@ -32,11 +32,14 @@ adapt_slang = false
 # Usa la suscripción de Claude con la que iniciaste sesión en Claude Code.
 # Alias: "opus", "sonnet", "haiku", o un ID completo como "claude-opus-5-5".
 model = "opus"
+# La voz (lo que decís y lo que te dicen) va por su propia sesión, sin pensar antes de responder (~1,6 s por
+# traducción). "" = el mismo modelo que `model`; también "sonnet" (tarda lo mismo, medido).
+voice_model = ""
 # low = más rápido. medium/high = más razonamiento (más lento).
 effort = "low"
-# Sesiones de Claude abiertas en paralelo (permite traducir varios mensajes a la vez).
+# Sesiones de Claude abiertas como máximo (se abren solas si llegan pedidos juntos y se cierran al rato).
 pool_size = 3
-# Se reinicia la sesión cada N traducciones para que no crezca el historial.
+# Cada N traducciones la sesión se renueva (se abre la nueva antes de cerrar la vieja: no hay espera).
 session_max_turns = 15
 # Ruta a claude.exe. Vacío = se busca solo (PATH, instalador nativo o extensión de VS Code).
 cli_path = ""

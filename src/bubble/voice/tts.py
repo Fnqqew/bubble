@@ -17,6 +17,8 @@ from .models import Progress, download, models_dir
 
 CATALOG_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json"
 FILE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/{path}"
+# Cómo acompaña la voz lo que sentiste: (velocidad, expresividad, volumen).
+STYLES = {"": (1.0, 0.7, 1.0), "shout": (1.1, 0.9, 1.4), "exclaim": (1.05, 0.85, 1.2), "soft": (0.95, 0.6, 0.75)}
 QUALITY_ORDER = {"medium": 0, "high": 1, "low": 2, "x_low": 3}
 # Idiomas cuya voz de Piper necesita programas extra que no vienen instalados (tailandés: tltk; japonés: pyopenjtalk).
 MAX_LOADED = 3  # voces sintéticas cargadas a la vez (la tuya, la femenina y la masculina, casi siempre)
@@ -132,17 +134,21 @@ class Voices:
         self.synthesize("ok", language, gender)
         return voice is not None
 
-    def synthesize(self, text: str, language: str, gender: str | None = None, speed: float | None = None
-                   ) -> Speech | None:
-        """Dice `text` con una voz de `language`. None si no hay voz para ese idioma."""
+    def synthesize(self, text: str, language: str, gender: str | None = None, speed: float | None = None,
+                   style: str = "") -> Speech | None:
+        """Dice `text` con una voz de `language`. None si no hay voz para ese idioma. `style`: cómo lo dijiste vos
+        ("shout", "exclaim", "soft"…, ver voice/speech.py): la voz lo acompaña (más rápida y fuerte, o más suave)."""
         name = self.voice_for(language, gender or self.gender)
         if name is None or not text.strip():
             return None
         from piper.config import SynthesisConfig
 
+        marks = set(style.split("+")) if style else set()
+        mood = next((mark for mark in ("shout", "exclaim", "soft") if mark in marks), "")
+        pace, expressive, gain = STYLES[mood]
         # Un poco de variación natural (no monótona) y la velocidad elegida.
-        config = SynthesisConfig(length_scale=1.0 / max(0.6, min(1.6, speed or self.speed)), noise_scale=0.7,
-                                 noise_w_scale=0.85)
+        config = SynthesisConfig(length_scale=1.0 / max(0.6, min(1.6, (speed or self.speed) * pace)),
+                                 noise_scale=expressive, noise_w_scale=0.85)
         with self._lock:  # una síntesis a la vez por voz
             voice = self._load(name)
             try:
@@ -155,4 +161,7 @@ class Voices:
         if not chunks:
             return None
         audio = np.concatenate([chunk.audio_float_array for chunk in chunks]).astype(np.float32)
+        if gain != 1.0:
+            peak = float(np.max(np.abs(audio))) or 1.0
+            audio = audio * min(gain, 0.98 / peak)  # más fuerte, sin saturar
         return Speech(audio, chunks[0].sample_rate)

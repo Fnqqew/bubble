@@ -46,6 +46,12 @@ class TranslationRequest:
     tone: int = 3
     # Se va a decir en voz (voz sintética): palabras completas, sin abreviaturas de chat, en la escritura del idioma.
     spoken: bool = False
+    # Viene de reconocer una voz (Whisper): puede tener palabras mal entendidas y le falta puntuación (¿? ¡!).
+    from_speech: bool = False
+    # Cómo lo dijo (la entonación): "question" (subió al final) o "exclaim" (con énfasis). Whisper no lo marca.
+    intonation: str = ""
+    # Cómo querés sonar: pares (lo que dijiste, cómo quedó bien) que aprobaste en la página Pruebas.
+    examples: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

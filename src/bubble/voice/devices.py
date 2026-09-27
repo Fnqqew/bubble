@@ -3,9 +3,11 @@
 - Al instalar el micrófono virtual (VB-Audio Virtual Cable), Windows suele dejarlo como micrófono o parlante
   predeterminado: como parlante no escuchás nada, y como micrófono nadie te escucha si Bubble está cerrado. Bubble lo
   corrige solo.
-- Modo Soundpad: mientras Bubble está conectado, el micrófono de Windows es el virtual. Roblox abre el micrófono de
-  Windows cada vez que te desmuteás (se ve en su registro), y Bubble le pasa al virtual tu voz real en vivo más la
-  traducida: te escuchan igual que siempre, y la voz traducida cuando suena. Al cerrar Bubble, vuelve tu micrófono.
+- Modo Soundpad: mientras Bubble está abierto, el micrófono de Windows es el virtual, y Bubble le pasa tu voz real en
+  vivo más la traducida: te escuchan igual que siempre, y la voz traducida cuando suena. Al cerrar Bubble, vuelve tu
+  micrófono. Roblox arma su lista de micrófonos UNA vez, al abrirse, y usa el que en ese momento es el de Windows (se
+  ve en su registro): por eso el cambio se hace apenas abre Bubble y no se deshace al cerrar Roblox. Si Roblox ya
+  estaba abierto, `roblox_microphone` dice cuál está usando, para avisarte.
 
 Windows no tiene una función pública para elegir el dispositivo predeterminado: se usa la misma interfaz COM que usan
 el panel de Sonido y programas como EarTrumpet o SoundSwitch (IPolicyConfig), a mano con ctypes.
@@ -128,6 +130,25 @@ def restore_real_defaults() -> list[str]:
     if fixed:
         log.info("Dispositivos de Windows restaurados: %s", ", ".join(fixed))
     return fixed
+
+
+def roblox_microphone() -> str | None:
+    """El micrófono del que está grabando Roblox ahora (su sesión de audio activa), o None si no graba o no está
+    abierto. Solo mira: no cambia nada."""
+    from .. import win32
+    from .sessions import sessions
+
+    pids = set(win32.roblox_process_ids())
+    if not pids:
+        return None
+    for mic in _sc().all_microphones():
+        try:
+            found = sessions(mic.id)
+        except OSError:
+            continue
+        if any(session.pid in pids and session.active for session in found):
+            return mic.name
+    return None
 
 
 def real_microphone(name: str = ""):

@@ -165,8 +165,32 @@ def build_user_prompt(requests: TranslationRequest | Sequence[TranslationRequest
         parts.append(
             "This will be read aloud by a text-to-speech voice, so write it the way people say it out loud: full "
             "words, no chat abbreviations (vc, tmj, pls, u, q), no emojis, no repeated letters like kkkk or jajaja, "
-            "and use the language's own script. Keep the same tone and meaning."
+            "no words in ALL CAPS (the voice would spell them out; its tone already carries a shout), and use the "
+            "language's own script. Keep the same tone and meaning."
         )
+    if first.from_speech:
+        parts.append(
+            "The message was transcribed from speech, so it can have misheard or missing words and little punctuation "
+            "(no ¿? ¡! marks): translate what the speaker most likely meant, keeping questions as questions and "
+            "exclamations as exclamations."
+        )
+        marks = set(first.intonation.split("+")) if first.intonation else set()
+        if "question" in marks:
+            parts.append("Their voice rose at the end, which in speech usually marks a question: if the words can be "
+                         "a question, translate it as one.")
+        if "shout" in marks:
+            parts.append("They SHOUTED it (much louder and more strained than their normal voice): translate it as a "
+                         "shout, with the same emotion (anger, excitement, panic... as the words suggest), using "
+                         "exclamation marks.")
+        elif "exclaim" in marks:
+            parts.append("They said it louder and higher than usual (excited or emphatic): if the words fit, "
+                         "translate it as an exclamation, keeping the emotion.")
+        elif "soft" in marks:
+            parts.append("They said it quietly and calmly: keep it calm, no exclamation marks.")
+    if first.examples:
+        pairs = "\n".join(f"{escape(said)} => {escape(wanted)}" for said, wanted in first.examples)
+        parts.append(f"<how_i_sound>\n{pairs}\n</how_i_sound>\n"
+                     "These are translations this player approved: match their style and word choices.")
     parts.append(f"Translate into {reader}.")
     if any(r.mode == "adapt" for r in batch):
         parts.append(

@@ -51,6 +51,9 @@ class TranslationConfig:
 @dataclass
 class ClaudeConfig:
     model: str = "opus"
+    # La voz (lo que decís y lo que te dicen) va por su propia sesión, sin pensar antes de responder: ~1,6 s por
+    # traducción. "" = el mismo modelo que `model` (con Opus y Sonnet tarda lo mismo, medido, y Opus traduce mejor).
+    voice_model: str = ""
     effort: str = "low"
     pool_size: int = 3
     session_max_turns: int = 15

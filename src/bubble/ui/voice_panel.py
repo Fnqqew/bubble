@@ -60,8 +60,15 @@ class VoicePanel:
         self.speed_var = tk.DoubleVar(value=self.config.speed)
         self.pass_var = tk.BooleanVar(value=self.config.pass_my_voice)
         self._soundpad = False  # el micrófono de Windows es el virtual (ver voice/devices.py)
+        # El micrófono virtual va a ser el de Windows apenas arranque el puente: mientras tanto no se "arregla" Windows
+        # (antes la revisión de dispositivos lo sacaba y un segundo después se volvía a poner: Roblox notaba el cambio).
+        self._soundpad_planned = True
         self._bridge_lock = threading.Lock()
         self.status = None
+        self.lang_box = None
+        from ..voice.profile import VoiceProfile
+
+        self.profile = VoiceProfile()  # lo que se aprende de cómo hablás (voice/profile.py)
         self._tick()
 
     # ------------------------------------------------------------ página «Voz»
@@ -73,7 +80,14 @@ class VoicePanel:
         box = widgets.card(page, "Tu voz para los demás")
         widgets.switch_row(box, "mic", "Traducir mi voz", "Hablás en tu idioma y te escuchan en el suyo.",
                            self.speak_var, self._toggle_speak)
-        row = widgets.label_row(box, "Cómo", pady=(12, 2))
+        from .main_window import AUTO_CHOICE, LANG_CHOICES, _choice, _code
+
+        row = widgets.label_row(box, "Te escuchan en", pady=(12, 2))
+        self.lang_box = ttk.Combobox(row, values=[AUTO_CHOICE, *LANG_CHOICES], state="readonly", width=30)
+        self.lang_box.set(_choice(self.app.config.user.outgoing_language))
+        self.lang_box.bind("<<ComboboxSelected>>", lambda _e: self.app._set_outgoing(_code(self.lang_box.get())))
+        self.lang_box.pack(side="right")
+        row = widgets.label_row(box, "Cómo", pady=(8, 2))
         widgets.segmented(row, self.mode_var, MODES, self._change_mode).pack(side="right")
         row = widgets.label_row(box, "Botón para hablar")
         ttk.Button(row, text="Cambiar", command=self._change_key).pack(side="right")
@@ -102,7 +116,8 @@ class VoicePanel:
         ttk.Button(row, text="Probar voz", command=self._try_voice).pack(side="right")
 
         box = widgets.card(page, "Micrófono", "Como Soundpad: Bubble habla por un micrófono virtual que suma tu voz "
-                                              "real y la traducida. En Roblox lo elegís una sola vez.")
+                                              "real y la traducida. Abrí Bubble antes que Roblox y Roblox lo toma "
+                                              "solo.")
         row = widgets.label_row(box, "Tu micrófono")
         self.mic_box = ttk.Combobox(row, state="readonly", width=30, values=["Buscando…"])
         self.mic_box.set(self.config.mic or "El predeterminado de Windows")
@@ -134,6 +149,8 @@ class VoicePanel:
             from ..voice.devices import restore_real_defaults, wrong_defaults
 
             wrong = wrong_defaults()
+            if self._soundpad or self._soundpad_planned:
+                wrong = [item for item in wrong if item != "micrófono"]  # el micrófono virtual es a propósito
             if wrong and not self._soundpad:
                 # El instalador del micrófono virtual lo dejó como predeterminado (o Bubble se cerró de golpe): se
                 # vuelve a lo tuyo sin que tengas que hacer nada.
@@ -164,9 +181,11 @@ class VoicePanel:
             self.cable_button.pack_forget()
             self.cable_help.configure(text="Listo, no hay que configurar nada: mientras Bubble está abierto, el "
                                            "micrófono virtual es tu micrófono de Windows y Bubble le pasa tu voz real "
-                                           "(te escuchan igual, más la traducida). Al cerrar Bubble vuelve el tuyo. En "
-                                           "Roblox tenés que estar desmuteado; si ya lo estabas, muteate y desmuteate "
-                                           "una vez.")
+                                           "(te escuchan igual, más la traducida). Al cerrar Bubble vuelve el tuyo. "
+                                           "Abrí Bubble antes que Roblox: Roblox elige su micrófono al abrirse. Si ya "
+                                           "estaba abierto, te aviso y lo elegís una vez (Esc → Configuración → "
+                                           "Dispositivo de entrada → CABLE Output). En Roblox tenés que estar "
+                                           "desmuteado.")
         else:
             self.cable_label.configure(text="No instalado", foreground=colors["warn"])
             self.cable_button.pack(side="right", padx=(0, 10))
@@ -174,11 +193,18 @@ class VoicePanel:
                                            "(sirve para probar). Instalarlo toma un minuto.")
 
     # ------------------------------------------------------------ arranque (cuando la app ya tiene Claude listo)
-    def start(self) -> None:
-        # Como Soundpad: con el micrófono virtual instalado, mientras Bubble está conectado tu voz pasa por él y es el
-        # micrófono de Windows (Roblox abre el de Windows cada vez que te desmuteás). Sin importar si usás el botón,
-        # el modo directo o Ctrl+Enter: antes solo se prendía con «Traducir mi voz» y Roblox seguía con tu micrófono.
+    def early_start(self) -> None:
+        """Apenas abre Bubble (sin esperar a Claude): el micrófono virtual pasa a ser el de Windows. Roblox elige su
+        micrófono al abrirse, así que tiene que estar listo antes. Y se vigila cuál usa Roblox, para avisarte."""
         threading.Thread(target=self._start_soundpad, name="bubble-soundpad", daemon=True).start()
+        threading.Thread(target=self._watch_roblox_mic, name="bubble-microfono-roblox", daemon=True).start()
+
+    def start(self) -> None:
+        # Como Soundpad: con el micrófono virtual instalado, mientras Bubble está abierto tu voz pasa por él y es el
+        # micrófono de Windows. Sin importar si usás el botón, el modo directo o Ctrl+Enter.
+        threading.Thread(target=self._start_soundpad, name="bubble-soundpad", daemon=True).start()
+        if self.app.translator is not None:
+            self.app.translator.examples_for = self.profile.examples  # cómo querés sonar (página Pruebas)
         if not (self.config.subtitles or self.config.speak):
             return
         if load_state().get("voice_loading"):
@@ -198,13 +224,14 @@ class VoicePanel:
             update_state(voice_loading=False)  # cerraste Bubble a mitad de la descarga: no fue un error
 
     def pause(self) -> None:
-        """Se cerró Roblox o se refrescó: se apaga todo (escucha, tu voz, el micrófono virtual) y se olvida la partida
-        (las voces vuelven a numerarse desde 1). Los modelos quedan cargados: retomar con `start()` es rápido."""
-        for part in (self.listener, self.speaker, self.bridge):
+        """Se cerró Roblox o se refrescó: se apaga la escucha y tu voz, y se olvida la partida (las voces vuelven a
+        numerarse desde 1). Los modelos quedan cargados: retomar con `start()` es rápido. El micrófono virtual sigue:
+        si Windows volviera a tu micrófono, el próximo Roblox arrancaría con ese (antes pasaba eso y no te
+        escuchaban)."""
+        for part in (self.listener, self.speaker):
             if part:
                 part.stop()
-        self._route_mic(False)
-        self.listener = self.speaker = self.bridge = self.out = self.board = None
+        self.listener = self.speaker = self.out = self.board = None
         if self.models is not None and self.models[2] is not None:
             self.models[2].voices.clear()
 
@@ -264,8 +291,11 @@ class VoicePanel:
         try:
             if self._ensure_bridge() is not None:
                 self._route_mic(True)
+                return
         except Exception:  # noqa: BLE001 - sin la parte de voz instalada
             log.warning("No se pudo preparar el micrófono virtual", exc_info=True)
+        self._soundpad_planned = False  # sin puente no hay modo Soundpad: Windows tiene que quedar con tu micrófono
+        self._scan_devices()
 
     def _ensure_out(self):
         """La voz sintética y, si hay micrófono virtual, el puente con tu micrófono."""
@@ -296,12 +326,10 @@ class VoicePanel:
                 if on:
                     time.sleep(1.0)  # que el puente arranque (si falla, se apaga solo)
                     if bridge is None or not bridge.running:
-                        self._soundpad = False
+                        self._soundpad = self._soundpad_planned = False
                         log.warning("El puente con tu micrófono no arrancó: Windows queda con tu micrófono")
                         return
-                    if devices.use_cable_as_default():
-                        self._set_status("Tu voz pasa por Bubble. En Roblox, si ya estabas desmuteado, muteate y "
-                                         "desmuteate una vez para que tome el micrófono de Bubble.")
+                    devices.use_cable_as_default()
                 else:
                     devices.restore_real_defaults()
             except Exception:  # noqa: BLE001 - queda el botón «Arreglar Windows»
@@ -325,6 +353,7 @@ class VoicePanel:
 
         final, quick, speakers = self.models
         self._ensure_out()
+        self._open_voice_lane()
         if self.board is None:
             self.board = CaptionBoard(self.app.config.user.language, self._translate_heard,
                                       on_translated=lambda line: self.app.events.put(("voice_line", line)))
@@ -346,13 +375,14 @@ class VoicePanel:
                 self.speaker = DirectVoice(final, self.out, self._translate_mine, self.app.config.user.language,
                                            partial_asr=quick, on_event=self._spoke,
                                            target=self.app.translator.outgoing_target,
-                                           mic_factory=self._my_microphone)
+                                           mic_factory=self._my_microphone, profile=self.profile)
             elif self.speaker is None:
                 self.out.warm_up(self.app.translator.outgoing_target())
                 binding = win32.parse_binding(self.config.push_to_talk)
                 self.speaker = VoiceSpeaker(final, self.out, self._translate_mine, binding.vk,
                                             self.app.config.user.language, on_event=self._spoke,
-                                            mic_factory=self._my_microphone)
+                                            mic_factory=self._my_microphone, profile=self.profile)
+                self.speaker.on_turn = lambda turn: self.profile.note_times(turn.times)
             self.speaker.start()
             if not self.out.output.is_cable:
                 self._set_status("Tu voz traducida suena en tus auriculares. Para que la escuchen los demás, instalá "
@@ -534,14 +564,15 @@ class VoicePanel:
         threading.Thread(target=self._scan_devices, daemon=True).start()
 
     # ------------------------------------------------------------ lo que te dicen: frase → traducción → subtítulo
-    def _translate_heard(self, text: str, language: str, speaker: int, on_piece, on_done) -> None:
+    def _translate_heard(self, text: str, language: str, speaker: int, on_piece, on_done, intonation: str = "") -> None:
         if self._is_my_language(text, language):
             on_done(None, native=True)  # en tu idioma: no se traduce (se ve el original, o nada)
             return
 
         async def translate() -> None:
             try:
-                result = await self.app.translator.translate_incoming(text, speaker_name(speaker), on_delta=on_piece)
+                result = await self.app.translator.translate_incoming(text, speaker_name(speaker), on_delta=on_piece,
+                                                                      from_speech=True, intonation=intonation)
                 if result.status == "same_language":
                     on_done(None, native=True)
                 else:
@@ -552,26 +583,95 @@ class VoicePanel:
         self.app.runner.submit(translate())
 
     def _is_my_language(self, text: str, language: str) -> bool:
-        """Whisper dice que es tu idioma y el texto no dice claramente otra cosa. Antes se le preguntaba solo al
-        traductor, que mira el texto: con frases habladas (cortas, sin puntuación) dudaba y "traducía" español a
-        español."""
+        """¿Ya está en tu idioma? Tu idioma no se traduce nunca. Whisper a veces confunde el español rioplatense con
+        portugués o italiano: además de lo que dice Whisper, se miran las palabras."""
+        from ..translate.langdetect import foreign_words, lexical_share, without_gaming
+
         mine = self.app.config.user.language.split("-")[0].lower()
-        if language.split("-")[0].lower() != mine:
-            return False
         detector = getattr(self.app.translator, "detector", None)
-        detection = detector.detect(text) if detector is not None else None
-        return not (detection and detection.lang != mine and detection.is_confident(0.8))
+        detection = detector.detect(without_gaming(text)) if detector is not None else None
+        if language.split("-")[0].lower() == mine:
+            return not (detection and detection.lang != mine and detection.is_confident(0.8))
+        if detection and detection.lang == mine and detection.is_confident(0.5):
+            return True
+        return lexical_share(text, mine) >= 0.6 and not foreign_words(text, mine)
 
     # ------------------------------------------------------------ tu voz: texto en tu idioma → (traducción, idioma)
-    def _translate_mine(self, text: str) -> tuple[str, str] | None:
+    def _translate_mine(self, text: str, intonation: str = "") -> tuple[str, str] | None:
         translator = self.app.translator
         target = translator.outgoing_target()
+        marks = set(intonation.split("+")) if intonation else set()
+        key = text + ("?" if "question" in marks and "?" not in text else "") + (
+            "!" if marks & {"shout", "exclaim"} and "!" not in text else "")
+        saved = self.profile.saved(key, target)
+        if saved:  # ya lo dijiste antes: sale al instante
+            translator.remember_target(target)
+            self.app.tracker.mark_sent(saved)
+            return saved, target
         result = self.app.runner.submit(
-            translator.translate_outgoing(text, target, tone=self.app.config.user.tone, spoken=True)).result(timeout=25)
+            translator.translate_outgoing(text, target, tone=self.app.config.user.tone, spoken=True,
+                                          from_speech=True, intonation=intonation)).result(timeout=25)
         if result.status == "error" or not result.translation.strip():
             return None
+        translator.remember_target(target)
+        self.profile.remember(key, target, result.translation)
         self.app.tracker.mark_sent(result.translation)
         return result.translation, result.target_lang or target
+
+    def _open_voice_lane(self) -> None:
+        """El carril rápido de Claude para la voz (se abre una vez y queda caliente)."""
+        translator = self.app.translator
+        if translator is None:
+            return
+        translator.examples_for = self.profile.examples
+
+        async def open_lane() -> None:
+            translator.start_voice()
+
+        self.app.runner.submit(open_lane())
+
+    def language_changed(self) -> None:
+        """Elegiste otro idioma para hablar: se deja lista su voz."""
+        if self.out is not None and self.app.translator is not None:
+            self.out.warm_up(self.app.translator.outgoing_target())
+
+    def _watch_roblox_mic(self) -> None:
+        """Cada unos segundos: ¿Roblox está grabando del micrófono de Bubble? Si se abrió antes que Bubble, sigue con
+        tu micrófono de siempre y no escuchan tu voz traducida: se avisa (en la ventana y en el juego), una vez."""
+        from ..voice.devices import is_virtual, roblox_microphone
+
+        warned = None
+        while True:
+            time.sleep(5)
+            if not (self._soundpad and self.config.speak):
+                continue
+            try:
+                name = roblox_microphone()
+                pid = win32.roblox_pid() if hasattr(win32, "roblox_pid") else None
+            except Exception:  # noqa: BLE001 - es solo un aviso
+                continue
+            if name is None or is_virtual(name):
+                if warned is not None and name is not None:
+                    warned = None
+                    self._set_status("Roblox ya usa el micrófono de Bubble: te escuchan.")
+                continue
+            if warned == pid:
+                continue
+            warned = pid
+            self._set_status(f"Roblox está usando «{name}» (se abrió antes que Bubble), así que no escuchan tu voz "
+                             "traducida. En Roblox: Esc → Configuración → Dispositivo de entrada → «CABLE Output». O "
+                             "cerrá y volvé a abrir Roblox.")
+            self.app.events.put(("voice_notice", "Roblox no está usando el micrófono de Bubble: Esc → Configuración "
+                                                 "→ Dispositivo de entrada → CABLE Output"))
+
+    def notice(self, text: str) -> None:
+        """(hilo de la ventana) Un aviso en el juego, donde van los subtítulos."""
+        if self.board is None:
+            from ..voice.captions import CaptionBoard
+
+            self.board = CaptionBoard(self.app.config.user.language, self._translate_heard,
+                                      on_translated=lambda line: self.app.events.put(("voice_line", line)))
+        self.board.notice(text)
 
     def _spoke(self, kind: str, text: str) -> None:
         if kind == "escuchando":

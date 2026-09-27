@@ -13,6 +13,11 @@ from .base import DeltaCallback, Provider, TranslationRequest
 
 log = logging.getLogger(__name__)
 BatchDeltaCallback = Callable[[int, str], None]
+# El proveedor avisa con (SENT, "") cuando el pedido salió de verdad (ya tenía una sesión libre). Hasta ahí el pedido
+# puede estar esperando turno: esa espera no es una sesión colgada (antes contaba, y un pedido que esperaba detrás de
+# otro se cortaba por "sin respuesta" y reiniciaba la única sesión: la voz tardaba 15 s o fallaba).
+SENT = -1
+QUEUE_WAIT_S = 20.0  # tope para conseguir una sesión libre (normalmente es menos de 2 s)
 
 
 @dataclass
@@ -59,10 +64,17 @@ class Router:
                 ttfts: list[float | None] = [None] * len(requests)
                 start = time.perf_counter()
                 started = False
+                first_limit = min(self.first_token_s, timeout) if attempt == 1 else timeout
                 try:
-                    async with asyncio.timeout(min(self.first_token_s, timeout) if attempt == 1 else timeout) as limit:
+                    # Sin aviso de envío (otros proveedores), el reloj corre desde ya, como antes.
+                    wait = QUEUE_WAIT_S if getattr(provider, "reports_sent", False) else first_limit
+                    async with asyncio.timeout(wait) as limit:
                         async with aclosing(_batch_stream(provider, requests)) as stream:
                             async for index, chunk in stream:
+                                if index == SENT:  # ya tiene sesión: desde acá corre el tiempo de respuesta
+                                    start = time.perf_counter()
+                                    limit.reschedule(loop.time() + first_limit)
+                                    continue
                                 if not started:  # ya responde: tiene el tiempo completo para terminar
                                     started = True
                                     limit.reschedule(loop.time() + timeout - (time.perf_counter() - start))

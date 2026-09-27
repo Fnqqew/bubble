@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import re
 import time
 from collections import Counter, deque
 from dataclasses import replace
@@ -13,7 +15,7 @@ from .batcher import Batcher
 from .base import ChatLine, DeltaCallback, Direction, Mode, TranslationRequest, TranslationResult, clamp_tone
 from .cache import TranslationCache
 from .langdetect import (LanguageDetector, foreign_words, is_filtered, is_universal, known_anywhere,
-                         lexical_share, words_in)
+                         lexical_share, without_gaming, words_in)
 from .languages import DEFAULT_REGION, split_locale
 from .router import Router
 from .slang import Slang, laugh_for, laugh_only, scan
@@ -28,12 +30,26 @@ MY_SPEAKER = "Yo"
 MAX_HINTS = 6
 # Mensajes recientes que se miran para decidir en qué idioma(s) escribir.
 RECENT_MESSAGES = 12
+# Voz: si el carril rápido no terminó en este tiempo, se le pregunta también al del chat y gana el primero. Una
+# traducción de voz tarda ~1,6 s (medido); a veces 3 o 4 s: ahí sirve.
+HEDGE_AFTER_S = 2.3
+log = logging.getLogger(__name__)
 
 
 class Translator:
-    def __init__(self, config: Config, router: Router, detector: LanguageDetector | None = None) -> None:
+    def __init__(self, config: Config, router: Router, detector: LanguageDetector | None = None,
+                 voice_router: Router | None = None) -> None:
+        """`voice_router`: el carril de la voz (su propia sesión, sin pensar antes de responder): lo que decís y lo que
+        te dicen por voz no hace fila detrás del chat."""
         self.config = config
         self.router = router
+        self.voice_router = voice_router
+        self._voice_lane: asyncio.Task | None = None
+        # El último idioma en el que hablaste o escribiste: se mantiene (antes, en "automático", se elegía de nuevo en
+        # cada mensaje según el chat y cambiaba solo).
+        self.last_target: str | None = None
+        # Cómo querés sonar: devuelve pares (dijiste, quedó bien) aprobados en la página Pruebas para ese idioma.
+        self.examples_for: Callable[[str], tuple[tuple[str, str], ...]] | None = None
         self.detector = detector or LanguageDetector()
         self.cache = TranslationCache(config.translation.cache_size, config.translation.cache_max_words)
         self.history: deque[ChatLine] = deque(maxlen=max(1, config.translation.context_lines))
@@ -45,9 +61,29 @@ class Translator:
     async def start(self) -> None:
         await asyncio.gather(asyncio.to_thread(self.detector.load), self.router.start())
         self.batcher.start()
+        if self.config.voice.speak or self.config.voice.subtitles:
+            self.start_voice()
+
+    def start_voice(self) -> None:
+        """Abre el carril de la voz en segundo plano (y lo deja caliente). Mientras abre, la voz usa el del chat."""
+        if self.voice_router is not None and self._voice_lane is None:
+            self._voice_lane = asyncio.get_running_loop().create_task(self._open_voice_lane())
+
+    async def _open_voice_lane(self) -> None:
+        await self.voice_router.start()
+        for provider in self.voice_router.providers:
+            if hasattr(provider, "warm_up"):
+                await provider.warm_up()
+
+    def _voice_ready(self) -> bool:
+        lane = self._voice_lane
+        return lane is not None and lane.done() and not lane.cancelled() and lane.exception() is None
 
     async def close(self) -> None:
         await self.batcher.close()
+        if self._voice_lane is not None:
+            self._voice_lane.cancel()
+            await self.voice_router.close()
         await self.router.close()
 
     @property
@@ -67,12 +103,21 @@ class Translator:
         return sorted(counts, key=lambda lang: (-counts[lang], -last_seen[lang]))
 
     def outgoing_target(self) -> str:
-        """Idioma al que se traduce lo que escribís: el configurado o el más usado últimamente en el chat."""
+        """Idioma al que se traduce lo que escribís o decís: el elegido; en "automático", el último que usaste (se
+        mantiene); y si todavía no usaste ninguno, el más usado en el chat."""
         configured = self.config.user.outgoing_language
         if configured and configured != "auto":
             return split_locale(configured)[0]
+        if self.last_target:
+            return self.last_target
         languages = self.chat_languages()
         return languages[0] if languages else "en"
+
+    def remember_target(self, language: str) -> None:
+        """Hablaste o escribiste en este idioma: es el que se usa la próxima vez."""
+        code = split_locale(language)[0] if language else ""
+        if code.isalpha():  # no "*" (todos los del chat)
+            self.last_target = code
 
     def outgoing_region(self, lang: str) -> str:
         """Variante del idioma destino: la configurada o la que más aparece en la jerga del chat."""
@@ -90,11 +135,15 @@ class Translator:
         speaker: str = "",
         on_delta: DeltaCallback | None = None,
         on_pending: Callable[[], None] | None = None,
+        from_speech: bool = False,
+        intonation: str = "",
     ) -> TranslationResult:
         """`on_pending` se llama (sin esperar) justo antes de pedirle la traducción a Claude:
-        sirve para reservar el lugar del mensaje en pantalla, en el orden del chat."""
+        sirve para reservar el lugar del mensaje en pantalla, en el orden del chat. `from_speech`: lo dijeron por voz
+        (va por el carril rápido y Claude sabe que puede haber palabras mal entendidas)."""
         lang, region = self.my_locale
-        return await self._translate(text, lang, region, "incoming", speaker, on_delta, on_pending=on_pending)
+        return await self._translate(text, lang, region, "incoming", speaker, on_delta, on_pending=on_pending,
+                                     from_speech=from_speech, intonation=intonation)
 
     async def translate_outgoing(
         self,
@@ -103,14 +152,19 @@ class Translator:
         on_delta: DeltaCallback | None = None,
         tone: int | None = None,
         spoken: bool = False,
+        from_speech: bool = False,
+        intonation: str = "",
     ) -> TranslationResult:
-        """`spoken`: se va a decir en voz (sin abreviaturas de chat, en la escritura del idioma)."""
+        """`spoken`: se va a decir en voz (sin abreviaturas de chat, en la escritura del idioma). `from_speech`: lo
+        dijiste vos por el micrófono (Whisper). Lo que va a voz usa el carril rápido."""
         target = target_lang or self.outgoing_target()
         lang, region = split_locale(target)
         if "-" not in target:
             region = self.outgoing_region(lang)
         tone = clamp_tone(tone if tone is not None else self.config.user.tone)
-        return await self._translate(text, lang, region, "outgoing", MY_SPEAKER, on_delta, tone, spoken=spoken)
+        examples = self.examples_for(lang) if self.examples_for else ()
+        return await self._translate(text, lang, region, "outgoing", MY_SPEAKER, on_delta, tone, spoken=spoken,
+                                     from_speech=from_speech, intonation=intonation, examples=examples)
 
     async def _translate(
         self,
@@ -123,6 +177,9 @@ class Translator:
         tone: int = 3,
         on_pending: Callable[[], None] | None = None,
         spoken: bool = False,
+        from_speech: bool = False,
+        intonation: str = "",
+        examples: tuple[tuple[str, str], ...] = (),
     ) -> TranslationResult:
         start = time.perf_counter()
         text = text.strip()
@@ -147,7 +204,7 @@ class Translator:
             translated = text if source == target else laugh_for(target)
             return result(translated, "local", source)
 
-        detection = self.detector.detect(text)
+        detection = self.detector.detect(without_gaming(text))  # "pvp" o "lag" no hacen inglés a un mensaje
         source = detection.lang if detection else None
         confident = bool(detection and detection.is_confident(SKIP_CONFIDENCE))
         if len(hint_langs) == 1 and not (detection and detection.is_confident(TRACK_CONFIDENCE)):
@@ -177,7 +234,9 @@ class Translator:
                 self.history.append(ChatLine(speaker, text))
                 return result(text, "same_language", source)
 
-        cache_key = f"{target}-{region}:{mode}:{direction}:{tone if direction == 'outgoing' else ''}:{spoken}"
+        # Cómo se dijo cuenta: "vamos a la torre" preguntado no se traduce igual que afirmado.
+        cache_key = (f"{target}-{region}:{mode}:{direction}:{tone if direction == 'outgoing' else ''}:{spoken}:"
+                     f"{intonation}")
         if (cached := self.cache.get(text, cache_key)) is not None:
             self.history.append(ChatLine(speaker, text))
             return result(cached, "cache", source)
@@ -185,13 +244,14 @@ class Translator:
         request = TranslationRequest(
             text, target, direction, speaker, tuple(self.history),
             target_region=region, mode=mode, slang_hints=_hint_tuples(hints), tone=tone, spoken=spoken,
+            from_speech=from_speech, intonation=intonation, examples=tuple(examples),
         )
         # Se agrega al contexto ya (no al terminar) para que el siguiente mensaje del chat lo tenga en cuenta.
         self.history.append(ChatLine(speaker, text))
         if on_pending:
             on_pending()
         try:
-            routed = await self.batcher.translate(request, on_delta)
+            routed = await self._route(request, on_delta)
             if looks_wrong(text, routed.text, request.context):
                 # Traducción sospechosa (mezcló otros mensajes o inventó texto): reintento sin contexto.
                 retry = replace(request, context=())
@@ -201,9 +261,51 @@ class Translator:
         except Exception as exc:  # noqa: BLE001 - la UI muestra el original con el error
             return result(text, "error", source, error=str(exc))
 
+        if direction == "incoming" and mode == "translate" and unchanged(text, routed.text):
+            # Claude lo devolvió igual: ya estaba en tu idioma (el detector dudó). No se muestra como traducción.
+            self.cache.put(text, cache_key, text)
+            return result(text, "same_language", target, routed.provider)
         self.cache.put(text, cache_key, routed.text)
         status = "adapted" if mode == "adapt" else "translated"
         return result(routed.text, status, source, routed.provider, ttft_s=routed.ttft_s)
+
+    async def _route(self, request: TranslationRequest, on_delta: DeltaCallback | None):
+        """Por dónde va cada pedido:
+        - la voz (lo que decís, lo que te dicen, lo que escribís para decir): carril rápido;
+        - lo que escribís para el chat: directo, sin esperar a que se junten mensajes;
+        - los mensajes del chat: en lotes (llegan en ráfagas)."""
+        voice = request.spoken or request.from_speech
+        if voice and self._voice_ready():
+            if on_delta is None:
+                return await self._hedged(request)
+            return await self.voice_router.translate(request, on_delta)
+        if voice or request.direction == "outgoing":
+            return await self.router.translate(request, on_delta)
+        return await self.batcher.translate(request, on_delta)
+
+    async def _hedged(self, request: TranslationRequest):
+        """Carril rápido; si tarda, también el del chat, y gana el primero que termine bien. El que pierde termina
+        solo (cortarlo reiniciaría su sesión)."""
+        first = asyncio.ensure_future(self.voice_router.translate(request))
+        done, _pending = await asyncio.wait({first}, timeout=HEDGE_AFTER_S)
+        if first in done:
+            if first.exception() is None:
+                return first.result()
+            return await self.router.translate(request)
+        second = asyncio.ensure_future(self.router.translate(request))
+        pending = {first, second}
+        error: BaseException | None = None
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                if task.exception() is None:
+                    for other in pending:
+                        other.add_done_callback(_forget)
+                    if task is second:
+                        log.info("Voz: respondió antes el carril del chat")
+                    return task.result()
+                error = task.exception()
+        raise error or RuntimeError("No se pudo traducir")
 
     def _short_from_my_side(self, text: str, speaker: str, target: str) -> bool:
         """Un mensaje corto que el detector no sabe de qué idioma es ("alm", "visito", "sofiiii"). Se deja como está si
@@ -220,6 +322,21 @@ class Translator:
     @staticmethod
     def _foreign_region(hints: list[Slang], lang: str, region: str) -> bool:
         return any(h.lang == lang and h.region and h.region != region for h in hints)
+
+
+def _forget(task: asyncio.Future) -> None:
+    if not task.cancelled():
+        task.exception()  # que no avise "nunca se leyó el error"
+
+
+_WORD = re.compile(r"\w+", re.UNICODE)
+
+
+def unchanged(original: str, translation: str) -> bool:
+    """La "traducción" dice lo mismo que el original (mismas palabras, sin contar mayúsculas ni signos)."""
+    before = _WORD.findall(original.casefold())
+    after = _WORD.findall(translation.casefold())
+    return bool(before) and before == after
 
 
 def looks_wrong(original: str, translation: str, context: tuple[ChatLine, ...]) -> bool:

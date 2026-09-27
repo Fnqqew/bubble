@@ -15,6 +15,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 
@@ -33,6 +34,7 @@ DENSE_TOKENS_PER_S = 30
 LIKELY = {"en", "es", "pt", "fr", "de", "it", "nl", "ru", "uk", "pl", "tr", "ar", "hi", "ur", "bn", "id", "ms", "vi",
           "th", "tl", "zh", "ja", "ko", "sv", "no", "da", "fi", "ro", "hu", "cs", "el", "he", "fa", "ta", "te"}
 UNLIKELY_WEIGHT = 0.05
+MAX_HINT_TOKENS = 96  # pistas cortas: más largas no mejoran y demoran
 
 
 @dataclass
@@ -126,9 +128,11 @@ class FastWhisper:
         return self._tokenizers[language]
 
     def transcribe(self, audio: np.ndarray, language: str | None = None, beam_size: int = 1,
-                   prior: dict[str, float] | None = None, retry_beam: int = 0) -> Heard | None:
+                   prior: dict[str, float] | None = None, retry_beam: int = 0,
+                   hint: str | Callable[[str], str] = "") -> Heard | None:
         """`audio`: mono, float32, 16 kHz. `language`: si ya se sabe, no se detecta. `prior`: peso extra de algunos
-        idiomas al detectarlo (los que se vienen escuchando). None si no había voz."""
+        idiomas al detectarlo (los que se vienen escuchando). `hint`: texto de ejemplo en ese idioma (o una función
+        idioma → texto): Whisper escribe parecido (tus palabras, el voseo, los ¿? y ¡!). None si no había voz."""
         import ctranslate2
 
         started = time.perf_counter()
@@ -145,7 +149,12 @@ class FastWhisper:
                 language, probability = _pick_language(self._model.model.detect_language(encoded)[0], prior or {})
             tokenizer = self._tokenizer(language)
             prompt = [tokenizer.sot, tokenizer.language, tokenizer.transcribe, tokenizer.no_timestamps]
+            example = hint(language) if callable(hint) else hint
+            if example:
+                # "Lo que se dijo antes" (así lo usa Whisper): marca el estilo del texto, no se transcribe.
+                prompt = [tokenizer.sot_prev, *tokenizer.encode(" " + example.strip())[-MAX_HINT_TOKENS:], *prompt]
             limit = min(440, int((DENSE_TOKENS_PER_S if language in DENSE_SCRIPTS else TOKENS_PER_S) * seconds) + 12)
+            limit = min(448, limit + len(prompt))  # el tope cuenta también las pistas
 
             def decode(beams: int):
                 return self._model.model.generate(
