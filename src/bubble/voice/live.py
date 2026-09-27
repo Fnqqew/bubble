@@ -174,7 +174,8 @@ class LiveListener:
     # ------------------------------------------------------------ 1. captura y detector de voz
     def _capture(self) -> None:
         try:
-            with self.source_factory().recorder(samplerate=SAMPLE_RATE, channels=1, blocksize=BLOCK * 2) as recorder:
+            # Búfer de ~0,5 s: si la PC está ocupada un instante (el juego, el OCR), no se pierde audio.
+            with self.source_factory().recorder(samplerate=SAMPLE_RATE, channels=1, blocksize=SAMPLE_RATE // 2) as recorder:
                 while self.running:
                     self.feed(audio_io.to_mono(recorder.record(numframes=BLOCK)))
         except Exception as exc:  # noqa: BLE001 - sin audio no hay subtítulos: se avisa

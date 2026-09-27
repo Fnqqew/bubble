@@ -17,8 +17,12 @@ CABLE_NAMES = ("cable input", "vb-audio virtual cable", "voicemeeter input")
 
 
 def _sc():
+    import warnings
+
     import soundcard
 
+    # Aviso de soundcard al empezar a grabar (y si el búfer se atrasa): llenaba el registro de errores.
+    warnings.filterwarnings("ignore", message="data discontinuity in recording")
     return soundcard
 
 
