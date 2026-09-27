@@ -97,6 +97,10 @@ class VoiceConfig:
     hear_myself: bool = True
     # Reconocimiento de voz: "auto" elige según tu procesador ("base" o "small"); también "tiny", "base", "small".
     model: str = "auto"
+    # Cómo se entiende TU voz: "preciso" (modelo grande, large-v3-turbo: entiende mucho mejor el español; ~0,5 s más
+    # por frase y ~1,6 GB que se descargan una vez), "rapido" (el mismo que para las voces del juego) o "auto" (el que
+    # mejor te entendió en el entrenamiento; si no entrenaste, preciso si la PC da).
+    my_accuracy: str = "auto"
     # Cómo suena tu voz traducida: "femenina" o "masculina", y su velocidad (1 = normal).
     gender: str = "femenina"
     speed: float = 1.0

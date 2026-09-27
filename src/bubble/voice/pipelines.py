@@ -185,7 +185,9 @@ class VoiceSpeaker:
         return self.profile.hint(self.my_language) if self.profile is not None else ""
 
     def _transcribe(self, audio: np.ndarray) -> Heard | None:
-        return self.transcriber.transcribe(audio, language=self.my_language, hint=self._hint(), retry_beam=3)
+        # Si duda, el modelo chico prueba con varias hipótesis; el preciso casi no mejora así y tardaría el doble.
+        retry = 0 if "large" in getattr(self.transcriber, "name", "") else 3
+        return self.transcriber.transcribe(audio, language=self.my_language, hint=self._hint(), retry_beam=retry)
 
     def _ended(self, quiet: float, peek: Future | None) -> bool:
         """¿Ya terminaste de hablar? Depende de cómo sonó lo último que dijiste."""

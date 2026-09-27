@@ -14,12 +14,19 @@ Se puede cortar en cualquier momento y seguir otro día.
 
 from __future__ import annotations
 
+import os
 import re
 import statistics
+import wave
 from dataclasses import dataclass, field
+from pathlib import Path
+
+import numpy as np
 
 from .checks import word_error_rate, words
 from .speech import Melody
+
+SAMPLE_RATE = 16000
 
 
 @dataclass(frozen=True)
@@ -150,6 +157,75 @@ def feedback(result: Result) -> str:
         return f"✓ Te entendí casi todo. Aprendí: {', '.join(result.missed)}." if result.missed else "✓ Casi perfecto."
     listed = ", ".join(result.missed[:8])
     return f"Entendí «{result.heard}». Ya aprendí cómo decís: {listed}." if listed else f"Entendí «{result.heard}»."
+
+
+# ---------------------------------------------------------------- tu voz grabada: para elegir con qué entenderte
+def clips_dir(language: str) -> Path:
+    """Tus grabaciones del entrenamiento (solo en tu PC): con ellas se elige el modelo que mejor te entiende."""
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".cache")
+    return Path(base) / "Bubble" / "tu_voz" / language.split("-")[0].lower()
+
+
+def save_clip(audio: np.ndarray, text: str, language: str, index: int) -> None:
+    folder = clips_dir(language)
+    folder.mkdir(parents=True, exist_ok=True)
+    samples = (np.clip(np.asarray(audio, dtype=np.float32), -1, 1) * 32767).astype(np.int16)
+    with wave.open(str(folder / f"{index:02d}.wav"), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(SAMPLE_RATE)
+        out.writeframes(samples.tobytes())
+    (folder / f"{index:02d}.txt").write_text(text, encoding="utf-8")
+
+
+def saved_clips(language: str) -> list[tuple[np.ndarray, str]]:
+    clips = []
+    for path in sorted(clips_dir(language).glob("*.wav")):
+        text_path = path.with_suffix(".txt")
+        if not text_path.exists():
+            continue
+        with wave.open(str(path), "rb") as source:
+            audio = np.frombuffer(source.readframes(source.getnframes()), np.int16).astype(np.float32) / 32767
+        clips.append((audio, text_path.read_text(encoding="utf-8")))
+    return clips
+
+
+@dataclass
+class ModelScore:
+    name: str
+    accuracy: float  # palabras bien entendidas (0 a 1)
+    seconds: float  # lo que tarda por frase (mediana)
+
+
+def compare_models(models: dict, clips: list[tuple[np.ndarray, str]], language: str, hint="") -> list[ModelScore]:
+    """Cada modelo con tus grabaciones: cuántas palabras entiende bien y cuánto tarda."""
+    import time
+
+    scores = []
+    for name, model in models.items():
+        if clips:
+            model.transcribe(clips[0][0], language=language, hint=hint)  # la primera vez es más lenta: no cuenta
+        errors, took = [], []
+        for audio, text in clips:
+            started = time.perf_counter()
+            heard = model.transcribe(audio, language=language, hint=hint)
+            took.append(time.perf_counter() - started)
+            errors.append(word_error_rate(text, heard.text if heard else ""))
+        scores.append(ModelScore(name, 1 - statistics.mean(errors), statistics.median(took)))
+    return scores
+
+
+def pick(scores: list[ModelScore], precise: str, max_extra_s: float = 1.5) -> str:
+    """El que conviene para tu voz: el preciso si te entiende claramente mejor (3 puntos o más) sin tardar demasiado;
+    si no, el rápido."""
+    by_name = {score.name: score for score in scores}
+    best = by_name.get(precise)
+    fast = next((score for score in scores if score.name != precise), None)
+    if best is None or fast is None:
+        return (best or fast).name if (best or fast) else ""
+    if best.accuracy - fast.accuracy >= 0.03 and best.seconds - fast.seconds <= max_extra_s:
+        return best.name
+    return fast.name
 
 
 def calibrate(results: list[Result], usual: tuple[float, float, float] | None) -> dict[str, float]:

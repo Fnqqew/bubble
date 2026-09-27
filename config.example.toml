@@ -85,6 +85,8 @@ subtitles = false
 speak = false
 speak_mode = "boton"
 push_to_talk = "mouse5"
+# Cómo se entiende tu voz: "auto" | "preciso" (modelo grande: entiende mucho mejor, ~0,5 s más) | "rapido".
+my_accuracy = "auto"
 # Cómo suena: "femenina" o "masculina", y la velocidad (1.0 = normal).
 gender = "femenina"
 speed = 1.0

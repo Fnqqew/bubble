@@ -160,6 +160,13 @@ escucha todo lo que suena en la PC.
 
 **Te escuchan en** (en la página **Voz**) es el idioma de tu voz: el mismo que el de la barra para escribir.
 
+**Entenderte: Rápido o Preciso** (en la página **Voz**). Con **Preciso**, tu voz la entiende un modelo mucho más
+grande (Whisper `large-v3-turbo`), que entiende bastante mejor el español hablado: ~0,9 s una frase de 3 s en vez de
+~0,4 s (medido), y la primera vez descarga ~1,6 GB (mientras, usa el rápido). **Rápido** es el de siempre. Las
+voces del juego se siguen entendiendo con el rápido. En automático queda Preciso si tu PC da (8 hilos y 8 GB de
+memoria o más); y si hiciste el entrenamiento, **el que mejor te entendió a vos**: el entrenamiento guarda tus
+grabaciones (solo en tu PC, en `%LOCALAPPDATA%\Bubble\tu_voz`) y compara los dos modelos con tu voz real.
+
 **Tus pausas.** Apenas hacés una pausa, Bubble lee lo que dijiste. Si suena terminado, lo traduce ya (sin esperar
 más silencio ni volver a leerlo); si quedó a medias ("fui a buscar la espada y…", "porque…"), espera a que sigas.
 Así no te corta a mitad de frase y, cuando terminás, sale enseguida.
@@ -278,6 +285,10 @@ La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus 
   Además aprende tu voz de siempre, **cuánto sube tu voz cuando preguntás** y **cómo suena tu grito**: cada uno
   pregunta y grita distinto, y desde ahí los umbrales son los tuyos. Cortás cuando quieras (**Terminar por ahora**)
   y la próxima vez seguís desde la misma frase. Está en español y en inglés (según tu idioma).
+
+  Y elige **con qué entenderte**: con tus frases grabadas compara el reconocimiento rápido y el preciso (cuántas de
+  tus palabras entiende cada uno y cuánto tarda) y deja el que mejor te entiende; el resultado se ve en **Voz →
+  Entenderte**. Se puede repetir con **Elegir el que mejor me entiende**.
 - **Lo que aprendió:** cuántas frases y palabras tuyas conoce, cuántas traducciones aprobaste, cuántas salen al
   instante, los tiempos promedio de tu voz y lo que sacó del entrenamiento. **Borrar lo aprendido** empieza de cero.
 

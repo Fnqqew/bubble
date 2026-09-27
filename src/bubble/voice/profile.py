@@ -163,6 +163,13 @@ class VoiceProfile:
                                              if key in ("question_rise", "shout_db", "exclaim_db")})
         self.save()
 
+    def set_models(self, scores, chosen: str) -> None:
+        """Cuánto te entendió cada modelo con tus grabaciones y cuál quedó."""
+        with self._lock:
+            self.data["models"] = {"puntajes": {s.name: {"accuracy": round(s.accuracy, 3), "seconds": round(s.seconds, 2)}
+                                                for s in scores}, "elegido": chosen}
+        self.save()
+
     # ------------------------------------------------------------ entrenamiento
     def training_step(self, language: str) -> int:
         """Por qué frase va el entrenamiento en ese idioma (para seguir otro día)."""

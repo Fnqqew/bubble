@@ -128,6 +128,8 @@ class TestsPanel:
         row.pack(fill="x")
         self.train_button = ttk.Button(row, text="Empezar", command=self._train, style="Accent.TButton")
         self.train_button.pack(side="left")
+        self.compare_button = ttk.Button(row, text="Elegir el que mejor me entiende", command=self._compare)
+        self.compare_button.pack(side="left", padx=(8, 0))
         self.train_info = ttk.Label(row, text="", foreground=colors["muted"])
         self.train_info.pack(side="left", padx=12)
 
@@ -223,7 +225,7 @@ class TestsPanel:
         language = self.app.config.user.language
 
         def work() -> None:
-            final = self.voice.models[0]
+            final = self.voice.my_asr()
             self._ui(lambda: (self.mic_rating.configure(text="Te escucho… leé la frase", foreground=""),
                               self.mic_details.configure(text="")))
             audio = record_phrase(self.voice._my_microphone(), max_s=12, quiet_s=1.0, wait_s=6)
@@ -252,7 +254,7 @@ class TestsPanel:
         profile = self.voice.profile
 
         def work() -> None:
-            final = self.voice.models[0]
+            final = self.voice.my_asr()
             translator = self.app.translator
             target = translator.outgoing_target()
             self._mine_target = target
@@ -386,7 +388,7 @@ class TestsPanel:
         language = self.app.config.user.language.split("-")[0]
 
         def work() -> None:
-            final = self.voice.models[0]
+            final = self.voice.my_asr()
             voices = self._voices()
             self._ui(lambda: (self.pc_rating.configure(text="Midiendo…", foreground=""),
                               self.pc_info.configure(text="")))
@@ -454,6 +456,9 @@ class TestsPanel:
             return
         step = self.voice.profile.training_step(language)
         self.train_button.state(["!disabled"])
+        from ..voice.training import saved_clips
+
+        self.compare_button.state(["!disabled"] if len(saved_clips(language)) >= 6 else ["disabled"])
         if step >= total:
             self.train_button.configure(text="Entrenar de nuevo")
             self.train_info.configure(text="✓ Ya lo hiciste completo.")
@@ -476,6 +481,22 @@ class TestsPanel:
             self.refresh_learned()
 
         self._training = TrainingWindow(self.app, closed)
+
+    def _compare(self) -> None:
+        """Compara el reconocimiento rápido y el preciso con tus grabaciones del entrenamiento y deja el mejor."""
+        self.compare_button.state(["disabled"])
+        self.train_info.configure(text="Comparando con tu voz (puede tardar un minuto)…")
+
+        def done(message: str) -> None:
+            def show() -> None:
+                self.compare_button.state(["!disabled"])
+                self.train_info.configure(text="")
+                self.app._set_status(message or "Hacen falta al menos 6 frases grabadas en el entrenamiento.")
+                self.voice.refresh_accuracy()
+
+            self._ui(show)
+
+        self.voice.compare_my_voice(done)
 
     def _forget(self) -> None:
         self.voice.profile.forget()

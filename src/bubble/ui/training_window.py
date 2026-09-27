@@ -164,8 +164,12 @@ class TrainingWindow:
                                       quiet_s=1.3 if free else 0.9, wait_s=8)
                 heard = None
                 if len(audio):
-                    heard = self.voice.models[0].transcribe(audio, language=self.language, hint=self.profile.hint,
-                                                            retry_beam=3)
+                    heard = self.voice.my_asr().transcribe(audio, language=self.language, hint=self.profile.hint,
+                                                           retry_beam=3)
+                    if not free:  # tu voz real: para elegir después el modelo que mejor te entiende
+                        from ..voice.training import save_clip
+
+                        save_clip(audio, item.text, self.language, index)
                 result = check(item, heard.text if heard else "", melody(audio) if len(audio) else None)
                 self.app.events.put(("call", lambda: self._heard(index, result)))
             except Exception as exc:  # noqa: BLE001 - se muestra
@@ -243,6 +247,15 @@ class TrainingWindow:
             learned.append("cómo gritás")
         message = ("Listo, terminaste el entrenamiento." if completed else
                    f"Guardé lo que hiciste: la próxima seguís desde la frase {self.index + 1}.")
+        if len(self.results) >= 6:
+            # Con tu voz grabada se elige el reconocimiento que mejor te entiende (en segundo plano).
+            message += " Ahora comparo cuál reconocimiento te entiende mejor…"
+
+            def compared(text: str) -> None:
+                if text:
+                    self.app.events.put(("call", lambda: (self.app._set_status(text), self.voice.refresh_accuracy())))
+
+            self.voice.compare_my_voice(compared)
         if learned:
             message += " Aprendí " + ", ".join(learned[:-1]) + (" y " if len(learned) > 1 else "") + learned[-1] + "."
         self.win.destroy()

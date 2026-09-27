@@ -131,3 +131,32 @@ def test_training_makes_the_question_and_shout_thresholds_yours(tmp_path):
     assert profile.intonation(question) == ""  # con el umbral de todos (2 semitonos) no parecía pregunta
     profile.calibrate(found)
     assert profile.intonation(question) == "question"  # con el tuyo, sí
+
+
+def test_your_recordings_pick_the_model_that_understands_you_best(tmp_path, monkeypatch):
+    from bubble.voice.asr import Heard
+    from bubble.voice.training import ModelScore, compare_models, pick, save_clip, saved_clips
+
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    save_clip(np.zeros(RATE, np.float32) + 0.1, "che vamos a la torre", "es-AR", 1)
+    save_clip(np.zeros(RATE, np.float32), "dale esperame", "es", 2)
+    clips = saved_clips("es")
+    assert [text for _audio, text in clips] == ["che vamos a la torre", "dale esperame"]
+    assert abs(float(clips[0][0].max()) - 0.1) < 1e-3
+
+    class Fake:
+        def __init__(self, text):
+            self.text = text
+
+        def transcribe(self, audio, language=None, hint=""):
+            return Heard(self.text, "es", 1.0, 0.0, -0.1, 1.0, 0.0)
+
+    scores = compare_models({"small": Fake("che vamos a la"), "large-v3-turbo": Fake("che vamos a la torre")},
+                            clips[:1], "es")
+    assert pick(scores, "large-v3-turbo") == "large-v3-turbo"
+    # si el grande no entiende claramente mejor, o tarda demasiado, queda el rápido
+    assert pick([ModelScore("small", 0.90, 0.4), ModelScore("large-v3-turbo", 0.91, 0.9)], "large-v3-turbo") == "small"
+    assert pick([ModelScore("small", 0.70, 0.4), ModelScore("large-v3-turbo", 0.95, 2.5)], "large-v3-turbo") == "small"
+    profile = VoiceProfile(tmp_path / "perfil.json")
+    profile.set_models(scores, "large-v3-turbo")
+    assert VoiceProfile(tmp_path / "perfil.json").data["models"]["elegido"] == "large-v3-turbo"
