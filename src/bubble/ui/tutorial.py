@@ -91,9 +91,9 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
             "reiniciá la PC.\n"
             "2. Abrí Bubble: si el instalador te cambió el micrófono o los parlantes de Windows, los vuelvo a poner "
             "como estaban solo.\n"
-            "3. Prendé «Traducir mi voz». Mientras está prendido, el micrófono virtual es tu micrófono de Windows "
-            "(Roblox lo usa); al apagarlo o cerrar Bubble vuelve el tuyo. Si Roblox ya estaba abierto, reabrilo "
-            "una vez.\n\n"
+            "3. Listo: mientras Bubble está abierto, el micrófono virtual es tu micrófono de Windows (Roblox lo usa) y "
+            "Bubble le pasa tu voz; al cerrar Bubble vuelve el tuyo. En Roblox tenés que estar desmuteado: si ya lo "
+            "estabas, muteate y desmuteate una vez.\n\n"
             "¿Algo quedó raro? «Arreglar Windows» deja todo como estaba.",
             "Arreglar Windows" if fix_windows else "",
             fix_windows,

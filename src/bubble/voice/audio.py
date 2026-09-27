@@ -13,7 +13,6 @@ from dataclasses import dataclass
 import numpy as np
 
 SAMPLE_RATE = 16000
-CABLE_NAMES = ("cable input", "vb-audio virtual cable", "voicemeeter input")
 
 
 def com_ready() -> None:
@@ -84,11 +83,12 @@ def microphone():
 
 
 def virtual_cable():
-    """La entrada del micrófono virtual, si está instalado (VB-Audio Virtual Cable u otro parecido)."""
-    for speaker in _sc().all_speakers():
-        if any(name in speaker.name.lower() for name in CABLE_NAMES):
-            return speaker
-    return None
+    """La entrada del micrófono virtual, si está instalado: la misma que usa el puente con tu micrófono (bridge.py).
+    VB-Cable también instala «CABLE In 16ch»: reproducir ahí fallaba (0x8889000A) y la voz traducida nunca llegaba a
+    Roblox."""
+    from .bridge import cable_input
+
+    return cable_input()
 
 
 def default_speaker():

@@ -91,8 +91,6 @@ hear_myself = true
 # pasa al virtual junto con la voz traducida; en Roblox elegís «CABLE Output».
 mic = ""
 pass_my_voice = true
-# Si estás muteado en Roblox, Bubble te desmutea solo mientras suena tu voz traducida y te vuelve a mutear.
-auto_unmute = true
 # Reconocimiento de voz (texto final): "auto" (según tu procesador), "tiny", "base" o "small".
 model = "auto"
 

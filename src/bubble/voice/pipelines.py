@@ -7,8 +7,8 @@ Tres formas de usarla:
 - Escribiendo (la barra, Ctrl+Enter): el texto traducido se dice con la voz sintética.
 
 Las tres terminan en VoiceOut: la voz sintética sale por el micrófono virtual (lo que Roblox escucha como tu
-micrófono) y, si querés, también por tus auriculares, para que sepas qué dijo. Si estás muteado en Roblox, te desmutea
-mientras suena y te vuelve a mutear (ver roblox_mic.py).
+micrófono) y, si querés, también por tus auriculares, para que sepas qué dijo. En Roblox tenés que tener el micrófono
+activado: si no, no te escucha nadie (la página Voz te avisa).
 """
 
 from __future__ import annotations
@@ -38,10 +38,8 @@ class VoiceOut:
     """Dice un texto con voz sintética: al micrófono virtual y (si querés) a tus auriculares."""
 
     def __init__(self, voices: Voices, hear_myself: bool = True, output: audio_io.Output | None = None,
-                 bridge=None, mic_switch=None) -> None:
+                 bridge=None) -> None:
         self.voices = voices
-        # Tu micrófono en Roblox (roblox_mic.RobloxMic): si estás muteado, se desmutea solo mientras suena la frase.
-        self.mic_switch = mic_switch
         self.output = output or audio_io.voice_output()
         self.bridge = bridge  # tu micrófono pasando al virtual (ver bridge.py): baja mientras suena la traducida
         # Con el micrófono virtual, tu voz traducida va a Roblox y vos no la escucharías: también suena, más bajo,
@@ -62,37 +60,16 @@ class VoiceOut:
         if speech is None:
             return False
         with self._lock:
-            unmuted = self._unmute()
-            try:
-                seconds = len(speech.audio) / speech.sample_rate
-                for listener in self.listeners:
-                    listener(seconds)
-                if self.bridge is not None and self.bridge.running:
-                    self.bridge.duck(seconds + 0.25)
-                if self.hear_myself and self.output.is_cable:
-                    threading.Thread(target=self._monitor, args=(speech,), name="bubble-tu-voz-escucha",
-                                     daemon=True).start()
-                audio_io.play(self.output, speech.audio, speech.sample_rate)
-            finally:
-                if unmuted:
-                    try:
-                        self.mic_switch.mute_again()
-                    except Exception:  # noqa: BLE001
-                        log.debug("No se pudo volver a mutear en Roblox", exc_info=True)
+            seconds = len(speech.audio) / speech.sample_rate
+            for listener in self.listeners:
+                listener(seconds)
+            if self.bridge is not None and self.bridge.running:
+                self.bridge.duck(seconds + 0.25)
+            if self.hear_myself and self.output.is_cable:
+                threading.Thread(target=self._monitor, args=(speech,), name="bubble-tu-voz-escucha",
+                                 daemon=True).start()
+            audio_io.play(self.output, speech.audio, speech.sample_rate)
         return True
-
-    def _unmute(self) -> bool:
-        """Solo con el micrófono virtual: sin él, Roblox escucharía tu micrófono real, no la voz traducida."""
-        if self.mic_switch is None:
-            return False
-        if not self.output.is_cable:
-            log.info("Sin micrófono virtual no se toca el micrófono de Roblox (escucharían tu micrófono real)")
-            return False
-        try:
-            return bool(self.mic_switch.unmute())
-        except Exception:  # noqa: BLE001 - si no se puede, suena igual (quizás no estabas muteado)
-            log.debug("No se pudo desmutear en Roblox", exc_info=True)
-            return False
 
     def _monitor(self, speech) -> None:
         try:
@@ -105,7 +82,7 @@ class VoiceSpeaker:
     """Con un botón, de dos formas:
     - lo tocás (y lo soltás enseguida): te escucha y termina solo cuando dejás de hablar (o cuando lo volvés a tocar);
     - lo mantenés apretado mientras hablás: termina al soltarlo.
-    Después se traduce y se dice (y si estabas muteado en Roblox, te desmutea solo mientras suena)."""
+    Después se traduce y se dice."""
 
     MAX_SECONDS = 20.0
     TAP_S = 0.35  # soltarlo antes de esto es "tocarlo"

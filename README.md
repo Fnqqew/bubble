@@ -54,7 +54,7 @@ y qué dice, en tu idioma, casi al instante. Escucha solo a Roblox: ni Discord n
 
 **Habla por vos.** Tocás un botón, hablás en tu idioma y, cuando terminás, los demás te escuchan en el suyo, con una
 voz femenina o masculina (también en modo directo o escribiendo, con Ctrl+Enter). Como Soundpad, sale por tu
-micrófono en Roblox; si estás muteado, te desmutea solo mientras suena. [Cómo activarla](docs/GUIA.md#voz).
+micrófono en Roblox (con el micrófono de Roblox activado). [Cómo activarla](docs/GUIA.md#voz).
 
 <br>
 

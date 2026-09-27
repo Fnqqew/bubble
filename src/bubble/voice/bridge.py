@@ -52,10 +52,12 @@ def microphones() -> list[str]:
 
 def cable_input():
     """La entrada del micrófono virtual (donde se reproduce lo que Roblox va a escuchar), o None."""
-    for speaker in _sc().all_speakers():
-        name = speaker.name.lower()
-        if "cable input" in name or ("voicemeeter" in name and "input" in name):
-            return speaker
+    speakers = _sc().all_speakers()
+    for wanted in ("cable input", "voicemeeter input", "voicemeeter vaio input"):
+        for speaker in speakers:
+            name = speaker.name.lower()
+            if wanted in name and "16ch" not in name:
+                return speaker
     return None
 
 

@@ -164,12 +164,13 @@ un micrófono virtual. Bubble usa **VB-Audio Virtual Cable**, gratis (es el "dri
    tocá **Install Driver**. Si te lo pide, reiniciá la PC.
 2. Abrí Bubble. El instalador suele dejar el cable como micrófono o parlante de Windows (dejás de escuchar, o
    Discord deja de escucharte): Bubble lo vuelve a dejar como estaba, solo.
-3. Prendé **Traducir mi voz**. No hay que configurar nada más.
+3. Listo, no hay que configurar nada más.
 
-Mientras **Traducir mi voz** está prendido, el micrófono de Windows es el virtual (Roblox usa el de Windows) y Bubble
-le pasa tu micrófono real en vivo: te escuchan igual que siempre y, cuando suena tu voz traducida, tu voz baja. Al
-apagarlo o cerrar Bubble, Windows vuelve a tu micrófono (y si Bubble se cerró de golpe, lo arregla al abrirse). Si
-Roblox ya estaba abierto cuando lo prendiste, reabrilo una vez. Si algo queda raro, **Voz → Arreglar Windows**.
+Mientras Bubble está abierto, el micrófono de Windows es el virtual y Bubble le pasa tu micrófono real en vivo: te
+escuchan igual que siempre y, cuando suena tu voz traducida (con el botón, en modo directo o con Ctrl+Enter), tu voz
+baja. Roblox abre el micrófono de Windows cada vez que te desmuteás: si ya estabas desmuteado cuando abriste Bubble,
+muteate y desmuteate una vez. Al cerrar Bubble, Windows vuelve a tu micrófono (y si Bubble se cerró de golpe, lo
+arregla al abrirse). Si algo queda raro, **Voz → Arreglar Windows**.
 
 - Con **Pasar también mi voz real** apagado, solo escuchan la voz traducida.
 - Discord usa el micrófono de Windows: mientras está prendido, también escucha la voz traducida. Si no querés, en
@@ -177,10 +178,8 @@ Roblox ya estaba abierto cuando lo prendiste, reabrilo una vez. Si algo queda ra
 - ¿Por qué no como Soundpad? Soundpad se mete dentro de cada programa para hablar por su micrófono. Con Roblox eso
   choca con su anti-trampas y puede traer problemas; el micrófono virtual no toca Roblox.
 
-**Muteado en Roblox.** Si tenés el micrófono muteado en Roblox (la raya roja arriba a la izquierda), Bubble te
-desmutea solo mientras suena tu voz traducida y te vuelve a mutear: un clic en ese botón, y el mouse vuelve a donde
-estaba. Pasa lo mismo con Ctrl+Enter. Se apaga en **Voz → Desmutearme en Roblox solo mientras suena**. Si Roblox
-tiene el mouse trabado en el juego (primera persona), el clic no llega: desmuteate a mano.
+**Tu micrófono en Roblox tiene que estar activado** (el de arriba a la izquierda, sin la raya roja): si estás
+muteado, no te escucha nadie. Bubble no lo prende ni lo apaga; si hablás estando muteado, la página **Voz** te avisa.
 
 Sin el micrófono virtual, la página **Voz** te avisa: tu voz traducida suena solo en tus auriculares.
 
@@ -347,7 +346,7 @@ píldoras fuera de lugar, mensajes sin tapar y basura. Tarda un minuto por escen
 ## Si algo no anda
 
 Bubble anota lo que va haciendo en `%APPDATA%\Bubble\bubble.log` (cuándo se sacó una captura, si escucha solo a
-Roblox, si te desmuteó…) y los errores en `errores.log`. No anota lo que dicen en el chat ni lo que tecleás. Si algo
+Roblox, qué pasó con tu voz traducida…) y los errores en `errores.log`. No anota lo que dicen en el chat ni lo que tecleás. Si algo
 falla, esos dos archivos dicen por qué.
 
 

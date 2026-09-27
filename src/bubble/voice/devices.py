@@ -3,9 +3,9 @@
 - Al instalar el micrófono virtual (VB-Audio Virtual Cable), Windows suele dejarlo como micrófono o parlante
   predeterminado: como parlante no escuchás nada, y como micrófono nadie te escucha si Bubble está cerrado. Bubble lo
   corrige solo.
-- Modo Soundpad: mientras "Traducir mi voz" está prendido, el micrófono de Windows es el virtual. Roblox usa el
-  micrófono de Windows, y Bubble le pasa al virtual tu voz real en vivo más la traducida: te escuchan igual que
-  siempre, y la voz traducida cuando suena. Al apagarlo o cerrar Bubble, vuelve tu micrófono.
+- Modo Soundpad: mientras Bubble está conectado, el micrófono de Windows es el virtual. Roblox abre el micrófono de
+  Windows cada vez que te desmuteás (se ve en su registro), y Bubble le pasa al virtual tu voz real en vivo más la
+  traducida: te escuchan igual que siempre, y la voz traducida cuando suena. Al cerrar Bubble, vuelve tu micrófono.
 
 Windows no tiene una función pública para elegir el dispositivo predeterminado: se usa la misma interfaz COM que usan
 el panel de Sonido y programas como EarTrumpet o SoundSwitch (IPolicyConfig), a mano con ctypes.

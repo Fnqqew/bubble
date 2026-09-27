@@ -41,6 +41,23 @@ def test_red_text_in_the_bar_is_not_the_mic():
     assert find_mic(window) is None
 
 
+def test_warns_if_muted_but_never_clicks(monkeypatch):
+    from bubble import roblox_mic, win32
+    from bubble.geometry import Rect
+
+    bar = window_with("roblox_bar_mic_off.png")
+    monkeypatch.setattr(win32, "find_roblox_window", lambda: 1)
+    monkeypatch.setattr(win32, "roblox_is_foreground", lambda: True)
+    monkeypatch.setattr(win32, "client_rect", lambda _hwnd: Rect(0, 0, 1920, 1040))
+    grab = lambda rect: bar.crop((rect.left, rect.top, rect.right, rect.bottom))  # noqa: E731
+    assert roblox_mic.roblox_muted(grab) is True
+    bar = window_with("roblox_bar_mic_on.png")
+    assert roblox_mic.roblox_muted(grab) is False
+    assert not hasattr(roblox_mic, "_click") and not hasattr(roblox_mic, "RobloxMic")  # nada de clics
+    monkeypatch.setattr(win32, "roblox_is_foreground", lambda: False)
+    assert roblox_mic.roblox_muted(grab) is None  # sin Roblox al frente no se mira
+
+
 class _Broken:
     def recorder(self, **_options):
         return self
@@ -127,3 +144,18 @@ def test_process_loopback_reads_in_real_time():
         pytest.skip(f"Windows sin captura por proceso: {exc}")
     assert len(audio) == 4800 and not np.abs(audio).any()
     assert 0.2 <= took <= 0.6
+
+
+def test_translated_voice_goes_to_cable_input_not_the_16ch_one(monkeypatch):
+    """VB-Cable instala «CABLE In 16ch» (primero en la lista) y «CABLE Input»: reproducir en el de 16 canales fallaba
+    y la voz traducida nunca le llegaba a Roblox."""
+    from types import SimpleNamespace
+
+    from bubble.voice import bridge
+
+    speakers = [SimpleNamespace(name="CABLE In 16ch (VB-Audio Virtual Cable)"),
+                SimpleNamespace(name="Speakers (Realtek(R) Audio)"),
+                SimpleNamespace(name="CABLE Input (VB-Audio Virtual Cable)")]
+    monkeypatch.setattr(bridge, "_sc", lambda: SimpleNamespace(all_speakers=lambda: speakers))
+    assert bridge.cable_input().name == "CABLE Input (VB-Audio Virtual Cable)"
+    assert audio_io.virtual_cable().name == "CABLE Input (VB-Audio Virtual Cable)"

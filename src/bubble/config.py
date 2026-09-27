@@ -100,8 +100,6 @@ class VoiceConfig:
     # Tu micrófono real ("" = el predeterminado de Windows): pasa al micrófono virtual junto con la voz traducida.
     mic: str = ""
     pass_my_voice: bool = True
-    # Si estás muteado en Roblox, desmutearte solo mientras suena tu voz traducida (y volver a mutearte).
-    auto_unmute: bool = True
 
 
 @dataclass
