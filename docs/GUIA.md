@@ -7,6 +7,7 @@ hecho por dentro.
 - [Primer uso](#primer-uso)
 - [Leer el chat y las burbujas](#leer-el-chat-y-las-burbujas)
 - [Escribir en otro idioma](#escribir-en-otro-idioma)
+- [Voz (beta 2.0)](#voz-beta-20)
 - [Jerga, dialectos y tono](#jerga-dialectos-y-tono)
 - [Configuración](#configuración)
 - [Cómo está hecho](#cómo-está-hecho)
@@ -81,6 +82,53 @@ En el juego apretá el atajo (**°** por defecto) y se abre una barra para escri
 
 El idioma de destino se elige solo: el que más se usa en el chat. Si el servidor mezcla idiomas, la opción
 **Todos los del chat** manda el mensaje en varios a la vez.
+
+## Voz (beta 2.0)
+
+Todo el audio se procesa en tu PC: Whisper entiende la voz y Piper habla, los dos locales. Claude solo traduce el
+texto.
+
+```powershell
+.venv\Scripts\python.exe -m pip install -e ".[voz]"
+```
+
+La primera vez se descargan el reconocimiento de voz (~150 MB) y una voz por idioma (~60 MB). Quedan en
+`%LOCALAPPDATA%\Bubble\models`.
+
+**Subtítulos de lo que te dicen.** Activá la casilla en la sección **Voz · beta**.
+
+1. Bubble escucha lo que suena en la PC y detecta cuándo alguien habla. Separa las frases de la música del juego:
+   la voz sube y baja con las sílabas y la música suena pareja.
+2. Transcribe la frase y reconoce el idioma solo.
+3. Si no está en tu idioma, la traduce y la muestra abajo al centro del juego: la traducción grande y el original
+   chico. Tarda ~3,5 s desde que la persona termina de hablar.
+
+En esta beta se subtitula todo lo que suena en la PC. Si tenés Discord o un video abierto, también.
+
+**Tu voz, traducida.**
+
+1. Activá **Traducir mi voz**.
+2. Mantené apretado el botón (por defecto el **botón lateral del mouse, adelante**), hablá y soltalo.
+3. Bubble entiende lo que dijiste, lo traduce al idioma del chat y lo dice con una voz natural en ese idioma, ~3 s
+   después de soltar.
+
+Para que **los demás** lo escuchen, Roblox tiene que recibir esa voz como si fuera tu micrófono:
+
+1. Instalá **VB-Audio Virtual Cable** (gratis): <https://vb-audio.com/Cable/>. Se instala como administrador y
+   después hay que reiniciar Bubble.
+2. En Roblox: **Configuración** → **Micrófono** → elegí **CABLE Output**.
+
+Así, lo que sale por tu micrófono en Roblox es solo tu voz traducida. Sin el cable virtual, la voz traducida suena
+por tus parlantes: sirve para probar.
+
+El chat de voz de Roblox pide verificación de edad. Usar voz sintética puede ir contra sus reglas en algunos
+casos: usala con cuidado, para comunicarte.
+
+| Modelo de voz | 5 s de voz en un Ryzen 5 5650U | Uso |
+|---|---|---|
+| `tiny` | 0,9 s | PCs lentas |
+| `base` | 1,9 s | el normal (`auto` en procesadores de hasta 15 hilos) |
+| `small` | 5,4 s | más preciso (`auto` desde 16 hilos) |
 
 ## Jerga, dialectos y tono
 

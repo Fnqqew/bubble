@@ -77,11 +77,25 @@ class RobloxConfig:
 
 
 @dataclass
+class VoiceConfig:
+    """Voz (beta 2.0). Todo el audio se procesa en tu PC; Claude solo traduce el texto."""
+
+    # Subtítulos de lo que te dicen por el chat de voz (se escucha el audio de la PC).
+    subtitles: bool = False
+    # Tu voz traducida: mantené apretada la tecla, hablá y soltala. Sale por el micrófono virtual (VB-Audio Cable).
+    speak: bool = False
+    push_to_talk: str = "mouse5"
+    # Reconocimiento de voz: "auto" elige según tu procesador ("base" o "small"); también "tiny", "base", "small".
+    model: str = "auto"
+
+
+@dataclass
 class Config:
     user: UserConfig = field(default_factory=UserConfig)
     translation: TranslationConfig = field(default_factory=TranslationConfig)
     claude: ClaudeConfig = field(default_factory=ClaudeConfig)
     roblox: RobloxConfig = field(default_factory=RobloxConfig)
+    voice: VoiceConfig = field(default_factory=VoiceConfig)
 
 
 def _merge(section, values: dict) -> None:
@@ -91,7 +105,7 @@ def _merge(section, values: dict) -> None:
             setattr(section, key, value)
 
 
-SECTIONS = ("user", "translation", "claude", "roblox")
+SECTIONS = ("user", "translation", "claude", "roblox", "voice")
 
 
 def save_setting(section: str, key: str, value) -> None:

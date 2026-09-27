@@ -90,10 +90,11 @@ Medido con el simulador de pruebas, con chats lentos, rápidos y en ráfagas:
 
 <br>
 
-## Lo que viene
+## Nuevo: voz (beta 2.0)
 
-**Bubble 2.0 · beta de voz.** Subtítulos de lo que te dicen por el chat de voz, y tu voz traducida al idioma de los
-demás. Todo el audio se procesa en tu PC; Claude solo traduce el texto.
+**Subtítulos de lo que te dicen por voz**, y **tu voz traducida** al idioma de los demás: mantenés apretado un botón,
+hablás, y los demás te escuchan en su idioma. Todo el audio se procesa en tu PC; Claude solo traduce el texto.
+[Cómo activarla](docs/GUIA.md#voz-beta-20).
 
 <br>
 

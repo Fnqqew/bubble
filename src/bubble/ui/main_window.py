@@ -33,6 +33,7 @@ from ..state import load_state, update_state
 from .inline import BubbleView, Entry, InlineChatView
 from .overlays import CalibrationOverlay, ComposeBar, HotkeyCaptureDialog, TranslationOverlay
 from .tutorial import TutorialWindow, build_steps
+from .voice_panel import VoicePanel
 
 ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "bubble.ico"
 STATUS_TEXT = {
@@ -116,8 +117,8 @@ class BubbleWindow:
         win32.set_app_id("Bubble.Translator")
         self.root = tk.Tk()
         self.root.title("Bubble")
-        self.root.geometry("820x700")
-        self.root.minsize(620, 520)
+        self.root.geometry("1000x800")
+        self.root.minsize(760, 600)
         if ICON_PATH.exists():
             self.root.iconbitmap(default=str(ICON_PATH))
         self._build()
@@ -198,11 +199,14 @@ class BubbleWindow:
         self.hotkey_label = ttk.Label(hotkey_row, text="", font=("Segoe UI", 10, "bold"))
         self.hotkey_label.pack(side="left", padx=(6, 10))
         ttk.Button(hotkey_row, text="Cambiar…", command=self._change_hotkey).pack(side="left")
-        ttk.Label(hotkey_row, text="(se abre una barra: escribís y Enter lo traduce y lo manda).",
+        ttk.Label(hotkey_row, text="(escribís y Enter lo manda traducido).",
                   foreground="#666").pack(side="left", padx=6)
         self._refresh_hotkey_label()
-        self.perf_label = ttk.Label(rbx, text="Detectando tu PC...", foreground="#666")
+        self.perf_label = ttk.Label(rbx, text="Detectando tu PC...", foreground="#666", wraplength=940,
+                                    justify="left")
         self.perf_label.grid(row=4, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 6))
+
+        self.voice_panel = VoicePanel(self, self.root)
 
         sim = ttk.LabelFrame(self.root, text="Prueba sin Roblox")
         sim.pack(fill="x", **pad)
@@ -337,6 +341,7 @@ class BubbleWindow:
         self._set_status("Cerrando...")
         if self.hotkey:
             self.hotkey.stop()
+        self.voice_panel.stop()
         try:
             self.runner.submit(self._shutdown()).result(timeout=5)
         except Exception:  # noqa: BLE001 - se cierra igual
@@ -778,6 +783,19 @@ class BubbleWindow:
         self.ready = True
         ocr_lang = self.ocr.language if self.ocr else "?"
         self._set_status(f"Listo. OCR de Windows en {ocr_lang}.")
+        self.voice_panel.start()
+
+    # --- voz (beta)
+    def _ev_voice_status(self, text: str) -> None:
+        self.voice_panel.status.configure(text=text)
+
+    def _ev_voice_ready(self, then) -> None:
+        then()
+
+    def _ev_voice_subtitle(self, payload) -> None:
+        original, translation, language = payload
+        self.voice_panel.show(original, translation, language)
+        self._append(f"🔊 {original}\n   → {translation}\n", "out" if original == "(vos)" else "in")
 
     def _ev_hardware(self, hardware) -> None:
         self.hardware = hardware

@@ -98,6 +98,15 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
             "¿Preferís otra tecla o un botón del mouse? Tocá «Cambiar…» al lado del atajo.",
         ),
         Step(
+            "Nuevo: la voz (beta)",
+            "En la sección «Voz · beta»:\n\n"
+            "• Subtítulos: lo que te dicen por el chat de voz aparece traducido abajo, en el centro del juego.\n"
+            "• Tu voz: mantené apretado el botón lateral del mouse, hablá y soltalo. Los demás te escuchan en su "
+            "idioma.\n\n"
+            "Para que te escuchen hace falta el micrófono virtual VB-Audio Virtual Cable (gratis) y, en Roblox, "
+            "elegir «CABLE Output» como micrófono. Todo el audio se procesa en tu PC.",
+        ),
+        Step(
             "Últimos consejos",
             "• Poné tu nombre de Roblox en la configuración ([roblox] username) para que tus propios "
             "mensajes no se traduzcan.\n"
