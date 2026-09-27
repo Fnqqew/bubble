@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import faulthandler
 import logging
+import sys
 from pathlib import Path
 
 from .config import Config, load_config
@@ -63,12 +65,30 @@ async def _console(config: Config) -> None:
         await translator.close()
 
 
+def _error_log() -> None:
+    """Con la ventana (pythonw) no hay consola y los errores se perdían: quedan en %APPDATA%\\Bubble\\errores.log.
+    Incluye los cierres de golpe (una librería nativa que se cae), que Python no puede atrapar."""
+    from .state import state_path
+
+    path = state_path().with_name("errores.log")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stream = path.open("a", encoding="utf-8")
+    except OSError:
+        return
+    faulthandler.enable(stream)
+    if sys.stderr is None:
+        sys.stderr = stream
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="bubble", description="Traductor en tiempo real para Roblox")
     parser.add_argument("--console", action="store_true", help="modo consola en vez de ventana")
     parser.add_argument("--config", type=Path, help="ruta a config.toml")
     parser.add_argument("-v", "--verbose", action="store_true", help="logs detallados")
     args = parser.parse_args()
+    if not args.console:
+        _error_log()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
 
     config = load_config(args.config)

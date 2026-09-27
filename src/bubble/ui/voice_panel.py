@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from .. import win32
 from ..config import save_setting
+from ..state import load_state, update_state
 from .subtitles import SubtitleView
 from .theme import MUTED, strong_font
 
@@ -56,13 +57,22 @@ class VoicePanel:
 
     # --- arranque (cuando la app ya tiene Claude listo)
     def start(self) -> None:
-        if self.config.subtitles or self.config.speak:
-            self._prepare(self._apply)
+        if not (self.config.subtitles or self.config.speak):
+            return
+        if load_state().get("voice_loading"):
+            # La última vez Bubble se cerró mientras cargaba la voz: esta vez no se carga sola, así la ventana abre.
+            update_state(voice_loading=False)
+            self._set_status("La última vez Bubble se cerró mientras preparaba la voz, así que quedó en pausa. "
+                             "Para intentar de nuevo, desmarcá y volvé a marcar la casilla.")
+            return
+        self._prepare(self._apply)
 
     def stop(self) -> None:
         for part in (self.listener, self.speaker):
             if part:
                 part.stop()
+        if self._preparing:
+            update_state(voice_loading=False)  # cerraste Bubble a mitad de la descarga: no fue un error
 
     def _set_status(self, text: str) -> None:
         self.app.events.put(("voice_status", text))
@@ -86,12 +96,15 @@ class VoicePanel:
                     self.voices = Voices()
                 self._set_status(f"Preparando el reconocimiento de voz ({self.transcriber.model_name}). La primera vez "
                                  "se descarga (~150 MB) y queda en tu PC…")
+                update_state(voice_loading=True)  # si el proceso se cae acá, el próximo arranque no la carga sola
                 self.transcriber.load()
+                update_state(voice_loading=False)
                 self._set_status("")
                 self.app.events.put(("voice_ready", then))
             except ImportError:
                 self._set_status('Falta instalar la parte de voz: .venv\\Scripts\\python.exe -m pip install -e ".[voz]"')
             except Exception as exc:  # noqa: BLE001
+                update_state(voice_loading=False)
                 self._set_status(f"No se pudo preparar la voz: {exc}")
             finally:
                 self._preparing = False

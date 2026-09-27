@@ -135,8 +135,25 @@ def merge_rows(rows: list[OcrRow]) -> list[OcrRow]:
     return result
 
 
+def _use_system_cpp_runtime() -> None:
+    """Carga la librería de C++ de Windows (msvcp140.dll) antes que winrt.
+
+    El paquete winrt trae su propia copia, vieja (14.29). Si se carga primero, todo el proceso usa esa, y otras
+    librerías compiladas con una versión más nueva se caen sin aviso: el reconocimiento de voz (Whisper) cerraba
+    Bubble al abrir. La del sistema es más nueva y sirve para las dos.
+    """
+    import ctypes
+    import os
+
+    try:
+        ctypes.WinDLL(os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "msvcp140.dll"))
+    except OSError:
+        pass  # sin la del sistema, queda la de winrt (el OCR anda igual)
+
+
 class WindowsOcr:
     def __init__(self, language_tag: str = "") -> None:
+        _use_system_cpp_runtime()
         from winrt.windows.globalization import Language
         from winrt.windows.media.ocr import OcrEngine
 
