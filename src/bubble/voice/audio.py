@@ -72,20 +72,11 @@ class _WithFallback:
 
 
 def game_audio():
-    """Lo que suena en Roblox, y nada más: ni YouTube, ni Discord, ni música (Windows 11). Si no se puede (Windows
-    más viejo, Roblox cerrado), todo lo que suena en la PC, como antes."""
-    from .. import win32
+    """Lo que suena en Roblox, y nada más: ni Discord, ni YouTube, ni música (Windows 11). Si Roblox todavía no abrió,
+    silencio hasta que abra. Solo en un Windows que no permite escuchar un programa suelto se escucha toda la PC."""
+    from .process_audio import RobloxAudio
 
-    import logging
-
-    pid = win32.roblox_process_id()
-    if not pid:
-        logging.getLogger(__name__).info("Roblox no está abierto: se escucha todo lo que suena en la PC")
-        return speaker_loopback()
-    from .process_audio import ProcessLoopback
-
-    logging.getLogger(__name__).info("Se escucha solo el sonido de Roblox (proceso %s)", pid)
-    return _WithFallback(ProcessLoopback(pid), speaker_loopback)
+    return _WithFallback(RobloxAudio(), speaker_loopback)
 
 
 def microphone():

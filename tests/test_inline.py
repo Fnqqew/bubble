@@ -52,6 +52,16 @@ def test_translated_bubble_grows_instead_of_cutting_the_text():
     assert short[2:] == (116, 36)  # si entra, queda del tamaño de la original
 
 
+def test_long_bubble_translation_is_never_cut():
+    """Una burbuja de 4 renglones (la de Blancanieves): la traducción al español salía cortada a media frase."""
+    text = ("Había una vez una joven y hermosa princesa llamada Blancanieves. Vivía en un reino muy lejano "
+            "con su padre y su madrastra, que era muy celosa.")
+    for rows, width in ((4, 300), (3, 260), (2, 200), (1, 120)):
+        size, lines, out_w, out_h = fit_bubble_text(text, width, int(rows * 18 + 12), rows)
+        assert " ".join(lines).split() == text.split(), rows  # todas las palabras, en orden
+        assert out_w >= width and size >= 10
+
+
 def test_layout_fits_wraps_and_truncates():
     one = [Slot(0, 0, 400, 20)]
     size, lines = layout_text("hola che", one, 16)

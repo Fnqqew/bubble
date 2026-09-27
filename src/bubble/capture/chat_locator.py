@@ -59,10 +59,11 @@ def find_chat_region(rows: list[OcrRow], width: int, height: int) -> ChatGuess |
         return None
     line = sorted(row.height for row in best)[len(best) // 2]
     pitch = max(line * 1.2, (best[-1].top - best[0].top) / max(1, len(best) - 1)) if len(best) > 1 else line * 1.4
-    # A la izquierda, lugar para la banderita/etiqueta (el OCR a veces no la lee); abajo, una línea más: ahí aparecen
-    # los mensajes nuevos (y con el fondo desvanecido la última línea puede no haberse leído).
+    # A la izquierda, lugar para la banderita/etiqueta (el OCR a veces no la lee); abajo, lugar para dos líneas más:
+    # ahí aparecen los mensajes nuevos, y uno largo ocupa dos renglones (con uno solo, el segundo quedaba afuera y se
+    # traducía la mitad del mensaje).
     left = max(0, int(min(row.left for row in best)) - 34)
     right = min(width, int(max(max(row.right for row in best) + 12, left + MIN_WIDTH_SHARE * width)))
-    bottom = min(height, int(max(row.bottom for row in best) + pitch * 1.4))
+    bottom = min(height, int(max(row.bottom for row in best) + pitch * 2.4))
     top = max(0, int(min(min(row.top for row in best) - line * 0.4, bottom - pitch * VISIBLE_LINES)))
     return ChatGuess(Rect(left, top, right - left, bottom - top), len(best))

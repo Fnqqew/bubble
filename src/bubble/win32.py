@@ -132,22 +132,29 @@ class _PROCESSENTRY32W(ctypes.Structure):
                 ("szExeFile", ctypes.c_wchar * 260)]
 
 
-def roblox_process_id() -> int:
-    """El proceso de Roblox (0 si no está), tenga o no una ventana a la vista: para escuchar solo su sonido."""
+def roblox_process_ids() -> list[int]:
+    """Los procesos de Roblox, tengan o no una ventana a la vista (puede haber más de uno un momento, al reabrirlo)."""
     kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
     snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
     if not snapshot or snapshot == wintypes.HANDLE(-1).value:
-        return 0
+        return []
+    found = []
     try:
         entry = _PROCESSENTRY32W(ctypes.sizeof(_PROCESSENTRY32W))
         ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
         while ok:
             if entry.szExeFile.lower() == ROBLOX_PROCESS:
-                return int(entry.th32ProcessID)
+                found.append(int(entry.th32ProcessID))
             ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
-        return 0
+        return found
     finally:
         kernel32.CloseHandle(snapshot)
+
+
+def roblox_process_id() -> int:
+    """El proceso de Roblox (0 si no está), tenga o no una ventana a la vista: para escuchar solo su sonido."""
+    ids = roblox_process_ids()
+    return ids[-1] if ids else 0
 
 
 def find_roblox_window() -> int | None:

@@ -12,6 +12,9 @@ from .languages import LANGUAGES
 UNIVERSAL_TOKENS = {
     "gg", "ggs", "ggwp", "gl", "hf", "glhf", "wp", "ez", "lol", "lmao", "xd", "xdd", "xddd",
     "ok", "okay", "k", "kk", "afk", "brb", "omg", "oof", "rip", "gg!", "w", "l",
+    # Interjecciones que se entienden igual en cualquier idioma ("Ahhhh", "aja", "nah", "nop", "mmm").
+    "ah", "aa", "oh", "eh", "uh", "ay", "hm", "hmm", "mm", "mmm", "aja", "aha", "ajá", "nah", "nop", "nope", "yep",
+    "wow", "uff", "uf", "bruh", "sh", "shh", "ups", "oops", "q",
 }
 _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 
@@ -39,6 +42,10 @@ COMMON_WORDS: dict[str, set[str]] = {
         casa tiempo hoy manana ayer noche dia equipo mapa donde onda sabes sabe se ves ver vi mismo mucho mucha
         poco poca tanto nadie ningun ninguno alguno algun igual claro obvio okey vale oye wey pues bueno perdon
         disculpa listo espera esperen vengan vayan corran vamo aca tipo medio capo crack loco loca pa pal
+        q k xq pq porq tmb tb tbm x d xfa pls sip nel simon chido neta wey guey pedo alv ptm vdd ntp msj bn ns
+        tal vez feliz felices viaje viajes ano anos visito visita hembra macho gato gata perro peso pesos plata
+        dinero comprar compra vender cuenta hermano hermana mama papa novio novia chica chico nena nene sisi
+        nono jsjs jsjsjs jajs jaj jsj bueh buah ahre alta mala onda qonda ke kiero xk yaya yayaya
     """.split()),
     "pt": set("""
         o a os as um uma de do da dos das no na nos nas em e ou mas que quem como quando onde por para pra pro
@@ -65,13 +72,35 @@ _DISTINCTIVE = {
 _WORD_TOKEN = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
+def _chat_forms(token: str) -> set[str]:
+    """Cómo puede estar escrita una palabra en el chat: "Siii" es "si", "Ahhhh" es "ah", "felicesxd" es "felices"."""
+    folded = _fold(token)
+    forms = {folded}
+    collapsed = re.sub(r"(.)\1+", r"\1", folded)
+    if len(collapsed) >= 2:  # "kkkkkk" es una risa, no la letra "k"
+        forms.add(collapsed)
+    if folded.endswith("xd") and len(folded) > 4:
+        forms |= _chat_forms(folded[:-2])
+    return forms
+
+
 def lexical_share(text: str, lang: str) -> float:
     """Fracción de las palabras del mensaje que son comunes en `lang` (0 si no hay lista para ese idioma)."""
     words = COMMON_WORDS.get(lang)
-    tokens = [_fold(t) for t in _WORD_TOKEN.findall(text)]
+    tokens = _WORD_TOKEN.findall(text)
     if not words or not tokens:
         return 0.0
-    return sum(t in words for t in tokens) / len(tokens)
+    return sum(bool(_chat_forms(t) & words) for t in tokens) / len(tokens)
+
+
+def words_in(text: str) -> list[str]:
+    return _WORD_TOKEN.findall(text)
+
+
+def known_anywhere(token: str) -> bool:
+    """La palabra está en alguna de las listas (o es universal)."""
+    forms = _chat_forms(token)
+    return bool(forms & UNIVERSAL_TOKENS) or any(forms & words for words in COMMON_WORDS.values())
 
 
 def foreign_words(text: str, lang: str) -> list[str]:
@@ -95,9 +124,8 @@ def is_filtered(text: str, threshold: float = 0.5) -> bool:
 
 
 def is_universal(text: str) -> bool:
-    """True si el mensaje no tiene palabras o solo tiene abreviaturas universales."""
-    words = [w.lower() for w in _WORD.findall(text)]
-    return all(w in UNIVERSAL_TOKENS for w in words)
+    """True si el mensaje no tiene palabras o solo tiene abreviaturas e interjecciones universales ("Ahhhh")."""
+    return all(_chat_forms(w) & UNIVERSAL_TOKENS for w in _WORD.findall(text))
 
 
 @dataclass(frozen=True)

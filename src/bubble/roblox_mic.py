@@ -116,8 +116,12 @@ class RobloxMic:
 
     def _look(self) -> tuple[MicState, Rect] | None:
         hwnd = win32.find_roblox_window()
-        if not hwnd or not win32.roblox_is_foreground():
+        if not hwnd:
             return None
+        if not win32.roblox_is_foreground():
+            # Con Ctrl+Enter desde la barra de Bubble, Roblox no está al frente: el clic tiene que llegarle a él.
+            win32.force_foreground(hwnd)
+            time.sleep(0.2)
         client = win32.client_rect(hwnd)
         top = Rect(client.left, client.top, *top_bar(client.width, client.height))
         state = find_mic_in_bar(self.grab(top))

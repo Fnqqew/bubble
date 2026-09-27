@@ -136,8 +136,9 @@ que se use (~60 MB). Quedan en `%LOCALAPPDATA%\Bubble\models`.
 - Lo que ya está en tu idioma no se subtitula ni se traduce: si Whisper dice que es tu idioma (y el texto no dice
   claramente otro), queda como está.
 
-Se escucha **solo el sonido de Roblox** (Windows 11): Discord, un video o la música no se subtitulan. En Windows más
-viejos se escucha todo lo que suena en la PC.
+Se escucha **solo el sonido de Roblox** (Windows 11): Discord, un video o la música no se subtitulan, aunque suenen
+fuerte. Si Roblox se reabre o pasás a otro juego (cambia de proceso), Bubble lo sigue solo. En Windows más viejos se
+escucha todo lo que suena en la PC.
 
 **Tu voz, traducida.** Interruptor **Tu voz para los demás**, en Inicio. En la página **Voz** elegís cómo:
 
@@ -156,17 +157,25 @@ usa esa), **velocidad** y **Probar voz**. Con **Escucharla yo también**, tu voz
 más bajo, así sabés qué dijo. Hay voz para español, inglés, portugués, francés, alemán, italiano, ruso, polaco,
 neerlandés, chino, hindi, turco, árabe, coreano, indonesio y vietnamita.
 
-**Que te escuchen los demás (como Soundpad).** Windows no deja que un programa hable "por tu micrófono" sin un
-micrófono virtual. Bubble usa VB-Audio Virtual Cable (gratis):
+**Que te escuchen los demás (como Soundpad).** Windows no deja que un programa hable "por tu micrófono": hace falta
+un micrófono virtual. Bubble usa **VB-Audio Virtual Cable**, gratis (es el "driver" que se descarga):
 
 1. En **Voz → Micrófono**, tocá **Instalar (gratis)**. Windows pide permiso de administrador; en el instalador
-   tocá **Install Driver**. Si te lo pide, reiniciá la PC. Después volvé a abrir Bubble.
-2. En **Tu micrófono** elegí tu micrófono de verdad.
-3. En Roblox: **Configuración → Micrófono → CABLE Output**.
+   tocá **Install Driver**. Si te lo pide, reiniciá la PC.
+2. Abrí Bubble. El instalador suele dejar el cable como micrófono o parlante de Windows (dejás de escuchar, o
+   Discord deja de escucharte): Bubble lo vuelve a dejar como estaba, solo.
+3. Prendé **Traducir mi voz**. No hay que configurar nada más.
 
-Bubble pasa tu micrófono al virtual en vivo y le suma la voz traducida: los demás te escuchan a vos y a tu voz
-traducida (mientras suena, tu voz baja). Con **Pasar también mi voz real** apagado, solo escuchan la traducida.
-Si cerrás Bubble, en Roblox volvé a elegir tu micrófono de siempre.
+Mientras **Traducir mi voz** está prendido, el micrófono de Windows es el virtual (Roblox usa el de Windows) y Bubble
+le pasa tu micrófono real en vivo: te escuchan igual que siempre y, cuando suena tu voz traducida, tu voz baja. Al
+apagarlo o cerrar Bubble, Windows vuelve a tu micrófono (y si Bubble se cerró de golpe, lo arregla al abrirse). Si
+Roblox ya estaba abierto cuando lo prendiste, reabrilo una vez. Si algo queda raro, **Voz → Arreglar Windows**.
+
+- Con **Pasar también mi voz real** apagado, solo escuchan la voz traducida.
+- Discord usa el micrófono de Windows: mientras está prendido, también escucha la voz traducida. Si no querés, en
+  Discord elegí tu micrófono de verdad en vez de "Predeterminado".
+- ¿Por qué no como Soundpad? Soundpad se mete dentro de cada programa para hablar por su micrófono. Con Roblox eso
+  choca con su anti-trampas y puede traer problemas; el micrófono virtual no toca Roblox.
 
 **Muteado en Roblox.** Si tenés el micrófono muteado en Roblox (la raya roja arriba a la izquierda), Bubble te
 desmutea solo mientras suena tu voz traducida y te vuelve a mutear: un clic en ese botón, y el mouse vuelve a donde

@@ -12,7 +12,8 @@ from ..config import Config
 from .batcher import Batcher
 from .base import ChatLine, DeltaCallback, Direction, Mode, TranslationRequest, TranslationResult, clamp_tone
 from .cache import TranslationCache
-from .langdetect import LanguageDetector, foreign_words, is_filtered, is_universal, lexical_share
+from .langdetect import (LanguageDetector, foreign_words, is_filtered, is_universal, known_anywhere,
+                         lexical_share, words_in)
 from .languages import DEFAULT_REGION, split_locale
 from .router import Router
 from .slang import Slang, laugh_for, laugh_only, scan
@@ -39,6 +40,7 @@ class Translator:
         self.batcher = Batcher(router, workers=config.claude.pool_size)
         self._incoming_langs: deque[str] = deque(maxlen=30)
         self._incoming_regions: deque[tuple[str, str]] = deque(maxlen=30)
+        self._speaker_langs: dict[str, deque[str]] = {}  # idioma de lo último que escribió cada jugador (seguro)
 
     async def start(self) -> None:
         await asyncio.gather(asyncio.to_thread(self.detector.load), self.router.start())
@@ -156,10 +158,17 @@ class Translator:
             self._incoming_regions.extend((h.lang, h.region) for h in hints if h.region)
 
         mode: Mode = "translate"
-        foreign = any(h.lang != target for h in hints) or bool(foreign_words(text, target))
+        tokens = text.split()
+        # Una palabra suelta de otro idioma en un mensaje en tu idioma ("tal vez see") no lo vuelve extranjero.
+        stray = foreign_words(text, target)
+        foreign = any(h.lang != target for h in hints) or len(stray) >= max(1, (len(tokens) + 1) // 2)
+        if direction == "incoming" and source and detection and detection.is_confident(TRACK_CONFIDENCE):
+            self._speaker_langs.setdefault(speaker, deque(maxlen=4)).append(source)
         # Ya está en el idioma del lector: lo dice el detector con seguridad, o casi todas sus palabras son
         # comunes en ese idioma (clave para mensajes cortos como "hola", "dale voy", "todo bien?").
         looks_native = (source == target and (confident or hints)) or lexical_share(text, target) >= LEXICAL_SKIP
+        if direction == "incoming" and not looks_native and not foreign and not confident:
+            looks_native = self._short_from_my_side(text, speaker, target)
         if not foreign and looks_native:
             source = target
             if self.config.translation.adapt_slang and self._foreign_region(hints, target, region):
@@ -195,6 +204,18 @@ class Translator:
         self.cache.put(text, cache_key, routed.text)
         status = "adapted" if mode == "adapt" else "translated"
         return result(routed.text, status, source, routed.provider, ttft_s=routed.ttft_s)
+
+    def _short_from_my_side(self, text: str, speaker: str, target: str) -> bool:
+        """Un mensaje corto que el detector no sabe de qué idioma es ("alm", "visito", "sofiiii"). Se deja como está si
+        ese jugador viene escribiendo en tu idioma, o si es una sola palabra que no es de ningún idioma conocido (un
+        nombre, una risa, un error de tipeo). Antes iban a Claude, que los "traducía" a tu español."""
+        tokens = words_in(text)
+        if not tokens or len(tokens) > 4:
+            return False
+        recent = list(self._speaker_langs.get(speaker, ()))
+        if recent and recent.count(target) * 2 > len(recent):
+            return True
+        return len(tokens) == 1 and not known_anywhere(tokens[0])
 
     @staticmethod
     def _foreign_region(hints: list[Slang], lang: str, region: str) -> bool:

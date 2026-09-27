@@ -213,6 +213,7 @@ def parse_chat_items(
     is_known_name: Callable[[str], bool] | None = None,
     frame_width: float = 0,
     wrap_right: float = 0,
+    frame_height: float = 0,
 ) -> list[ChatItem]:
     """Arma los mensajes 'Nombre: texto' con su ubicación.
 
@@ -267,7 +268,14 @@ def parse_chat_items(
             last_row = row
         else:
             last_row = None
-    return [item for item in messages if item.text]
+    items = [item for item in messages if item.text]
+    if items and widest and frame_height:
+        last = items[-1].rows[-1]
+        if last.right >= 0.85 * widest and last.bottom >= frame_height - 1.3 * last.height:
+            # Llega al borde de abajo y ocupa todo el ancho: su segundo renglón puede estar justo afuera. Se confirma
+            # en otra captura (el chat sube o se lee entero) en vez de traducir la mitad.
+            items[-1].uncertain = True
+    return items
 
 
 class SpamFilter:

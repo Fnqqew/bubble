@@ -181,7 +181,7 @@ class ChatWatcher:
         if not faded:
             self._wrap_right = max([self._wrap_right, *(r.right for r in column_rows(rows) if r.words)])
         wrap = self._wrap_right if self._wrap_right >= 0.5 * image.width else 0
-        parsed = parse_chat_items(rows, self.tracker.is_known_name, image.width, wrap)
+        parsed = parse_chat_items(rows, self.tracker.is_known_name, image.width, wrap, image.height)
         bands = await asyncio.to_thread(_uncovered_bands, image, parsed)
         if bands:
             # Renglones con texto que el OCR no devolvió: pasa sobre todo con dos mensajes idénticos seguidos (el

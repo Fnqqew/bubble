@@ -139,6 +139,115 @@ def _activate(pid: int) -> c_void_p:
         _release(operation)
 
 
+_supported: bool | None = None
+
+
+def _check_supported() -> None:
+    """¿Este Windows deja escuchar un programa suelto? Se prueba una vez, con este mismo proceso (no suena nada)."""
+    global _supported
+    if _supported is None:
+        import os
+
+        from .audio import com_ready
+
+        com_ready()
+        try:
+            _release(_activate(os.getpid()))
+            _supported = True
+        except OSError:
+            _supported = False
+    if not _supported:
+        raise OSError("Este Windows no permite escuchar solo el sonido de un programa")
+
+
+def roblox_audio_pid() -> int:
+    """El proceso de Roblox del que sale su sonido: el que Windows tiene sonando (Mezclador de volumen). Si ninguno
+    tiene sonido todavía, el más nuevo."""
+    from .. import win32
+
+    ids = win32.roblox_process_ids()
+    if not ids:
+        return 0
+    try:
+        from .sessions import sessions
+
+        playing = [s for s in sessions() if s.pid in ids]
+    except OSError:
+        playing = []
+    if playing:
+        return max(playing, key=lambda s: (s.active, s.peak)).pid
+    return ids[-1]
+
+
+class RobloxAudio:
+    """El sonido de Roblox, siguiéndolo: Roblox cambia de proceso cuando lo reabrís o pasás a otro juego, y Bubble se
+    quedaba escuchando al de antes (silencio). Cada 2 s se fija cuál suena y, si cambió, se pasa a ese."""
+
+    CHECK_S = 2.0
+
+    def __init__(self, find_pid=roblox_audio_pid) -> None:
+        self.find_pid = find_pid
+        self.rate = 16000
+        self.pid = 0
+        self.current: ProcessLoopback | None = None
+        self._next_check = 0.0
+
+    def recorder(self, samplerate: int = 16000, channels: int = 1, blocksize: int | None = None) -> RobloxAudio:
+        self.rate = samplerate
+        return self
+
+    def __enter__(self) -> RobloxAudio:
+        _check_supported()  # si Windows no deja escuchar un programa suelto, el error sale acá (se escucha toda la PC)
+        pid = self.find_pid()
+        if pid:
+            try:
+                self._switch(pid)
+            except OSError as exc:  # Roblox cerrándose justo ahora: se reintenta en el próximo control
+                log.info("No se pudo escuchar a Roblox todavía: %s", exc)
+        self._next_check = time.monotonic() + self.CHECK_S
+        return self
+
+    def __exit__(self, *_exc) -> bool:
+        self._close()
+        return False
+
+    def _close(self) -> None:
+        if self.current is not None:
+            self.current.stop()
+            self.current, self.pid = None, 0
+
+    def _switch(self, pid: int) -> None:
+        self._close()
+        source = ProcessLoopback(pid).recorder(self.rate)
+        source.start()
+        self.current, self.pid = source, pid
+        log.info("Se escucha el sonido de Roblox (proceso %s)", pid)
+
+    def _follow(self) -> None:
+        self._next_check = time.monotonic() + self.CHECK_S
+        try:
+            pid = self.find_pid()
+            if pid and pid != self.pid:
+                self._switch(pid)
+            elif not pid:
+                self._close()
+        except OSError as exc:
+            log.info("No se pudo pasar al proceso nuevo de Roblox: %s", exc)
+            self._close()
+
+    def record(self, numframes: int) -> np.ndarray:
+        if time.monotonic() >= self._next_check:
+            self._follow()
+        if self.current is None:
+            time.sleep(numframes / self.rate)  # Roblox cerrado o cambiando: silencio, al ritmo real
+            return np.zeros(numframes, np.float32)
+        try:
+            return self.current.record(numframes)
+        except OSError:
+            self._close()  # se cerró ese proceso: en el próximo control se busca el nuevo
+            return np.zeros(numframes, np.float32)
+
+
 class ProcessLoopback:
     """Fuente de audio (como las de soundcard: `recorder()` y `record()`) con solo el sonido de un proceso."""
 

@@ -231,27 +231,31 @@ def fit_bubble_text(text: str, width: int, height: int, rows: int) -> tuple[int,
     """(tamaño de letra, líneas, ancho, alto) de la burbuja traducida.
 
     La letra es como la de la burbuja original. La traducción suele ser más larga que el original (el español
-    más que el inglés): en vez de achicarla hasta que no se lea o cortarla con "…", la burbuja se ensancha
-    (hasta 1,8 veces) y, si hace falta, suma líneas. Nunca queda más chica que la original (la tapa entera).
+    más que el inglés): nunca se corta. Primero la burbuja se ensancha (hasta 1,8 veces), después la letra se achica
+    un poco y, si todavía no entra, se suman líneas. Nunca queda más chica que la original (la tapa entera).
+    Antes probaba hasta 3 líneas: una burbuja de 4 renglones perdía el final de la traducción.
     """
     words = text.split() or [text]
     line_height = max(10.0, (height - 12) / max(1, rows))  # alto de cada línea de texto de la original
     base = int(max(10, min(30, line_height * 0.72)))  # letra parecida a la original
     widest = max(width, min(int(width * 1.8), 460))
-    for size in (base, max(10, int(base * 0.9))):
+    most = max(rows + 3, 5)
+    for size in sorted({base, max(10, int(base * 0.9)), max(10, int(base * 0.8))}, reverse=True):
         font = _font(size, text)
-        for count in range(max(1, rows), 4):
+        step = line_height * size / base  # con letra más chica, renglones más juntos
+        for count in range(max(1, rows), most + 1):
             target = max(width - 24, font.getlength(text) / count + size)  # líneas parejas
             if target > widest - 24:
                 continue
             lines = _wrap(words, font, target)
             longest = max(font.getlength(line) for line in lines)
             if len(lines) <= count and longest <= widest - 24:
-                return size, lines, max(width, int(longest) + 28), max(height, int(len(lines) * line_height + 12))
-    size = max(10, int(base * 0.9))
-    size, lines = layout_text(text, [Slot(0, 0, widest - 24, int(line_height))] * 3, size)
-    lines = [line for line in lines if line] or [text[:12] + "…"]
-    return size, lines, widest, max(height, int(len(lines) * line_height + 12))
+                return size, lines, max(width, int(longest) + 28), max(height, int(len(lines) * step + 12))
+    # Muchísimo texto: todo el ancho posible y las líneas que hagan falta (se lee entero, nunca con "…").
+    size = max(10, int(base * 0.8))
+    font = _font(size, text)
+    lines = _wrap(words, font, widest - 24)
+    return size, lines, widest, max(height, int(len(lines) * line_height * size / base + 12))
 
 
 def render_bubble(size_px: tuple[int, int], text_lines: list[str], font_size: int,
@@ -296,7 +300,7 @@ class PillSpot:
 
 
 TEXT_EDGE_FLOOR = 0.6  # sin haber visto mensajes largos, las traducciones llegan al menos a esta parte del ancho
-TEXT_EDGE_MARGIN = 60  # px más allá del texto más largo: Roblox corta los renglones bastante antes del borde del panel
+TEXT_EDGE_MARGIN = 45  # px más allá del texto más largo: Roblox corta los renglones bastante antes del borde del panel
 
 
 def chat_spots(item, frame_width: int, row_height: float | None = None, text_right: float = 0) -> list[PillSpot]:

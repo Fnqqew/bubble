@@ -6,6 +6,7 @@ los demás te escuchen, Bubble habla por un micrófono virtual, como Soundpad (v
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import tkinter as tk
@@ -17,6 +18,8 @@ from ..config import save_setting
 from ..state import load_state, update_state
 from . import widgets
 from .subtitles import SubtitleView, speaker_name
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .main_window import BubbleWindow
@@ -57,6 +60,7 @@ class VoicePanel:
         self.speed_var = tk.DoubleVar(value=self.config.speed)
         self.pass_var = tk.BooleanVar(value=self.config.pass_my_voice)
         self.unmute_var = tk.BooleanVar(value=self.config.auto_unmute)
+        self._soundpad = False  # el micrófono de Windows es el virtual (ver voice/devices.py)
         self.status = None
         self._tick()
 
@@ -113,6 +117,11 @@ class VoicePanel:
         ttk.Checkbutton(box, text="Pasar también mi voz real", variable=self.pass_var, command=self._toggle_pass,
                         style="Switch.TCheckbutton").pack(anchor="w", pady=(10, 0))
         self.cable_help = widgets.muted(box, "")
+        self.windows_row = ttk.Frame(box)
+        self.windows_warning = ttk.Label(self.windows_row, text="", foreground=widgets.palette()["warn"],
+                                         wraplength=330, justify="left")
+        self.windows_warning.pack(side="left", fill="x", expand=True)
+        ttk.Button(self.windows_row, text="Arreglar Windows", command=self.fix_windows).pack(side="right")
         self.status = widgets.muted(page, "", pady=(0, 8))
         threading.Thread(target=self._scan_devices, name="bubble-dispositivos", daemon=True).start()
 
@@ -124,23 +133,42 @@ class VoicePanel:
         try:
             from ..voice import bridge
 
+            from ..voice.devices import restore_real_defaults, wrong_defaults
+
+            wrong = wrong_defaults()
+            if wrong and not self._soundpad:
+                # El instalador del micrófono virtual lo dejó como predeterminado (o Bubble se cerró de golpe): se
+                # vuelve a lo tuyo sin que tengas que hacer nada.
+                fixed = restore_real_defaults()
+                if fixed:
+                    self._set_status("Dejé Windows como estaba: " + " y ".join(fixed) + ". El micrófono virtual "
+                                     "lo uso solo mientras traduzco tu voz.")
+                wrong = wrong_defaults()
             mics, cable = bridge.microphones(), bridge.cable_input() is not None
         except Exception:  # noqa: BLE001 - sin la parte de voz instalada
-            mics, cable = [], False
-        self.app.events.put(("voice_devices", (mics, cable)))
+            mics, cable, wrong = [], False, []
+        self.app.events.put(("voice_devices", (mics, cable, wrong)))
 
-    def show_devices(self, mics: list[str], cable: bool) -> None:
-        """(hilo de la ventana) Micrófonos encontrados y si hay micrófono virtual."""
+    def show_devices(self, mics: list[str], cable: bool, wrong: list[str] | tuple = ()) -> None:
+        """(hilo de la ventana) Micrófonos encontrados, si hay micrófono virtual y si Windows quedó usándolo."""
         self.mic_box.configure(values=["El predeterminado de Windows", *mics])
         colors = widgets.palette()
         self.cable_warning.configure(text="" if cable else "⚠ Falta el micrófono virtual: sin él, los demás no "
                                                               "escuchan tu voz traducida. Instalalo abajo (1 minuto).")
+        if wrong:
+            self.windows_warning.configure(text=f"⚠ Al instalarse, el micrófono virtual quedó como {' y '.join(wrong)} "
+                                                f"de Windows: Discord y los demás programas no te escuchan.")
+            self.windows_row.pack(fill="x", pady=(8, 0))
+        else:
+            self.windows_row.pack_forget()
         if cable:
             self.cable_label.configure(text="Instalado ✓", foreground=colors["good"])
             self.cable_button.pack_forget()
-            self.cable_help.configure(text="En Roblox: Configuración → Micrófono → «CABLE Output». Mientras Bubble "
-                                           "está abierto, por ahí sale tu voz y la traducida. Si cerrás Bubble, en "
-                                           "Roblox volvé a elegir tu micrófono de siempre.")
+            self.cable_help.configure(text="Listo, no hay que configurar nada: mientras «Traducir mi voz» está "
+                                           "prendido, Bubble usa el micrófono virtual como micrófono de Windows y le "
+                                           "pasa tu voz real (te escuchan igual, más la traducida). Al apagarlo o "
+                                           "cerrar Bubble vuelve tu micrófono. Si Roblox ya estaba abierto, reabrilo "
+                                           "una vez.")
         else:
             self.cable_label.configure(text="No instalado", foreground=colors["warn"])
             self.cable_button.pack(side="right", padx=(0, 10))
@@ -163,6 +191,7 @@ class VoicePanel:
         for part in (self.listener, self.speaker, self.bridge):
             if part:
                 part.stop()
+        self._route_mic(False, wait=True)  # al cerrar Bubble, Windows vuelve a tu micrófono
         if self._preparing:
             update_state(voice_loading=False)  # cerraste Bubble a mitad de la descarga: no fue un error
 
@@ -172,6 +201,7 @@ class VoicePanel:
         for part in (self.listener, self.speaker, self.bridge):
             if part:
                 part.stop()
+        self._route_mic(False)
         self.listener = self.speaker = self.bridge = self.out = self.board = None
         if self.models is not None and self.models[2] is not None:
             self.models[2].voices.clear()
@@ -232,6 +262,40 @@ class VoicePanel:
         self.out.listeners.append(self._playing)
         return self.out
 
+    def _route_mic(self, on: bool, wait: bool = False) -> None:
+        """Modo Soundpad: mientras tu voz traducida está prendida, el micrófono de Windows (el que usa Roblox) es el
+        virtual, y Bubble le pasa tu voz real. Si el puente con tu micrófono no arrancó, no se cambia: te quedarías
+        mudo."""
+        if on == self._soundpad:
+            return
+        self._soundpad = on
+        bridge = self.bridge
+
+        def work() -> None:
+            from ..voice import devices
+
+            try:
+                if on:
+                    time.sleep(1.0)  # que el puente arranque (si falla, se apaga solo)
+                    if bridge is None or not bridge.running:
+                        self._soundpad = False
+                        return
+                    devices.use_cable_as_default()
+                else:
+                    devices.restore_real_defaults()
+            except Exception:  # noqa: BLE001 - queda el botón «Arreglar Windows»
+                log.warning("No se pudo cambiar el micrófono de Windows", exc_info=True)
+
+        if wait:
+            work()
+        else:
+            threading.Thread(target=work, name="bubble-microfono-windows", daemon=True).start()
+
+    def _my_microphone(self):
+        from ..voice.devices import real_microphone
+
+        return real_microphone(self.config.mic)
+
     def _mic_switch(self):
         if not self.config.auto_unmute:
             return None
@@ -273,13 +337,16 @@ class VoicePanel:
             if self.speaker is None and direct:
                 self.speaker = DirectVoice(final, self.out, self._translate_mine, self.app.config.user.language,
                                            partial_asr=quick, on_event=self._spoke,
-                                           target=self.app.translator.outgoing_target)
+                                           target=self.app.translator.outgoing_target,
+                                           mic_factory=self._my_microphone)
             elif self.speaker is None:
                 self.out.warm_up(self.app.translator.outgoing_target())
                 binding = win32.parse_binding(self.config.push_to_talk)
                 self.speaker = VoiceSpeaker(final, self.out, self._translate_mine, binding.vk,
-                                            self.app.config.user.language, on_event=self._spoke)
+                                            self.app.config.user.language, on_event=self._spoke,
+                                            mic_factory=self._my_microphone)
             self.speaker.start()
+            self._route_mic(self.out.output.is_cable)
             if not self.out.output.is_cable:
                 self._set_status("Tu voz traducida suena en tus auriculares. Para que la escuchen los demás, instalá "
                                  "el micrófono virtual (abajo, en «Micrófono»).")
@@ -287,6 +354,7 @@ class VoicePanel:
                 self._set_status("")
         elif self.speaker:
             self.speaker.stop()
+            self._route_mic(False)
         if not self.speak_var.get() and not self.subtitles_var.get():
             self._set_status("")
 
@@ -438,6 +506,22 @@ class VoicePanel:
             self.app.events.put(("voice_cable_done", None))
 
         threading.Thread(target=work, name="bubble-instalar-cable", daemon=True).start()
+
+    def fix_windows(self) -> None:
+        """Tu micrófono y tu parlante de siempre, otra vez como predeterminados de Windows."""
+
+        def work() -> None:
+            try:
+                from ..voice.devices import restore_real_defaults
+
+                fixed = restore_real_defaults()
+                self._set_status("Listo: Windows vuelve a usar " + " y ".join(fixed) + "." if fixed
+                                 else "Windows ya usaba tus dispositivos de siempre.")
+            except Exception as exc:  # noqa: BLE001
+                self._set_status(f"No pude cambiarlo: {exc}. Hacelo en Configuración → Sonido de Windows.")
+            self._scan_devices()
+
+        threading.Thread(target=work, name="bubble-arreglar-windows", daemon=True).start()
 
     def cable_done(self) -> None:
         self.cable_button.configure(state="normal", text="Instalar (gratis)")

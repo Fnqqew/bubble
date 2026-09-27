@@ -59,6 +59,18 @@ def test_message_that_lost_its_colon_is_not_a_continuation():
                                              "RobloxBestGamerOne has added a comment to Lovine! (+25)"]
 
 
+def test_long_message_cut_at_the_bottom_waits_to_be_read_whole():
+    from bubble.capture.chat_parser import parse_chat_items
+
+    rows = [OcrRow("Ibarra: entonces", top=10, height=18, left=5, width=150),
+            OcrRow("Andres: Once upon a time, there was a beautiful young", top=32, height=18, left=5, width=480)]
+    cut = parse_chat_items(rows, frame_width=500, frame_height=52)  # el segundo renglón quedó afuera
+    assert cut[-1].uncertain and not cut[0].uncertain
+    whole = parse_chat_items(rows + [OcrRow("princess named Snow White.", top=54, height=18, left=5, width=230)],
+                             frame_width=500, frame_height=120)
+    assert whole[-1].text.endswith("Snow White.") and not whole[-1].uncertain
+
+
 def test_icon_read_as_part_of_the_name():
     from bubble.capture.chat_parser import parse_chat_items
 

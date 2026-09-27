@@ -31,8 +31,8 @@ class Step:
     action: Callable[[], None] | None = None
 
 
-def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callable[[], None] | None = None
-                ) -> list[Step]:
+def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callable[[], None] | None = None,
+                fix_windows: Callable[[], None] | None = None) -> list[Step]:
     return [
         Step(
             "¡Hola! Soy Bubble",
@@ -80,8 +80,23 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
             "En la página «Voz»:\n\n"
             "• Subtítulos: ves quién habla (Voz 1, Voz 2…) y qué dice, en tu idioma.\n"
             "• Tu voz para los demás: hablás en tu idioma y te escuchan en el suyo, con un botón o en modo directo.\n\n"
-            "Para que te escuchen, Bubble habla por un micrófono virtual (como Soundpad). Se instala en un clic "
-            "desde ahí mismo.",
+            "Para que te escuchen, Bubble habla por un micrófono virtual (como Soundpad). Mirá el paso siguiente.",
+        ),
+        Step(
+            "El micrófono virtual",
+            "Windows no deja que un programa hable por tu micrófono: hace falta un micrófono virtual gratis, "
+            "VB-Audio Virtual Cable (el driver que se descarga). Funciona como Soundpad: Bubble le pasa tu voz real y "
+            "le suma la traducida.\n\n"
+            "1. Voz → Micrófono → «Instalar (gratis)». Aceptá el permiso y tocá «Install Driver». Si lo pide, "
+            "reiniciá la PC.\n"
+            "2. Abrí Bubble: si el instalador te cambió el micrófono o los parlantes de Windows, los vuelvo a poner "
+            "como estaban solo.\n"
+            "3. Prendé «Traducir mi voz». Mientras está prendido, el micrófono virtual es tu micrófono de Windows "
+            "(Roblox lo usa); al apagarlo o cerrar Bubble vuelve el tuyo. Si Roblox ya estaba abierto, reabrilo "
+            "una vez.\n\n"
+            "¿Algo quedó raro? «Arreglar Windows» deja todo como estaba.",
+            "Arreglar Windows" if fix_windows else "",
+            fix_windows,
         ),
         Step(
             "Hacelo tuyo",

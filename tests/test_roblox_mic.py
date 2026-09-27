@@ -72,6 +72,44 @@ def test_game_audio_falls_back_to_the_whole_pc():
         assert isinstance(active, _Speaker) and _Speaker.entered
 
 
+def test_roblox_audio_follows_the_process_that_plays(monkeypatch):
+    """Roblox cambió de proceso (se reabrió): Bubble se pasa al nuevo en vez de quedarse con el viejo en silencio."""
+    import time
+
+    from bubble.voice import process_audio
+
+    opened = []
+
+    class FakeLoopback:
+        def __init__(self, pid):
+            self.pid = pid
+
+        def recorder(self, *_a, **_k):
+            return self
+
+        def start(self):
+            opened.append(self.pid)
+
+        def stop(self):
+            pass
+
+        def record(self, n):
+            return np.full(n, self.pid, np.float32)
+
+    monkeypatch.setattr(process_audio, "ProcessLoopback", FakeLoopback)
+    pids = iter([100, 100, 200, 200])
+    source = process_audio.RobloxAudio(find_pid=lambda: next(pids, 200))
+    source.CHECK_S = 0.0
+    with source.recorder(samplerate=16000) as rec:
+        values = [rec.record(160)[0] for _ in range(3)]
+    assert opened == [100, 200] and values[-1] == 200
+    empty = process_audio.RobloxAudio(find_pid=lambda: 0)
+    with empty.recorder(samplerate=16000) as rec:
+        started = time.perf_counter()
+        assert not rec.record(1600).any()  # Roblox cerrado: silencio al ritmo real
+        assert time.perf_counter() - started >= 0.09
+
+
 def test_process_loopback_reads_in_real_time():
     """Escucha solo a este mismo proceso (que no suena): silencio, al ritmo real."""
     import os

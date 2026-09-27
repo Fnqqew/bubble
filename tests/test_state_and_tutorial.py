@@ -10,7 +10,7 @@ def test_state_roundtrip_keeps_other_keys(tmp_path, monkeypatch):
     state.update_state(tutorial_seen=True)
     saved = state.load_state()
     assert saved["tutorial_seen"] is True
-    assert roblox.load_chat_region() == {"relative": True, "x": 10, "y": 20, "w": 400, "h": 200}
+    assert roblox.load_chat_region() == {"relative": True, "x": 10, "y": 20, "w": 400, "h": 200, "manual": True}
 
 
 def test_tutorial_steps_use_hotkey_and_actions():

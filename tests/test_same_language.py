@@ -49,3 +49,32 @@ async def test_messages_in_other_languages_are_translated(detector, text):
     result = await translator.translate_incoming(text, "Pedro")
     assert result.status in {"translated", "adapted"}, text
     assert len(provider.requests) == 1
+
+
+# Mensajes reales de una grabación de Roblox (chat en español mezclado con un jugador que escribía en inglés).
+@pytest.mark.parametrize("text", [
+    "Sii", "ah", "nah", "aja", "Ahhhh", "nop", "Q", "Q PEDO", "tal vez see", "todo felicesxd", "NO HEMBRA",
+    "SOY UN GATO", "MACHO PORFA", "entonces", "está muy devaluado el peso allá", "sofiiiiiii",
+])
+async def test_spanish_chat_from_a_real_game_is_left_alone(detector, text):
+    translator, provider = make(detector)
+    result = await translator.translate_incoming(text, "Ibarra")
+    assert result.status in {"same_language", "universal", "local"}, (text, result.status, result.source_lang)
+    assert provider.requests == []
+
+
+async def test_short_unclear_messages_follow_what_that_player_writes(detector):
+    translator, provider = make(detector)
+    await translator.translate_incoming("está muy devaluado el peso allá", "Ibarra")
+    for text in ("alm", "visito"):
+        result = await translator.translate_incoming(text, "Ibarra")
+        assert result.status == "same_language", text
+    assert provider.requests == []
+
+
+async def test_english_story_is_still_translated(detector):
+    translator, provider = make(detector)
+    for text in ('The mirror would answer, "You are the most beautiful of all women."',
+                 "Once upon a time, there was a beautiful young princess named Snow White."):
+        result = await translator.translate_incoming(text, "Andres")
+        assert result.status == "translated", text

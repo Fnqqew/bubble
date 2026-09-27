@@ -15,20 +15,36 @@ def load_chat_region() -> dict | None:
     return load_state().get("chat_region")
 
 
-def save_chat_region(absolute: Rect, roblox_client: Rect | None) -> None:
+# Versión del detector del chat: una zona encontrada sola con uno anterior se vuelve a buscar (las marcadas a mano no).
+REGION_VERSION = 3
+
+
+def save_chat_region(absolute: Rect, roblox_client: Rect | None, detected: bool = False) -> None:
     """Se guarda relativo a la ventana de Roblox, así sigue funcionando si la movés."""
     if roblox_client:
         region = {"relative": True, "x": absolute.left - roblox_client.left, "y": absolute.top - roblox_client.top,
                   "w": absolute.width, "h": absolute.height}
     else:
         region = {"relative": False, "x": absolute.left, "y": absolute.top, "w": absolute.width, "h": absolute.height}
+    if detected:
+        region["detector"] = REGION_VERSION
+    else:
+        region["manual"] = True
     update_state(chat_region=region)
 
 
-def region_too_wide(saved: dict | None, client: Rect) -> bool:
-    """Una zona guardada que ocupa más de la mitad de la ventana no es el chat: la versión anterior del detector
-    juntaba el chat con texto del juego a la misma altura (burbujas, nombres) y la zona salía enorme."""
-    return bool(saved and saved.get("relative") and client.width and saved["w"] > 0.5 * client.width)
+def region_outdated(saved: dict | None, client: Rect) -> bool:
+    """Una zona guardada que conviene volver a buscar:
+    - ocupa más de la mitad de la ventana: no es el chat (el detector de antes juntaba el chat con texto del juego a
+      la misma altura, burbujas o nombres, y la zona salía enorme);
+    - la encontró sola una versión anterior del detector (por ejemplo, sin lugar abajo para un mensaje de dos
+      renglones). Las zonas de antes no decían si eran a mano: se buscan de nuevo una vez."""
+    if not saved:
+        return False
+    if saved.get("relative") and client.width and saved["w"] > 0.5 * client.width:
+        return True
+    version = saved.get("detector")
+    return version is None and not saved.get("manual") or version is not None and version < REGION_VERSION
 
 
 def forget_chat_region() -> None:

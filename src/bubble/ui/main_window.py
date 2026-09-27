@@ -251,7 +251,8 @@ class BubbleWindow:
         if self.tutorial is not None:
             self.tutorial.lift()
             return
-        steps = build_steps(win32.describe_binding(self.config.roblox.hotkey), self._detect_chat, self._capture_test)
+        steps = build_steps(win32.describe_binding(self.config.roblox.hotkey), self._detect_chat, self._capture_test,
+                            self.voice_panel.fix_windows)
         self.tutorial = TutorialWindow(self.root, steps, self._on_tutorial_closed, ICON_PATH.with_suffix(".png"))
 
     def _on_tutorial_closed(self, reason: str) -> None:
@@ -418,8 +419,8 @@ class BubbleWindow:
             self.roblox_status.configure(text="Roblox está cerrado.", foreground=colors["muted"])
         self._watch_roblox_session(running)
         self._refresh_header(bool(hwnd))
-        if self.saved_region and hwnd and roblox.region_too_wide(self.saved_region, win32.client_rect(hwnd)):
-            log.info("La zona del chat guardada era casi toda la ventana: se vuelve a buscar el chat")
+        if self.saved_region and hwnd and roblox.region_outdated(self.saved_region, win32.client_rect(hwnd)):
+            log.info("La zona del chat guardada es de un detector anterior (o casi toda la ventana): se busca de nuevo")
             roblox.forget_chat_region()
             self.saved_region = None
             self.region_label.configure(text=self._region_text())
@@ -521,14 +522,14 @@ class BubbleWindow:
                 self._set_status("No encontré el chat: esperá a que haya un par de mensajes y probá de nuevo, "
                                  "o marcalo «a mano…».")
             return
-        self._on_calibrated(guess.region.offset(client.left, client.top), client)
+        self._on_calibrated(guess.region.offset(client.left, client.top), client, detected=True)
         self._append(f"Encontré el chat de este juego ({guess.lines} mensajes a la vista).\n", "info")
 
-    def _on_calibrated(self, rect: Rect | None, client: Rect | None) -> None:
+    def _on_calibrated(self, rect: Rect | None, client: Rect | None, detected: bool = False) -> None:
         if rect is None:
             self._set_status("Listo, no cambié nada.")
             return
-        roblox.save_chat_region(rect, client)
+        roblox.save_chat_region(rect, client, detected)
         self.saved_region = roblox.load_chat_region()
         self.region_label.configure(text=self._region_text())
         self._set_status("¡Encontré el chat! Ya lo estoy leyendo.")

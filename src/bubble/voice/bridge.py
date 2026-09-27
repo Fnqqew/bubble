@@ -60,12 +60,11 @@ def cable_input():
 
 
 def _microphone(name: str):
-    sc = _sc()
-    if name:
-        for mic in sc.all_microphones():
-            if mic.name == name:
-                return mic
-    return sc.default_microphone()
+    """Tu micrófono de verdad. Nunca el virtual: si Windows lo dejó como predeterminado, Bubble pasaría el cable al
+    cable (y escucharía eso en vez de tu voz)."""
+    from .devices import real_microphone
+
+    return real_microphone(name)
 
 
 class MicBridge:
@@ -159,5 +158,5 @@ def install_cable(progress: Progress | None = None) -> str:
     result = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(setup), None, str(folder), 1)
     if result <= 32:
         return "No se abrió el instalador (¿se canceló el permiso de administrador?)."
-    return ("Se abrió el instalador: tocá «Install Driver». Cuando termine, reiniciá la PC si te lo pide y "
-            "volvé a abrir Bubble.")
+    return ("Se abrió el instalador: tocá «Install Driver». Cuando termine, reiniciá la PC si te lo pide y volvé a "
+            "abrir Bubble. Si Windows dejó el cable como micrófono, tocá «Arreglar Windows».")

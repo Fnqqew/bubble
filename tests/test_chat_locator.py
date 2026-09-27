@@ -34,8 +34,12 @@ def test_no_chat_when_there_is_no_message_like_text():
 
 def test_a_saved_chat_zone_as_wide_as_the_window_is_redone():
     from bubble.geometry import Rect
-    from bubble.roblox import region_too_wide
+    from bubble.roblox import REGION_VERSION, region_outdated
 
     client = Rect(0, 0, 1920, 1050)
-    assert region_too_wide({"relative": True, "x": 0, "y": 137, "w": 1433, "h": 279}, client)  # la que tenías
-    assert not region_too_wide({"relative": True, "x": 0, "y": 137, "w": 652, "h": 279}, client)
+    zone = {"relative": True, "x": 0, "y": 137, "w": 652, "h": 279}
+    assert region_outdated({**zone, "w": 1433, "detector": REGION_VERSION}, client)  # la que tenías: casi toda
+    assert region_outdated(zone, client)  # de una versión anterior (no decía cómo se hizo): se busca de nuevo
+    assert region_outdated({**zone, "detector": REGION_VERSION - 1}, client)
+    assert not region_outdated({**zone, "detector": REGION_VERSION}, client)
+    assert not region_outdated({**zone, "manual": True}, client)  # la marcaste a mano: se respeta

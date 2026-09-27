@@ -83,7 +83,10 @@ class VoiceOut:
 
     def _unmute(self) -> bool:
         """Solo con el micrófono virtual: sin él, Roblox escucharía tu micrófono real, no la voz traducida."""
-        if self.mic_switch is None or not self.output.is_cable:
+        if self.mic_switch is None:
+            return False
+        if not self.output.is_cable:
+            log.info("Sin micrófono virtual no se toca el micrófono de Roblox (escucharían tu micrófono real)")
             return False
         try:
             return bool(self.mic_switch.unmute())
