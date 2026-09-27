@@ -1,8 +1,9 @@
 """GIF de demostración para el README.
 
-Escena ilustrada (un mundo de Roblox al atardecer, avatares de bloques) y, encima, el chat de Roblox con las traducciones
-dibujadas por el MISMO código de Bubble: píldoras del chat, burbuja traducida, barra para escribir (capturada de la
-ventana real), subtítulos de voz y tu voz dicha con voz artificial.
+Escena ilustrada y con movimiento (un mundo de Roblox al atardecer: nubes, pájaros, un obby con plataformas que se
+mueven y alguien haciéndolo) y, encima, el chat de Roblox con las traducciones dibujadas por el MISMO código de Bubble:
+píldoras del chat, burbuja traducida, barra para escribir (capturada de la ventana real), subtítulos de voz y tu voz
+dicha con voz artificial.
 """
 
 from __future__ import annotations
@@ -159,93 +160,187 @@ def soft_ridge(width: int, base: int, height: int, bumps: int, seed: int) -> lis
 
 
 def tree(d: ImageDraw.ImageDraw, x: int, ground: int, size: int, green) -> None:
-    """Árbol de bloques: tronco y copa de cubos."""
-    trunk_w, trunk_h = max(4, size // 5), int(size * 0.55)
-    block(d, (x - trunk_w // 2, ground - trunk_h, x + trunk_w // 2, ground), (122, 84, 52, 255), max(2, size // 12), 0)
-    canopy = [(-0.55, -1.25, 1.1, 0.7), (-0.4, -1.75, 0.8, 0.55), (-0.25, -2.12, 0.5, 0.42)]
-    for i, (dx, dy, w, h) in enumerate(canopy):
-        box = (x + int(dx * size), ground - trunk_h + int(dy * size * 0.62), x + int((dx + w) * size),
-               ground - trunk_h + int((dy + h) * size * 0.62))
-        block(d, box, shade(green, 1.0 + 0.08 * i) + (255,), max(3, size // 8), max(2, size // 12))
+    """Árbol de bloques: tronco y tres cubos de hojas apilados. La copa se apoya sobre el tronco y lo tapa arriba (antes
+    arrancaba más arriba de la punta del tronco y quedaba flotando)."""
+    depth, lift = max(3, size // 8), max(2, size // 12)
+    trunk_w = max(4, size // 4)
+    trunk_top = ground - int(size * 0.42)
+    block(d, (x - trunk_w // 2, trunk_top, x + trunk_w // 2, ground), (122, 84, 52, 255), max(2, depth // 2), 0)
+    bottom = trunk_top + max(2, size // 8)
+    for i, (half, height) in enumerate(((0.62, 0.44), (0.46, 0.36), (0.28, 0.30))):
+        top = bottom - int(height * size)
+        box = (x - int(half * size), top, x + int(half * size), bottom)
+        block(d, box, shade(green, 1.0 + 0.08 * i) + (255,), depth, lift)
+        bottom = top + 1  # el cubo de arriba se apoya sobre este
 
 
-def backdrop() -> Image.Image:
-    """Un mundo de Roblox al atardecer: nítido y con color (antes era todo borroso y apagado)."""
+def bird(phase: int) -> Image.Image:
+    """Un pájaro lejano (una "v"); phase 0-2 = alas arriba, en el medio, abajo."""
+    s3, w, h = 3, 17, 10
+    img = Image.new("RGBA", (w * s3, h * s3), (50, 58, 94, 0))
+    wing = (1.0, 4.0, 7.0)[phase]
+    ImageDraw.Draw(img).line([(0.5 * s3, wing * s3), (w / 2 * s3, 5.2 * s3), ((w - 0.5) * s3, wing * s3)],
+                             fill=(50, 58, 94, 230), width=int(1.9 * s3), joint="curve")
+    return img.resize((w, h), Image.Resampling.LANCZOS)
+
+
+# Lo que se mueve en el fondo repite su movimiento un número entero de veces por vuelta: el GIF empalma sin salto.
+PLATFORMS = [  # x, y, ancho, alto, color, cuánto se mueve en x y en y, vueltas por GIF
+    (520, 250, 84, 16, (255, 96, 96), 0, -12, 4),     # sube y baja
+    (590, 196, 70, 16, (255, 200, 70), -30, 0, 3),    # va y viene
+    (800, 196, 90, 18, (90, 176, 255), 0, 0, 1),
+    (860, 256, 70, 16, (176, 116, 244), 0, 0, 1),
+]
+CLOUDS = [(500, 36, 0.95, 240, 26), (760, 70, 0.72, 225, 20), (880, 150, 0.5, 200, 14), (640, 160, 0.42, 185, 12)]
+# el que hace el obby: salta del violeta al azul, festeja y vuelve (en segundos de su vuelta)
+HOP_FROM, HOP_TO = (901, 252), (851, 192)
+RUNNER_HOPS = [(1.4, 2.0, HOP_FROM, HOP_TO, 44), (4.6, 5.0, HOP_TO, HOP_TO, 16), (6.6, 7.2, HOP_TO, HOP_FROM, 26)]
+RUNNER_TURNS = [(0.0, -1), (5.3, 1), (8.0, -1)]  # hacia dónde mira desde cada momento
+
+
+def runner_pose(u: float) -> tuple[tuple[float, float], float]:
+    """Dónde tiene los pies y cuánto se estira (en el aire) o se aplasta (al caer), en el segundo `u` de su vuelta."""
+    feet, stretch = HOP_FROM, 1.0
+    for start, end, a, b, height in RUNNER_HOPS:
+        if u < start:
+            break
+        if u < end:
+            k = (u - start) / (end - start)
+            return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k - height * 4 * k * (1 - k)), 1.1
+        feet, stretch = b, (0.86 if u < end + 0.14 else 1.0)
+    return feet, stretch
+
+
+def put(img: Image.Image, sprite: Image.Image, x: int, y: int) -> None:
+    """alpha_composite que acepta posiciones fuera del cuadro (recorta lo que sobra)."""
+    if x <= -sprite.width or y <= -sprite.height or x >= img.width or y >= img.height:
+        return
+    if x < 0 or y < 0:
+        sprite = sprite.crop((max(0, -x), max(0, -y), sprite.width, sprite.height))
+        x, y = max(0, x), max(0, y)
+    img.alpha_composite(sprite, (x, y))
+
+
+class Backdrop:
+    """Un mundo de Roblox al atardecer, en capas: lo quieto se arma una vez y lo que se mueve (nubes, pájaros,
+    plataformas del obby y alguien haciéndolo) se dibuja en cada cuadro."""
+
     horizon = 330
-    img = gradient_stops((W, H), [(0.0, (46, 104, 204)), (0.33, (110, 164, 236)), (0.52, (240, 186, 170)),
-                                  (0.62, (255, 212, 168)), (1.0, (255, 212, 168))]).convert("RGBA")
-    glow = Image.new("L", (W, H), 0)
-    ImageDraw.Draw(glow).ellipse((690, 150, 910, 370), fill=255)
-    glow = glow.filter(ImageFilter.GaussianBlur(64))
-    img = Image.composite(Image.new("RGBA", (W, H), (255, 232, 196, 255)), img, glow.point(lambda v: int(v * 0.75)))
-    sun = Image.new("RGBA", (W, H), (255, 246, 216, 0))  # transparente del mismo color: sin aro oscuro
-    ImageDraw.Draw(sun).ellipse((764, 222, 840, 298), fill=(255, 246, 216, 255))
-    img = Image.alpha_composite(img, sun.filter(ImageFilter.GaussianBlur(1.2)))
-    for x, y, scale, alpha in ((500, 36, 0.95, 240), (760, 70, 0.72, 225), (880, 150, 0.5, 200), (640, 160, 0.42, 185)):
-        img.alpha_composite(cloud(scale, alpha), (x, y))
-    # lomas: lejos (lavanda, se funden con el cielo) y cerca (verdes)
-    for base, height, bumps, seed, color, blur in ((horizon - 4, 110, 6, 4, (160, 168, 214), 1.2),
-                                                   (horizon + 6, 64, 8, 11, (104, 160, 132), 0.6)):
-        layer = Image.new("RGBA", (W, H), color + (0,))  # transparente del mismo color: sin borde oscuro al suavizar
-        ImageDraw.Draw(layer).polygon(soft_ridge(W, base, height, bumps, seed), fill=color + (255,))
-        img = Image.alpha_composite(img, layer.filter(ImageFilter.GaussianBlur(blur)))
-    # suelo: la baseplate verde con su grilla en perspectiva
-    ground = gradient_stops((W, H - horizon), [(0, (132, 208, 98)), (1, (62, 150, 66))]).convert("RGBA")
-    grid = Image.new("RGBA", ground.size, (0, 0, 0, 0))
-    gd = ImageDraw.Draw(grid)
-    for i in range(1, 14):
-        y = int(ground.height * (i / 14) ** 1.8)
-        gd.line((0, y, W, y), fill=(255, 255, 255, 30), width=2)
-    vanishing = (W * 0.7, -320)
-    for i in range(-24, 40):
-        gd.line((vanishing[0], vanishing[1], i * 52, ground.height), fill=(255, 255, 255, 26), width=2)
-    img.alpha_composite(Image.alpha_composite(ground, grid), (0, horizon))
-    # camino de baldosas hasta la torre
-    world = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(world)
-    lane = [(640, H), (780, H), (738, horizon + 2), (704, horizon + 2)]
-    d.polygon(lane, fill=(230, 200, 146, 255))
-    mask = Image.new("L", (W, H), 0)
-    ImageDraw.Draw(mask).polygon(lane, fill=255)
-    seams = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    sd = ImageDraw.Draw(seams)
-    for i in range(1, 10):
-        y = horizon + 2 + int((H - horizon) * (i / 10) ** 1.6)
-        sd.line((600, y, 820, y), fill=(198, 166, 114, 255), width=2)
-    world.paste(seams, (0, 0), Image.composite(seams.getchannel("A"), Image.new("L", (W, H), 0), mask))
-    # hilera de árboles en el horizonte, la torre y las plataformas del obby
-    rng = random.Random(21)
-    x = 440
-    while x < W + 20:
-        if not 690 <= x <= 770:
-            tree(d, x, horizon + 6 + rng.randint(0, 6), rng.randint(18, 30),
-                 rng.choice([(64, 156, 78), (80, 172, 88), (58, 144, 72)]))
-        x += rng.randint(26, 44)
-    block(d, (694, 98, 752, horizon + 4), (240, 240, 248, 255), 16, 10)
-    block(d, (686, 82, 760, 100), (84, 152, 255, 255), 16, 10)
-    for yy in range(118, horizon - 8, 28):
-        d.rounded_rectangle((707, yy, 739, yy + 13), 3, fill=(122, 178, 242, 255))
-    for x0, y0, w, h, color in [(520, 250, 84, 16, (255, 96, 96)), (590, 196, 70, 16, (255, 200, 70)),
-                                (800, 196, 90, 18, (90, 176, 255)), (860, 256, 70, 16, (176, 116, 244))]:
-        block(d, (x0, y0, x0 + w, y0 + h), color + (255,), 12, 8)
-    img = Image.alpha_composite(img, world)
-    # avatares con su sombra
-    people = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    for spec in (AVATAR_A, AVATAR_B):
-        sprite = avatar(spec["size"], spec["shirt"], spec["pants"], face_dir=spec["dir"])
-        shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        ImageDraw.Draw(shadow).ellipse((spec["x"] - 44, spec["feet"] - 7, spec["x"] + 50, spec["feet"] + 9),
-                                       fill=(0, 0, 0, 90))
-        people = Image.alpha_composite(people, shadow.filter(ImageFilter.GaussianBlur(4)))
-        people.alpha_composite(sprite, (spec["x"] - sprite.width // 2, spec["feet"] - sprite.height + 4))
-    img = Image.alpha_composite(img, people)
-    # viñeta suave y grano fino (el grano evita las bandas del GIF)
-    yy, xx = np.mgrid[0:H, 0:W]
-    dist = np.sqrt(((xx - W / 2) / (W / 1.5)) ** 2 + ((yy - H / 2) / (H / 1.3)) ** 2)
-    vignette = np.clip(1 - (dist - 0.6) * 0.45, 0.82, 1)[..., None]
-    arr = np.asarray(img.convert("RGB")).astype(float) * vignette
-    arr += np.random.default_rng(3).normal(0, 0.7, arr.shape)
-    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB").convert("RGBA")
+
+    def __init__(self) -> None:
+        horizon = self.horizon
+        sky = gradient_stops((W, H), [(0.0, (46, 104, 204)), (0.33, (110, 164, 236)), (0.52, (240, 186, 170)),
+                                      (0.62, (255, 212, 168)), (1.0, (255, 212, 168))]).convert("RGBA")
+        glow = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(glow).ellipse((690, 150, 910, 370), fill=255)
+        glow = glow.filter(ImageFilter.GaussianBlur(64))
+        sky = Image.composite(Image.new("RGBA", (W, H), (255, 232, 196, 255)), sky, glow.point(lambda v: int(v * 0.75)))
+        sun = Image.new("RGBA", (W, H), (255, 246, 216, 0))  # transparente del mismo color: sin aro oscuro
+        ImageDraw.Draw(sun).ellipse((764, 222, 840, 298), fill=(255, 246, 216, 255))
+        self.sky = Image.alpha_composite(sky, sun.filter(ImageFilter.GaussianBlur(1.2)))
+        self.clouds = [(cloud(scale, alpha), x, y, drift) for x, y, scale, alpha, drift in CLOUDS]
+        self.birds = [bird(phase) for phase in range(3)]
+
+        # la tierra: lomas, suelo con su grilla, camino, árboles y la torre (transparente arriba de las lomas)
+        land = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        for base, height, bumps, seed, color, blur in ((horizon - 4, 110, 6, 4, (160, 168, 214), 1.2),
+                                                       (horizon + 6, 64, 8, 11, (104, 160, 132), 0.6)):
+            layer = Image.new("RGBA", (W, H), color + (0,))  # transparente del mismo color: sin borde oscuro
+            ImageDraw.Draw(layer).polygon(soft_ridge(W, base, height, bumps, seed), fill=color + (255,))
+            land = Image.alpha_composite(land, layer.filter(ImageFilter.GaussianBlur(blur)))
+        ground = gradient_stops((W, H - horizon), [(0, (132, 208, 98)), (1, (62, 150, 66))]).convert("RGBA")
+        grid = Image.new("RGBA", ground.size, (0, 0, 0, 0))
+        gd = ImageDraw.Draw(grid)
+        for i in range(1, 14):
+            y = int(ground.height * (i / 14) ** 1.8)
+            gd.line((0, y, W, y), fill=(255, 255, 255, 30), width=2)
+        vanishing = (W * 0.7, -320)
+        for i in range(-24, 40):
+            gd.line((vanishing[0], vanishing[1], i * 52, ground.height), fill=(255, 255, 255, 26), width=2)
+        land.alpha_composite(Image.alpha_composite(ground, grid), (0, horizon))
+        world = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d = ImageDraw.Draw(world)
+        lane = [(640, H), (780, H), (738, horizon + 2), (704, horizon + 2)]
+        d.polygon(lane, fill=(230, 200, 146, 255))
+        mask = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(mask).polygon(lane, fill=255)
+        seams = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        sd = ImageDraw.Draw(seams)
+        for i in range(1, 10):
+            y = horizon + 2 + int((H - horizon) * (i / 10) ** 1.6)
+            sd.line((600, y, 820, y), fill=(198, 166, 114, 255), width=2)
+        world.paste(seams, (0, 0), Image.composite(seams.getchannel("A"), Image.new("L", (W, H), 0), mask))
+        rng = random.Random(21)
+        trees, x = [], 440
+        while x < W + 20:
+            if not 690 <= x <= 770:
+                trees.append((horizon + 6 + rng.randint(0, 6), x, rng.randint(18, 30),
+                              rng.choice([(64, 156, 78), (80, 172, 88), (58, 144, 72)])))
+            x += rng.randint(26, 44)
+        for ground_y, x, size, green in sorted(trees):  # los de más atrás primero
+            tree(d, x, ground_y, size, green)
+        block(d, (694, 98, 752, horizon + 4), (240, 240, 248, 255), 16, 10)
+        block(d, (686, 82, 760, 100), (84, 152, 255, 255), 16, 10)
+        for yy in range(118, horizon - 8, 28):
+            d.rounded_rectangle((707, yy, 739, yy + 13), 3, fill=(122, 178, 242, 255))
+        self.land = Image.alpha_composite(land, world)
+
+        # los dos avatares de adelante, con su sombra
+        people = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        for spec in (AVATAR_A, AVATAR_B):
+            sprite = avatar(spec["size"], spec["shirt"], spec["pants"], face_dir=spec["dir"])
+            shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            ImageDraw.Draw(shadow).ellipse((spec["x"] - 44, spec["feet"] - 7, spec["x"] + 50, spec["feet"] + 9),
+                                           fill=(0, 0, 0, 90))
+            people = Image.alpha_composite(people, shadow.filter(ImageFilter.GaussianBlur(4)))
+            people.alpha_composite(sprite, (spec["x"] - sprite.width // 2, spec["feet"] - sprite.height + 4))
+        self.people = people
+        self.runner = {face: avatar(6, (255, 146, 52), (46, 52, 70), face_dir=face) for face in (-1, 1)}
+
+        # viñeta suave y grano fino (el grano evita las bandas del GIF)
+        yy, xx = np.mgrid[0:H, 0:W]
+        dist = np.sqrt(((xx - W / 2) / (W / 1.5)) ** 2 + ((yy - H / 2) / (H / 1.3)) ** 2)
+        self.vignette = np.clip(1 - (dist - 0.6) * 0.45, 0.82, 1)[..., None].astype(np.float32)
+        self.grain = np.random.default_rng(3).normal(0, 0.7, (H, W, 3)).astype(np.float32)
+
+    @staticmethod
+    def wave(t: float, laps: int) -> float:
+        """0 → 1 → 0, suave, `laps` veces por vuelta del GIF."""
+        return (1 - math.cos(2 * math.pi * t * laps / TOTAL)) / 2
+
+    def draw_sky(self, img: Image.Image, t: float) -> None:
+        drift = math.sin(2 * math.pi * t / TOTAL)  # el viento lleva las nubes y las trae (las grandes, más)
+        for sprite, x, y, amount in self.clouds:
+            put(img, sprite, x + round(amount * drift), y)
+        if 2.5 <= t < 15.5:  # una bandada que cruza el cielo
+            lead = -40 + (t - 2.5) * 80
+            for i, (dx, dy) in enumerate(((0, 0), (-19, -9), (-33, 5))):
+                flap = self.birds[int((t * 7 + i * 0.8) % 3)]
+                put(img, flap, round(lead + dx), round(118 + dy + 4 * math.sin(t * 2.2 + i)))
+
+    def draw_obby(self, img: Image.Image, t: float) -> None:
+        d = ImageDraw.Draw(img)
+        for x, y, w, h, color, move_x, move_y, laps in PLATFORMS:
+            k = self.wave(t, laps)
+            x0, y0 = x + round(move_x * k), y + round(move_y * k)
+            block(d, (x0, y0, x0 + w, y0 + h), color + (255,), 12, 8)
+        # alguien haciendo el obby (su vuelta dura un tercio del GIF)
+        u = t % (TOTAL / 3)
+        feet, stretch = runner_pose(u)
+        face = [f for since, f in RUNNER_TURNS if u >= since][-1]
+        sprite = self.runner[face]
+        if stretch != 1.0:
+            sprite = sprite.resize((sprite.width, round(sprite.height * stretch)), Image.Resampling.LANCZOS)
+        img.alpha_composite(sprite, (round(feet[0] - sprite.width / 2), round(feet[1] - sprite.height * 5.9 / 6.2)))
+
+    def at(self, t: float) -> Image.Image:
+        img = self.sky.copy()
+        self.draw_sky(img, t)
+        img = Image.alpha_composite(img, self.land)
+        self.draw_obby(img, t)
+        img = Image.alpha_composite(img, self.people)
+        arr = np.asarray(img.convert("RGB"), dtype=np.float32) * self.vignette + self.grain
+        return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB").convert("RGBA")
 
 
 def head_top(spec) -> tuple[int, int]:
@@ -630,8 +725,8 @@ TOTAL = 25.7
 LOOP_FADE = 0.4
 
 
-def frame_at(base: Image.Image, t: float) -> Image.Image:
-    canvas = base.copy()
+def frame_at(base: Backdrop, t: float) -> Image.Image:
+    canvas = base.at(t)
     draw_bubble(canvas, t)
     draw_chat(canvas, t)
     draw_voice(canvas, t)
@@ -644,7 +739,7 @@ def frame_at(base: Image.Image, t: float) -> Image.Image:
 
 
 def main() -> None:
-    base = backdrop()
+    base = Backdrop()
     times = [i * DT for i in range(int(TOTAL / DT))]
     frames = [frame_at(base, t) for t in times]
     # vuelta suave al principio
@@ -656,7 +751,7 @@ def main() -> None:
     for name, t in (("still_chat", 5.9), ("still_compose", 10.9), ("still_voice", 15.5), ("still_speak", 22.4)):
         frame_at(base, t).save(SCRATCH / f"{name}.png")
 
-    # GIF con ffmpeg: paleta pensada para lo que cambia y tramado ordenado (lo que no cambia queda idéntico)
+    # GIF con ffmpeg
     import shutil
     import subprocess
 
