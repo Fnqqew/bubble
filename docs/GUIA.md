@@ -133,15 +133,17 @@ que se use (~60 MB). Quedan en `%LOCALAPPDATA%\Bubble\models`.
   Tarda ~2 s desde que termina de hablar; casi todo es lo que tarda Claude.
 - Cada persona tiene su color y su número (**Voz 1**, **Voz 2**…) y Bubble la reconoce cuando vuelve a hablar. No
   sabe su nombre de Roblox: la numera en el orden en que aparece.
-- Lo que ya está en tu idioma no se subtitula (tu idioma pesa más al detectar, y si Claude confirma que ya estaba
-  en tu idioma, la frase desaparece).
+- Lo que ya está en tu idioma no se subtitula ni se traduce: si Whisper dice que es tu idioma (y el texto no dice
+  claramente otro), queda como está.
 
-Se subtitula todo lo que suena en la PC. Si tenés Discord o un video abierto, también.
+Se escucha **solo el sonido de Roblox** (Windows 11): Discord, un video o la música no se subtitulan. En Windows más
+viejos se escucha todo lo que suena en la PC.
 
 **Tu voz, traducida.** Interruptor **Tu voz para los demás**, en Inicio. En la página **Voz** elegís cómo:
 
-- **Mientras aprieto un botón:** apretás el botón (por defecto el **botón lateral del mouse, adelante**), hablás y
-  lo soltás.
+- **Con un botón** (por defecto el **botón lateral del mouse, adelante**):
+  - **tocalo y hablá:** cuando terminás de hablar, se traduce y se dice solo (o tocalo otra vez para terminar);
+  - o **mantenelo apretado** mientras hablás y soltalo.
 - **Directo, sin botón:** hablás normal. Cada frase que decís sale traducida en voz ~2 s después de que terminás.
   Ojo: traduce todo lo que diga tu micrófono.
 - **Escribiendo:** en la barra para escribir, **Ctrl+Enter** en vez de Enter.
@@ -165,6 +167,13 @@ micrófono virtual. Bubble usa VB-Audio Virtual Cable (gratis):
 Bubble pasa tu micrófono al virtual en vivo y le suma la voz traducida: los demás te escuchan a vos y a tu voz
 traducida (mientras suena, tu voz baja). Con **Pasar también mi voz real** apagado, solo escuchan la traducida.
 Si cerrás Bubble, en Roblox volvé a elegir tu micrófono de siempre.
+
+**Muteado en Roblox.** Si tenés el micrófono muteado en Roblox (la raya roja arriba a la izquierda), Bubble te
+desmutea solo mientras suena tu voz traducida y te vuelve a mutear: un clic en ese botón, y el mouse vuelve a donde
+estaba. Pasa lo mismo con Ctrl+Enter. Se apaga en **Voz → Desmutearme en Roblox solo mientras suena**. Si Roblox
+tiene el mouse trabado en el juego (primera persona), el clic no llega: desmuteate a mano.
+
+Sin el micrófono virtual, la página **Voz** te avisa: tu voz traducida suena solo en tus auriculares.
 
 El chat de voz de Roblox pide verificación de edad. Usar voz sintética puede ir contra sus reglas en algunos
 casos: usala con cuidado, para comunicarte.
@@ -327,6 +336,11 @@ píldoras fuera de lugar, mensajes sin tapar y basura. Tarda un minuto por escen
 - `python -m bubble --console` traduce por consola (`Nombre: mensaje`, o `> lo que escribís`).
 
 ## Si algo no anda
+
+Bubble anota lo que va haciendo en `%APPDATA%\Bubble\bubble.log` (cuándo se sacó una captura, si escucha solo a
+Roblox, si te desmuteó…) y los errores en `errores.log`. No anota lo que dicen en el chat ni lo que tecleás. Si algo
+falla, esos dos archivos dicen por qué.
+
 
 - **No encuentra el chat:** esperá a que haya dos o tres mensajes a la vista y tocá **Ajustes → Buscar el chat**,
   o **Marcarlo a mano**.

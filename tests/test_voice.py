@@ -286,3 +286,140 @@ def test_voices_have_both_genders_where_piper_has_them():
     assert voices.voice_for("es-AR", "femenina") == "es_AR-daniela-high"
     assert voices.voice_for("pt", "femenina") == "pt_BR-faber-medium"  # sin voz femenina: la otra
     assert all(voices.voice_for(code) is None for code in NO_VOICE)
+
+
+# ---------------------------------------------------------------- el botón para hablar: tocar o mantener
+class _RealTimeMic:
+    """Micrófono falso al ritmo real (silencio: lo que importa es cuándo termina de grabar)."""
+
+    def recorder(self, **_options):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def record(self, numframes):
+        import time as _time
+
+        _time.sleep(numframes / 16000)
+        return np.zeros(numframes, np.float32)
+
+
+class _ScriptedVad:
+    """Hay voz hasta `speech_until` segundos después de crearlo."""
+
+    def __init__(self, speech_until: float) -> None:
+        import time as _time
+
+        self.until = _time.monotonic() + speech_until
+
+    def feed(self, _samples):
+        import time as _time
+
+        return np.array([1.0 if _time.monotonic() < self.until else 0.0], np.float32)
+
+
+def _speaker(held_for: float, speech_s: float):
+    import time as _time
+
+    from bubble.voice.pipelines import VoiceSpeaker
+
+    pressed = _time.monotonic()
+    speaker = VoiceSpeaker(None, None, lambda _t: None, 0, "es", mic_factory=_RealTimeMic,
+                           vad_factory=lambda: _ScriptedVad(speech_s), held=lambda: _time.monotonic() - pressed < held_for)
+    speaker._running.set()
+    return speaker
+
+
+def test_tap_listens_until_you_stop_talking():
+    import time as _time
+
+    started = _time.monotonic()
+    audio = _speaker(held_for=0.1, speech_s=1.0)._record()
+    took = _time.monotonic() - started
+    assert audio is not None
+    # 1 s hablando + 0,8 s de silencio para saber que terminaste
+    assert 1.6 <= took <= 2.6
+
+
+def test_holding_records_until_release():
+    import time as _time
+
+    started = _time.monotonic()
+    audio = _speaker(held_for=0.9, speech_s=5.0)._record()
+    assert audio is not None and 0.8 <= _time.monotonic() - started <= 1.2
+
+
+def test_tap_without_talking_is_cancelled():
+    from bubble.voice.pipelines import VoiceSpeaker
+
+    events = []
+    speaker = _speaker(held_for=0.1, speech_s=0.0)
+    speaker.NO_SPEECH_S = 0.6
+    speaker.on_event = lambda kind, text: events.append(kind)
+    assert speaker._record() is None and "error" in events
+    assert VoiceSpeaker.NO_SPEECH_S > 3
+
+
+class _FakeMicSwitch:
+    def __init__(self, muted: bool) -> None:
+        self.muted, self.calls = muted, []
+
+    def unmute(self):
+        self.calls.append("unmute")
+        if self.muted:
+            self.muted = False
+            return True
+        return False
+
+    def mute_again(self):
+        self.calls.append("mute")
+        self.muted = True
+
+
+def _out(switch, is_cable=True):
+    from bubble.voice import audio as audio_io
+    from bubble.voice.pipelines import VoiceOut
+
+    class _Voices:
+        def synthesize(self, _text, _language):
+            from types import SimpleNamespace
+
+            return SimpleNamespace(audio=np.zeros(160, np.float32), sample_rate=16000)
+
+    played = []
+    out = VoiceOut(_Voices(), hear_myself=False, output=audio_io.Output(None, is_cable), mic_switch=switch)
+    return out, played
+
+
+def test_unmutes_only_while_speaking_and_mutes_again(monkeypatch):
+    from bubble.voice import audio as audio_io
+
+    switch = _FakeMicSwitch(muted=True)
+    out, _played = _out(switch)
+    monkeypatch.setattr(audio_io, "play", lambda *_a: switch.calls.append("play"))
+    assert out.say("hola", "en")
+    assert switch.calls == ["unmute", "play", "mute"] and switch.muted
+
+
+def test_does_not_touch_the_mic_if_you_were_not_muted(monkeypatch):
+    from bubble.voice import audio as audio_io
+
+    switch = _FakeMicSwitch(muted=False)
+    out, _played = _out(switch)
+    monkeypatch.setattr(audio_io, "play", lambda *_a: switch.calls.append("play"))
+    out.say("hola", "en")
+    assert switch.calls == ["unmute", "play"] and not switch.muted
+
+
+def test_without_virtual_mic_roblox_mute_is_left_alone(monkeypatch):
+    from bubble.voice import audio as audio_io
+
+    switch = _FakeMicSwitch(muted=True)
+    out, _played = _out(switch, is_cable=False)
+    monkeypatch.setattr(audio_io, "play", lambda *_a: switch.calls.append("play"))
+    out.say("hola", "en")
+    assert switch.calls == ["play"] and switch.muted

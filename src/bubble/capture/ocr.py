@@ -117,28 +117,69 @@ def _same_line(a: OcrRow, b: OcrRow) -> bool:
     return overlap >= 0.5 * min(a.height, b.height)
 
 
+GAP_LETTERS = 3.0  # hueco (en alturas de letra) desde el que dos textos a la misma altura son cosas distintas
+
+
+def _gap_limit(rows: list[OcrRow]) -> float:
+    heights = sorted(w.height for r in rows for w in r.words) or sorted(r.height for r in rows)
+    return max(24.0, GAP_LETTERS * heights[len(heights) // 2])
+
+
+def _from_words(words: list[OcrWord]) -> OcrRow:
+    top, left = min(w.top for w in words), min(w.left for w in words)
+    return OcrRow(" ".join(w.text for w in words), top, max(w.top + w.height for w in words) - top, left,
+                  max(w.right for w in words) - left, tuple(words))
+
+
+def split_far_words(row: OcrRow) -> list[OcrRow]:
+    """Separa una línea con un hueco enorme en el medio: el OCR junta el mensaje del chat con lo que haya a la misma
+    altura más a la derecha (la burbuja de otro jugador, un nombre sobre una cabeza, un cartel del juego)."""
+    words = sorted(row.words, key=lambda w: w.left)
+    if len(words) < 2:
+        return [row]
+    limit = _gap_limit([row])
+    parts = [[words[0]]]
+    for word in words[1:]:
+        if word.left - max(w.right for w in parts[-1]) > limit:
+            parts.append([word])
+        else:
+            parts[-1].append(word)
+    return [row] if len(parts) == 1 else [_from_words(part) for part in parts]
+
+
 def merge_rows(rows: list[OcrRow]) -> list[OcrRow]:
-    """Une fragmentos de la misma línea (Windows separa el nombre coloreado del mensaje)."""
+    """Une fragmentos de la misma línea (Windows separa el nombre coloreado del mensaje), pero solo si están cerca:
+    texto del juego a la misma altura, lejos a la derecha, no es parte del mensaje."""
     merged: list[list[OcrRow]] = []
+    rows = [part for row in rows for part in split_far_words(row)]
     for row in sorted(rows, key=lambda r: r.top + r.height / 2):
         if merged and any(_same_line(row, other) for other in merged[-1]):
             merged[-1].append(row)
         else:
             merged.append([row])
     result = []
-    for group in merged:
-        group.sort(key=lambda r: r.left)
-        top = min(r.top for r in group)
-        left = group[0].left
-        result.append(OcrRow(
-            text=" ".join(r.text for r in group),
-            top=top,
-            height=max(r.bottom for r in group) - top,
-            left=left,
-            width=max(r.right for r in group) - left,
-            words=tuple(w for r in group for w in r.words),
-        ))
-    return result
+    for line in merged:
+        line.sort(key=lambda r: r.left)
+        limit = _gap_limit(line)
+        groups = [[line[0]]]
+        for row in line[1:]:
+            reach = max(r.right if r.width else float("inf") for r in groups[-1])  # sin ancho: no se sabe
+            if row.left - reach > limit:
+                groups.append([row])
+            else:
+                groups[-1].append(row)
+        for group in groups:
+            top = min(r.top for r in group)
+            left = group[0].left
+            result.append(OcrRow(
+                text=" ".join(r.text for r in group),
+                top=top,
+                height=max(r.bottom for r in group) - top,
+                left=left,
+                width=max(r.right for r in group) - left,
+                words=tuple(w for r in group for w in r.words),
+            ))
+    return sorted(result, key=lambda r: (r.top, r.left))
 
 
 def _use_system_cpp_runtime() -> None:

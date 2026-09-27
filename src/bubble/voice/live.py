@@ -123,7 +123,7 @@ class LiveListener:
         on_caption: Callable[[Caption], None],
         partial_asr: FastWhisper | None = None,
         speakers: SpeakerTracker | None = None,
-        source_factory: Callable = audio_io.speaker_loopback,
+        source_factory: Callable = audio_io.game_audio,
         on_error: Callable[[str], None] = lambda _msg: None,
         settings: Settings | None = None,
         vad=None,
@@ -341,6 +341,8 @@ class LiveListener:
         prior = {language: 1.0 + strength * count / total for language, count in self._languages.items()}
         if self.native:
             prior[self.native] = prior.get(self.native, 1.0) + 1.0
+        # En Roblox lo más común es el inglés: con acento o con ruido, Whisper lo confundía con otros idiomas.
+        prior["en"] = prior.get("en", 1.0) + 0.5
         return prior
 
     def _partial(self, utterance: _Utterance, audio: np.ndarray, tail: bool = False) -> None:

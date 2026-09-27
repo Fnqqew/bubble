@@ -19,6 +19,7 @@ from .ocr import (
     WHITE_TEXT, WindowsOcr, binarize_local_background, looks_faded, prepare_chat_image, white_text_bands,
 )
 from .screen import grab, reading_mark, still_readable
+from .chat_parser import column_rows
 
 log = logging.getLogger(__name__)
 
@@ -119,6 +120,8 @@ class ChatFrame:
     image: Image.Image
     region: Rect
     items: list[ChatItem]
+    # Hasta dónde llega el texto del chat (dentro de la imagen): las traducciones no pasan de ahí. 0 = no se sabe.
+    text_right: float = 0.0
 
 
 class ChatWatcher:
@@ -149,6 +152,7 @@ class ChatWatcher:
         self._task: asyncio.Task | None = None
         self._wrap_region: Rect | None = None
         self._wrap_right = 0.0
+        self._text_right = 0.0  # lo más a la derecha que llegó un mensaje (también con el chat sin fondo)
         self._last_parsed: list[ChatItem] | None = None
         self._last_region: Rect | None = None
         self._last_fingerprint: bytes = b""
@@ -173,9 +177,9 @@ class ChatWatcher:
         # Borde donde Roblox corta las líneas largas: el más a la derecha visto en esta región (solo con el fondo
         # oscuro: sobre el juego, un borde de un árbol leído como texto lo correría).
         if region != self._wrap_region:
-            self._wrap_region, self._wrap_right = region, 0.0
+            self._wrap_region, self._wrap_right, self._text_right = region, 0.0, 0.0
         if not faded:
-            self._wrap_right = max([self._wrap_right, *(r.right for r in rows if r.words)])
+            self._wrap_right = max([self._wrap_right, *(r.right for r in column_rows(rows) if r.words)])
         wrap = self._wrap_right if self._wrap_right >= 0.5 * image.width else 0
         parsed = parse_chat_items(rows, self.tracker.is_known_name, image.width, wrap)
         bands = await asyncio.to_thread(_uncovered_bands, image, parsed)
@@ -204,6 +208,11 @@ class ChatWatcher:
             for item in missing:
                 item.uncertain = True  # puede ser texto mal leído: un mensaje nuevo así se confirma con otra lectura
             parsed = sorted(parsed + missing, key=lambda item: item.top)
+        if faded:
+            # Sin el fondo oscuro el OCR se equivoca mucho más (letras sobre el agua, el pasto...): un mensaje nuevo
+            # se traduce cuando se lee igual en otra captura (una fracción de segundo después).
+            for item in parsed:
+                item.uncertain = True
         return parsed
 
     @property
@@ -269,7 +278,8 @@ class ChatWatcher:
                 for item, canonical, origin, uid in zip(items, self.tracker.visible, self.tracker.visible_origins,
                                                         self.tracker.visible_ids):
                     item.speaker, item.origin, item.uid = canonical.speaker, origin, uid
-                self.on_frame(ChatFrame(image, region, items))
+                self._text_right = max([self._text_right, *(row.right for item in parsed for row in item.rows)])
+                self.on_frame(ChatFrame(image, region, items, max(self._wrap_right, self._text_right)))
                 for line in new:
                     self.on_message(line)
                 watch.seconds += time.thread_time() - parse_started

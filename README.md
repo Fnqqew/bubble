@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 2.0" src="https://img.shields.io/badge/versión-2.0-4a90e2?style=flat-square">
+  <img alt="Versión 2.1" src="https://img.shields.io/badge/versión-2.1-4a90e2?style=flat-square">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
   <img alt="Con tu suscripción de Claude" src="https://img.shields.io/badge/con%20tu%20suscripción-Claude-d97757?style=flat-square">
 </p>
@@ -50,11 +50,11 @@ movés la cámara.
 ves cómo va a quedar. Bubble solo abre el chat, escribe y envía; no toca ninguna otra tecla del juego.
 
 **Te subtitula la voz.** Lo que te dicen por voz aparece abajo, como en una película: quién habla (Voz 1, Voz 2…)
-y qué dice, en tu idioma, casi al instante.
+y qué dice, en tu idioma, casi al instante. Escucha solo a Roblox: ni Discord ni la música que tengas de fondo.
 
-**Habla por vos.** Hablás en tu idioma y los demás te escuchan en el suyo, con una voz femenina o masculina: con un
-botón, en modo directo o escribiendo (Ctrl+Enter). Como Soundpad, sale por tu micrófono en Roblox, junto con tu voz
-real. [Cómo activarla](docs/GUIA.md#voz).
+**Habla por vos.** Tocás un botón, hablás en tu idioma y, cuando terminás, los demás te escuchan en el suyo, con una
+voz femenina o masculina (también en modo directo o escribiendo, con Ctrl+Enter). Como Soundpad, sale por tu
+micrófono en Roblox; si estás muteado, te desmutea solo mientras suena. [Cómo activarla](docs/GUIA.md#voz).
 
 <br>
 

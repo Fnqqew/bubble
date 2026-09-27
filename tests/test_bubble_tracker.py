@@ -133,3 +133,14 @@ def test_old_bubble_moves_up_and_new_one_appears_below():
     new = next(t for t in tracks if t.id != old.id)
     assert kept.box.top < new.box.top  # la vieja (arriba) conserva su traducción
     assert kept.current_text and not new.text and new.needs_ocr()
+
+
+def test_fast_closing_matches_scipy():
+    import numpy as np
+
+    from bubble.capture.bubble_tracker import _ndimage, close_3x3
+
+    rng = np.random.default_rng(3)
+    for density in (0.3, 0.6, 0.9):
+        mask = rng.random((61, 97)) < density
+        assert np.array_equal(close_3x3(mask), _ndimage().binary_closing(mask, structure=np.ones((3, 3))))

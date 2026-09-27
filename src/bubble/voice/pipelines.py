@@ -1,12 +1,14 @@
 """Tu voz traducida, para que te escuchen los demás (lo que te dicen a vos está en live.py).
 
 Tres formas de usarla:
-- VoiceSpeaker: mientras mantenés apretada una tecla, graba tu micrófono → Whisper → Claude → voz sintética.
+- VoiceSpeaker: tocás un botón y hablás (termina solo cuando dejás de hablar), o lo mantenés apretado mientras
+  hablás → Whisper → Claude → voz sintética.
 - DirectVoice: traducción directa, sin tecla: cada frase que decís se traduce y se dice sola.
 - Escribiendo (la barra, Ctrl+Enter): el texto traducido se dice con la voz sintética.
 
 Las tres terminan en VoiceOut: la voz sintética sale por el micrófono virtual (lo que Roblox escucha como tu
-micrófono) y, si querés, también por tus auriculares, para que sepas qué dijo.
+micrófono) y, si querés, también por tus auriculares, para que sepas qué dijo. Si estás muteado en Roblox, te desmutea
+mientras suena y te vuelve a mutear (ver roblox_mic.py).
 """
 
 from __future__ import annotations
@@ -36,8 +38,10 @@ class VoiceOut:
     """Dice un texto con voz sintética: al micrófono virtual y (si querés) a tus auriculares."""
 
     def __init__(self, voices: Voices, hear_myself: bool = True, output: audio_io.Output | None = None,
-                 bridge=None) -> None:
+                 bridge=None, mic_switch=None) -> None:
         self.voices = voices
+        # Tu micrófono en Roblox (roblox_mic.RobloxMic): si estás muteado, se desmutea solo mientras suena la frase.
+        self.mic_switch = mic_switch
         self.output = output or audio_io.voice_output()
         self.bridge = bridge  # tu micrófono pasando al virtual (ver bridge.py): baja mientras suena la traducida
         # Con el micrófono virtual, tu voz traducida va a Roblox y vos no la escucharías: también suena, más bajo,
@@ -58,16 +62,34 @@ class VoiceOut:
         if speech is None:
             return False
         with self._lock:
-            seconds = len(speech.audio) / speech.sample_rate
-            for listener in self.listeners:
-                listener(seconds)
-            if self.bridge is not None and self.bridge.running:
-                self.bridge.duck(seconds + 0.25)
-            if self.hear_myself and self.output.is_cable:
-                threading.Thread(target=self._monitor, args=(speech,), name="bubble-tu-voz-escucha",
-                                 daemon=True).start()
-            audio_io.play(self.output, speech.audio, speech.sample_rate)
+            unmuted = self._unmute()
+            try:
+                seconds = len(speech.audio) / speech.sample_rate
+                for listener in self.listeners:
+                    listener(seconds)
+                if self.bridge is not None and self.bridge.running:
+                    self.bridge.duck(seconds + 0.25)
+                if self.hear_myself and self.output.is_cable:
+                    threading.Thread(target=self._monitor, args=(speech,), name="bubble-tu-voz-escucha",
+                                     daemon=True).start()
+                audio_io.play(self.output, speech.audio, speech.sample_rate)
+            finally:
+                if unmuted:
+                    try:
+                        self.mic_switch.mute_again()
+                    except Exception:  # noqa: BLE001
+                        log.debug("No se pudo volver a mutear en Roblox", exc_info=True)
         return True
+
+    def _unmute(self) -> bool:
+        """Solo con el micrófono virtual: sin él, Roblox escucharía tu micrófono real, no la voz traducida."""
+        if self.mic_switch is None or not self.output.is_cable:
+            return False
+        try:
+            return bool(self.mic_switch.unmute())
+        except Exception:  # noqa: BLE001 - si no se puede, suena igual (quizás no estabas muteado)
+            log.debug("No se pudo desmutear en Roblox", exc_info=True)
+            return False
 
     def _monitor(self, speech) -> None:
         try:
@@ -77,9 +99,15 @@ class VoiceOut:
 
 
 class VoiceSpeaker:
-    """Con tecla: mientras la mantenés apretada se graba; al soltarla se traduce y se dice."""
+    """Con un botón, de dos formas:
+    - lo tocás (y lo soltás enseguida): te escucha y termina solo cuando dejás de hablar (o cuando lo volvés a tocar);
+    - lo mantenés apretado mientras hablás: termina al soltarlo.
+    Después se traduce y se dice (y si estabas muteado en Roblox, te desmutea solo mientras suena)."""
 
     MAX_SECONDS = 20.0
+    TAP_S = 0.35  # soltarlo antes de esto es "tocarlo"
+    END_SILENCE_S = 0.8  # tocándolo: este silencio después de hablar es que terminaste
+    NO_SPEECH_S = 6.0  # tocándolo: si no hablás en este tiempo, se cancela
 
     def __init__(
         self,
@@ -90,14 +118,19 @@ class VoiceSpeaker:
         my_language: str,
         on_event: Callable[[str, str], None] = lambda _kind, _text: None,
         mic_factory: Callable = audio_io.microphone,
+        vad_factory: Callable | None = None,
+        held: Callable[[], bool] | None = None,
     ) -> None:
         self.transcriber = transcriber
         self.out = out
         self.translate = translate
         self.vk = push_to_talk_vk
         self.my_language = my_language
-        self.on_event = on_event  # ("grabando" | "entendi" | "traduccion" | "error", texto)
+        self.on_event = on_event  # ("grabando" | "escuchando" | "entendi" | "traduccion" | "error", texto)
         self.mic_factory = mic_factory
+        self.vad_factory = vad_factory
+        if held is not None:
+            self._held = held
         self._running = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -123,22 +156,55 @@ class VoiceSpeaker:
         while self.running:
             down = self._held()
             if down and not was_down:
-                recorded = self._record_while_held()
+                recorded = self._record()
                 if recorded is not None and len(recorded) > SAMPLE_RATE * 0.4:
                     threading.Thread(target=self.speak, args=(recorded,), name="bubble-tu-voz-trad", daemon=True).start()
-                down = False
+                down = self._held()  # un segundo toque para terminar no vuelve a empezar: se espera a que lo sueltes
             was_down = down
             time.sleep(0.015)
 
-    def _record_while_held(self) -> np.ndarray | None:
+    def _new_vad(self):
+        if self.vad_factory is not None:
+            return self.vad_factory()
+        from .vad import StreamingVad
+
+        return StreamingVad()
+
+    def _record(self) -> np.ndarray | None:
+        """Graba mientras lo mantenés apretado, o, si lo tocaste, hasta que dejás de hablar."""
         self.on_event("grabando", "")
         blocks: list[np.ndarray] = []
         try:
             audio_io.com_ready()
             with self.mic_factory().recorder(samplerate=SAMPLE_RATE, channels=1, blocksize=BLOCK * 4) as recorder:
                 started = time.monotonic()
-                while self._held() and time.monotonic() - started < self.MAX_SECONDS and self.running:
-                    blocks.append(audio_io.to_mono(recorder.record(numframes=BLOCK)))
+                released_at: float | None = None  # cuándo lo soltaste, si fue un toque
+                vad, spoke, quiet_since = None, False, None
+                while self.running and time.monotonic() - started < self.MAX_SECONDS:
+                    block = audio_io.to_mono(recorder.record(numframes=BLOCK))
+                    blocks.append(block)
+                    now, held = time.monotonic(), self._held()
+                    if released_at is None:
+                        if held:
+                            continue
+                        if now - started >= self.TAP_S:
+                            break  # lo mantuviste apretado mientras hablabas: al soltarlo, listo
+                        released_at = now  # fue un toque: se escucha hasta que termines de hablar
+                        self.on_event("escuchando", "")
+                        vad = self._new_vad()
+                        block = np.concatenate(blocks)
+                    if held and now - released_at > 0.3:
+                        break  # otro toque: terminaste
+                    probs = vad.feed(block)
+                    if len(probs) and float(np.max(probs)) >= 0.5:
+                        spoke, quiet_since = True, None
+                    elif len(probs) and spoke:
+                        quiet_since = quiet_since or now
+                        if now - quiet_since >= self.END_SILENCE_S:
+                            break
+                    if not spoke and now - released_at >= self.NO_SPEECH_S:
+                        self.on_event("error", "No te escuché: tocá el botón y hablá")
+                        return None
         except Exception as exc:  # noqa: BLE001
             self.on_event("error", f"No se pudo usar el micrófono: {exc}")
             return None

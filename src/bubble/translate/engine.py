@@ -162,7 +162,7 @@ class Translator:
         looks_native = (source == target and (confident or hints)) or lexical_share(text, target) >= LEXICAL_SKIP
         if not foreign and looks_native:
             source = target
-            if self._foreign_region(hints, target, region):
+            if self.config.translation.adapt_slang and self._foreign_region(hints, target, region):
                 mode = "adapt"  # mismo idioma, pero con jerga de otro país
             else:
                 self.history.append(ChatLine(speaker, text))

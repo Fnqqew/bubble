@@ -40,6 +40,9 @@ RIDEV_INPUTSINK, RID_INPUT, RIM_TYPEKEYBOARD, RI_KEY_BREAK = 0x100, 0x10000003, 
 HWND_MESSAGE = wintypes.HWND(-3)
 
 
+_KEY_NAMES = {VK_SNAPSHOT: "Impr Pant", VK_LWIN: "Win", VK_RWIN: "Win"}
+
+
 def hold_for(vk: int, down: bool, win: bool, shift: bool) -> float:
     """Cuántos segundos mostrar las traducciones en capturas por esta tecla (0: no es para sacar una captura)."""
     if not down:
@@ -105,6 +108,7 @@ class ScreenshotKeys(threading.Thread):
         self.showing = False  # las traducciones se ven en las capturas
         self._until = 0.0
         self._timer = 0
+        self._snipping = False
         self._thread_id = 0
         self._ready = threading.Event()
 
@@ -155,8 +159,14 @@ class ScreenshotKeys(threading.Thread):
         if got in (0, 0xFFFFFFFF) or data.header.dwType != RIM_TYPEKEYBOARD:
             return
         down = not data.keyboard.Flags & RI_KEY_BREAK
-        hold = hold_for(data.keyboard.VKey, down, _held(VK_LWIN, VK_RWIN), _held(VK_SHIFT))
-        if hold and (self.showing or self.active()):
+        vk = data.keyboard.VKey
+        hold = hold_for(vk, down, _held(VK_LWIN, VK_RWIN), _held(VK_SHIFT))
+        if not hold:
+            return
+        active = self.showing or self.active()
+        if vk != VK_LWIN and vk != VK_RWIN or not self.showing:
+            log.info("Tecla de captura (%s); Roblox al frente: %s", _KEY_NAMES.get(vk, "Win + Shift + S"), active)
+        if active:
             self._until = max(self._until, time.monotonic() + hold)
             self._update()
 
@@ -164,7 +174,11 @@ class ScreenshotKeys(threading.Thread):
         now = time.monotonic()
         if _held(VK_LWIN, VK_RWIN):
             self._until = max(self._until, now + WIN_HOLD_S)
-        if win32.foreground_process() in SNIPPING:
+        front = win32.foreground_process()
+        if front in SNIPPING:
+            if not self._snipping:
+                log.info("Se abrió la herramienta de recorte (%s)", front)
+            self._snipping = True
             self._until = max(self._until, now + SNIP_HOLD_S)  # sacando el recorte (o recién sacado)
         self._update()
 
@@ -176,6 +190,8 @@ class ScreenshotKeys(threading.Thread):
     def _show(self, visible: bool) -> None:
         if visible == self.showing:
             return
+        log.info("Traducciones %s en las capturas", "visibles" if visible else "ocultas otra vez")
+        self._snipping = False
         if visible:
             screen.pause_reading(True)  # primero se deja de leer, después se hacen visibles
             layered.set_capturable(True)

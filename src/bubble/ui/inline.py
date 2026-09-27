@@ -295,13 +295,23 @@ class PillSpot:
         return Slot(self.left, self.top, self.max_right - TEXT_INSET - RIGHT_PAD, self.bottom)
 
 
-def chat_spots(item, frame_width: int, row_height: float | None = None) -> list[PillSpot]:
+TEXT_EDGE_FLOOR = 0.6  # sin haber visto mensajes largos, las traducciones llegan al menos a esta parte del ancho
+TEXT_EDGE_MARGIN = 60  # px más allá del texto más largo: Roblox corta los renglones bastante antes del borde del panel
+
+
+def chat_spots(item, frame_width: int, row_height: float | None = None, text_right: float = 0) -> list[PillSpot]:
     """Una píldora por línea del mensaje: la primera desde donde termina el nombre, el resto enteras.
 
     Con `row_height` (la altura típica de las líneas del chat) todas las píldoras tienen el mismo alto, centradas en
     su línea: el OCR mide cada línea un poco distinto (una banderita la agranda) y se veían desparejas. Pueden pasar
     unos píxeles el borde calibrado, para tapar el final del texto original.
+
+    Con `text_right` (hasta dónde llega el texto del chat) las píldoras no pasan de ahí: la zona calibrada suele ser
+    más ancha que el chat, y una traducción larga se salía del chat.
     """
+    edge = frame_width
+    if text_right:
+        edge = min(frame_width, max(text_right, TEXT_EDGE_FLOOR * frame_width) + TEXT_EDGE_MARGIN)
     spots = []
     for index, row in enumerate(item.rows):
         start = item.text_left if index == 0 else row.left
@@ -312,7 +322,7 @@ def chat_spots(item, frame_width: int, row_height: float | None = None) -> list[
             top, bottom = int(row.top) - 3, int(row.bottom) + 3
         spots.append(PillSpot(
             left=int(start) - PILL_BEFORE_TEXT, top=top, bottom=bottom,
-            cover_right=int(row.right) + 4, max_right=int(frame_width) + 6,
+            cover_right=int(row.right) + 4, max_right=int(max(edge, row.right)) + 6,
         ))
     return spots
 
@@ -554,7 +564,7 @@ class InlineChatView:
             self._metrics = metrics
         base, row_height = self._metrics or (16, None)
         for item, entry, pill in matches:
-            spots = chat_spots(item, frame.image.width, row_height)
+            spots = chat_spots(item, frame.image.width, row_height, getattr(frame, "text_right", 0))
             text = entry.text
             slots = [spot.text_slot() for spot in spots]
             # Acomodar el texto (probar tamaños, medir palabras) es lo más caro del dibujo: se recuerda.

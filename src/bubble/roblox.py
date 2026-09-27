@@ -25,6 +25,16 @@ def save_chat_region(absolute: Rect, roblox_client: Rect | None) -> None:
     update_state(chat_region=region)
 
 
+def region_too_wide(saved: dict | None, client: Rect) -> bool:
+    """Una zona guardada que ocupa más de la mitad de la ventana no es el chat: la versión anterior del detector
+    juntaba el chat con texto del juego a la misma altura (burbujas, nombres) y la zona salía enorme."""
+    return bool(saved and saved.get("relative") and client.width and saved["w"] > 0.5 * client.width)
+
+
+def forget_chat_region() -> None:
+    update_state(chat_region=None)
+
+
 def resolve_chat_region(saved: dict | None, require_foreground: bool = False) -> Rect | None:
     """Región del chat en coordenadas de pantalla actuales.
 

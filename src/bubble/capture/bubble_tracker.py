@@ -111,6 +111,20 @@ def _same_fill(pixels: np.ndarray, luma: np.ndarray, mask: np.ndarray, tolerance
     return np.abs(pixels.astype(np.int16) - reference).max(axis=2) <= tolerance
 
 
+def _spread(mask: np.ndarray, op, pad: bool) -> np.ndarray:
+    """3x3 de una: cada píxel con sus vecinos de fila y después de columna (dos pasadas en vez de nueve)."""
+    p = np.pad(mask, 1, constant_values=pad)
+    rows = op(op(p[1:-1, :-2], p[1:-1, 1:-1]), p[1:-1, 2:])
+    p = np.pad(rows, ((1, 1), (0, 0)), constant_values=pad)
+    return op(op(p[:-2], p[1:-1]), p[2:])
+
+
+def close_3x3(mask: np.ndarray) -> np.ndarray:
+    """Lo mismo que scipy `binary_closing` con un cuadrado de 3x3 (igual hasta en los bordes), ~7 veces más rápido:
+    era la parte más cara de buscar burbujas y la traducción quedaba atrás de la burbuja al girar la cámara."""
+    return _spread(_spread(mask, np.logical_or, False), np.logical_and, False)
+
+
 def _fill_holes(mask: np.ndarray) -> np.ndarray:
     """Rellena lo encerrado por la mancha (el texto dentro de la burbuja). Una sola pasada de etiquetado: mucho
     más rápido que `binary_fill_holes`, que dilata una y otra vez."""
@@ -133,7 +147,7 @@ def find_bubble_boxes(image: Image.Image, exclude: Rect | None = None) -> list[B
     bright = (luma > 190) & (saturation < 45)
     dark = luma < 140
     # Cerrar los cortes que deja el texto oscuro dentro de la burbuja (el relleno fino se hace por zona).
-    closed = _ndimage().binary_closing(bright, structure=np.ones((3, 3)))
+    closed = close_3x3(bright)
     labels, _count = _ndimage().label(closed)
     min_width = int(28 * SCALE)
     boxes = []

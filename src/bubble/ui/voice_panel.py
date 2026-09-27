@@ -21,7 +21,7 @@ from .subtitles import SubtitleView, speaker_name
 if TYPE_CHECKING:
     from .main_window import BubbleWindow
 
-MODES = {"boton": "Mientras aprieto un botón", "directo": "Directo, sin botón"}
+MODES = {"boton": "Con un botón", "directo": "Directo, sin botón"}
 GENDERS = {"femenina": "Femenina", "masculina": "Masculina"}
 SAMPLES = {
     "en": "Hi! This is how I'm going to sound.", "pt": "Oi! É assim que eu vou soar.",
@@ -56,6 +56,7 @@ class VoicePanel:
         self.gender_var = tk.StringVar(value=self.config.gender if self.config.gender in GENDERS else "femenina")
         self.speed_var = tk.DoubleVar(value=self.config.speed)
         self.pass_var = tk.BooleanVar(value=self.config.pass_my_voice)
+        self.unmute_var = tk.BooleanVar(value=self.config.auto_unmute)
         self.status = None
         self._tick()
 
@@ -75,8 +76,14 @@ class VoicePanel:
         self.ptt_label = ttk.Label(row, text=win32.describe_binding(self.config.push_to_talk),
                                    font="SunValleyBodyStrongFont")
         self.ptt_label.pack(side="right", padx=10)
-        widgets.muted(box, "En modo directo no hace falta botón: cada frase que decís sale traducida. Y en la barra "
-                           "para escribir, Ctrl+Enter dice en voz lo que escribiste.")
+        widgets.muted(box, "Tocá el botón y hablá: cuando terminás, se traduce y se dice (o mantenelo apretado "
+                           "mientras hablás). En modo directo no hace falta botón. Y en la barra para escribir, "
+                           "Ctrl+Enter dice en voz lo que escribiste.")
+        ttk.Checkbutton(box, text="Desmutearme en Roblox solo mientras suena", variable=self.unmute_var,
+                        command=self._toggle_unmute, style="Switch.TCheckbutton").pack(anchor="w", pady=(10, 0))
+        self.cable_warning = ttk.Label(box, text="", foreground=widgets.palette()["warn"], wraplength=440,
+                                       justify="left")
+        self.cable_warning.pack(anchor="w", pady=(8, 0))
 
         box = widgets.card(page, "Cómo suena")
         row = widgets.label_row(box, "Voz")
@@ -126,6 +133,8 @@ class VoicePanel:
         """(hilo de la ventana) Micrófonos encontrados y si hay micrófono virtual."""
         self.mic_box.configure(values=["El predeterminado de Windows", *mics])
         colors = widgets.palette()
+        self.cable_warning.configure(text="" if cable else "⚠ Falta el micrófono virtual: sin él, los demás no "
+                                                              "escuchan tu voz traducida. Instalalo abajo (1 minuto).")
         if cable:
             self.cable_label.configure(text="Instalado ✓", foreground=colors["good"])
             self.cable_button.pack_forget()
@@ -219,9 +228,22 @@ class VoicePanel:
             self.bridge = bridge.MicBridge(self.config.mic)
             self.bridge.enabled = self.config.pass_my_voice
             self.bridge.start()
-        self.out = VoiceOut(self.voices, self.config.hear_myself, bridge=self.bridge)
+        self.out = VoiceOut(self.voices, self.config.hear_myself, bridge=self.bridge, mic_switch=self._mic_switch())
         self.out.listeners.append(self._playing)
         return self.out
+
+    def _mic_switch(self):
+        if not self.config.auto_unmute:
+            return None
+        from ..roblox_mic import RobloxMic
+
+        return RobloxMic()
+
+    def _toggle_unmute(self) -> None:
+        self.config.auto_unmute = self.unmute_var.get()
+        save_setting("voice", "auto_unmute", self.config.auto_unmute)
+        if self.out is not None:
+            self.out.mic_switch = self._mic_switch()
 
     def _apply(self) -> None:
         """Prende o apaga cada parte según los interruptores."""
@@ -423,6 +445,10 @@ class VoicePanel:
 
     # ------------------------------------------------------------ lo que te dicen: frase → traducción → subtítulo
     def _translate_heard(self, text: str, language: str, speaker: int, on_piece, on_done) -> None:
+        if self._is_my_language(text, language):
+            on_done(None, native=True)  # en tu idioma: no se traduce (se ve el original, o nada)
+            return
+
         async def translate() -> None:
             try:
                 result = await self.app.translator.translate_incoming(text, speaker_name(speaker), on_delta=on_piece)
@@ -434,6 +460,17 @@ class VoicePanel:
                 on_done(None)
 
         self.app.runner.submit(translate())
+
+    def _is_my_language(self, text: str, language: str) -> bool:
+        """Whisper dice que es tu idioma y el texto no dice claramente otra cosa. Antes se le preguntaba solo al
+        traductor, que mira el texto: con frases habladas (cortas, sin puntuación) dudaba y "traducía" español a
+        español."""
+        mine = self.app.config.user.language.split("-")[0].lower()
+        if language.split("-")[0].lower() != mine:
+            return False
+        detector = getattr(self.app.translator, "detector", None)
+        detection = detector.detect(text) if detector is not None else None
+        return not (detection and detection.lang != mine and detection.is_confident(0.8))
 
     # ------------------------------------------------------------ tu voz: texto en tu idioma → (traducción, idioma)
     def _translate_mine(self, text: str) -> tuple[str, str] | None:
@@ -447,7 +484,12 @@ class VoicePanel:
         return result.translation, result.target_lang or target
 
     def _spoke(self, kind: str, text: str) -> None:
-        if kind == "traduccion":
+        if kind == "escuchando":
+            self._set_status("Te escucho: hablá y, cuando termines, lo traduzco y lo digo.")
+        elif kind == "entendi":
+            self._set_status(f"Entendí: «{text}»")
+        elif kind == "traduccion":
+            self._set_status("")
             self.app.events.put(("voice_subtitle", ("(vos)", text, "→")))
         elif kind == "error":
             self._set_status(f"Tu voz: {text}")

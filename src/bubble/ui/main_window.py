@@ -418,6 +418,11 @@ class BubbleWindow:
             self.roblox_status.configure(text="Roblox está cerrado.", foreground=colors["muted"])
         self._watch_roblox_session(running)
         self._refresh_header(bool(hwnd))
+        if self.saved_region and hwnd and roblox.region_too_wide(self.saved_region, win32.client_rect(hwnd)):
+            log.info("La zona del chat guardada era casi toda la ventana: se vuelve a buscar el chat")
+            roblox.forget_chat_region()
+            self.saved_region = None
+            self.region_label.configure(text=self._region_text())
         # Sin chat calibrado: se busca solo mientras jugás (apenas haya un par de mensajes a la vista).
         if self.ready and not self.saved_region and hwnd and win32.roblox_is_foreground():
             self._detect_chat(quiet=True)

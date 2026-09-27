@@ -15,7 +15,7 @@ from .ocr import OcrRow
 
 MIN_LINES = 2
 VISIBLE_LINES = 10  # el chat de Roblox muestra ~8-10 líneas: la zona se estira hacia arriba hasta eso
-MIN_WIDTH_SHARE = 0.4  # ancho mínimo (parte de la ventana): un mensaje largo llega hasta el borde del panel
+MIN_WIDTH_SHARE = 0.34  # ancho mínimo (parte de la ventana): un mensaje largo llega hasta el borde del panel
 
 
 @dataclass

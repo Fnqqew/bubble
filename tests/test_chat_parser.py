@@ -16,6 +16,80 @@ def test_merge_rows_joins_name_and_message_on_same_line():
     assert [r.text for r in merged] == ["xXDragonXx: gg ez noob", "Pedro_BR: hola"]
 
 
+def words_row(*parts: tuple[str, float]) -> OcrRow:
+    """Una línea del OCR con sus palabras (texto, dónde empieza): cada letra ~9 px, alto 18."""
+    from bubble.capture.ocr import OcrWord
+
+    words = tuple(OcrWord(text, left, 100, len(text) * 9, 18) for text, left in parts)
+    right = max(w.right for w in words)
+    return OcrRow(" ".join(t for t, _ in parts), 100, 18, words[0].left, right - words[0].left, words)
+
+
+def test_merge_rows_keeps_far_game_text_apart():
+    """El OCR juntaba el mensaje con la burbuja de otro jugador a la misma altura: la zona del chat salía enorme y
+    el mensaje traía texto que no era suyo."""
+    merged = merge_rows([words_row(("Soph:", 5), ("NO", 55), ("spent", 700), ("all", 750), ("day", 782))])
+    assert [(r.text, r.left) for r in merged] == [("Soph: NO", 5), ("spent all day", 700)]
+    near = merge_rows([words_row(("Soph:", 5), ("no", 55), ("way", 80))])
+    assert [r.text for r in near] == ["Soph: no way"]
+
+
+def test_game_text_beside_the_chat_is_not_part_of_it():
+    from bubble.capture.chat_parser import parse_chat_items
+
+    items = parse_chat_items([
+        OcrRow("VeloxX: both of you are getting 1k from me", top=10, height=18, left=5, width=480),
+        OcrRow("spent all day bragging about how fast", top=12, height=18, left=700, width=300),  # una burbuja
+        OcrRow("tomorrow", top=32, height=18, left=5, width=90),  # sigue el mensaje de arriba
+        OcrRow("@juanot014", top=60, height=18, left=900, width=110),  # un nombre sobre una cabeza
+    ], frame_width=500)
+    assert [(item.speaker, item.text) for item in items] == [("VeloxX", "both of you are getting 1k from me tomorrow")]
+
+
+def test_message_that_lost_its_colon_is_not_a_continuation():
+    from bubble.capture.chat_parser import parse_chat_items
+
+    items = parse_chat_items([
+        OcrRow("melofruits: could u donate pls i wanna buy a priv", top=10, height=18, left=42, width=470),
+        OcrRow("smegJadon40i i wasin a debate", top=32, height=18, left=42, width=260),  # después de la banderita
+        OcrRow("SYSTEM: RobloxBestGamerOne has added a comment to", top=54, height=18, left=5, width=490),
+        OcrRow("Lovine! (+25)", top=76, height=18, left=5, width=120),  # esta sí sigue al de arriba
+    ], frame_width=500)
+    assert [item.text for item in items] == ["could u donate pls i wanna buy a priv",
+                                             "RobloxBestGamerOne has added a comment to Lovine! (+25)"]
+
+
+def test_icon_read_as_part_of_the_name():
+    from bubble.capture.chat_parser import parse_chat_items
+
+    items = parse_chat_items([
+        OcrRow("1151 melofruits: could u donate pls", top=10, height=18, left=5, width=300),
+        OcrRow("313: smegladon40: before u go", top=32, height=18, left=5, width=260),
+    ], frame_width=500)
+    assert [(item.speaker, item.text) for item in items] == [("melofruits", "could u donate pls"),
+                                                            ("smegladon40", "before u go")]
+
+
+def test_same_message_with_misread_name_is_not_new():
+    tracker = ChatTracker(keep_on_start=0)
+    tracker.update([ChatLine("smegladon40", "i got hate rallied on there"), ChatLine("reaper", "i gor suspended")])
+    new = tracker.update([ChatLine("Silleqlac101140", "i got hate rallied on there"),
+                          ChatLine("reaper", "i gor suspended"), ChatLine("park", "I support you")])
+    assert new == [ChatLine("park", "I support you")]
+
+
+def test_broken_read_of_a_recent_message_is_not_new_but_a_repeat_is():
+    tracker = ChatTracker(keep_on_start=0)
+    tracker.update([ChatLine("Ana", "hola")])
+    toxic = ChatLine("smegladon40", "its so toxic on there")
+    assert tracker.update([ChatLine("Ana", "hola"), toxic]) == [toxic]
+    # Sin fondo, sobre el agua: la misma línea leída rota (y la de arriba no salió) no es un mensaje nuevo.
+    assert tracker.update([ChatLine("smegladon40", "its soltoxic101Vt_here")]) == []
+    # El mismo jugador repite exactamente lo mismo, debajo: eso sí es nuevo.
+    again = ChatLine("smegladon40", "its so toxic on there")
+    assert tracker.update([ChatLine("Ana", "hola"), toxic, again]) == [again]
+
+
 def row(text: str, i: int, width: float = 200) -> OcrRow:
     return OcrRow(text, top=5 + i * 26, height=18, left=10, width=width)
 

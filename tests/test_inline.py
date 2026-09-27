@@ -27,6 +27,8 @@ def test_patch_starts_after_the_name():
     # "jody jo: " ocupa 9 caracteres de 8 px: el mensaje empieza cerca de x = 10 + 9*8 = 82.
     assert 74 <= item.text_left <= 90
     spot = chat_spots(item, frame_width=400)[0]
+    narrow = chat_spots(item, frame_width=400, text_right=300)[0]  # el chat real termina antes que la zona
+    assert narrow.max_right < spot.max_right and narrow.max_right >= 300
     assert spot.left == int(item.text_left) - 5  # tapa desde el espacio después de "Nombre:"
     assert spot.cover_right >= int(row.right) and spot.max_right == 406  # puede pasar un poco el borde calibrado
     assert chat_slots(item, frame_width=400)[0].right < 400  # el texto deja margen dentro de la píldora

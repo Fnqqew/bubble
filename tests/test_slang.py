@@ -59,8 +59,16 @@ async def test_foreign_slang_beats_wrong_language_detection():
     assert provider.requests[0].slang_hints
 
 
-async def test_other_country_slang_is_adapted():
+async def test_my_language_with_other_country_slang_is_left_alone():
     translator, provider = make(detections={"no mames wey, esta chido": ("es", 0.9)})
+    result = await translator.translate_incoming("no mames wey, esta chido", "Memo")
+    assert result.status == "same_language"
+    assert provider.requests == []
+
+
+async def test_other_country_slang_is_adapted_when_asked():
+    translator, provider = make(detections={"no mames wey, esta chido": ("es", 0.9)})
+    translator.config.translation.adapt_slang = True
     result = await translator.translate_incoming("no mames wey, esta chido", "Memo")
     assert result.status == "adapted"
     assert provider.requests[0].mode == "adapt"

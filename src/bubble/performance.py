@@ -15,8 +15,8 @@ from dataclasses import dataclass, field
 
 # Parte de UN núcleo que puede usar cada tarea, según la PC (el resto queda para Roblox).
 SHARES = {
-    "alta": {"chat": 0.25, "bubbles": 0.40},
-    "media": {"chat": 0.15, "bubbles": 0.25},
+    "alta": {"chat": 0.25, "bubbles": 0.55},
+    "media": {"chat": 0.15, "bubbles": 0.30},
     "baja": {"chat": 0.08, "bubbles": 0.12},
 }
 

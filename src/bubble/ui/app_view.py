@@ -45,6 +45,9 @@ def build(app: BubbleWindow) -> None:
     # Las listas desplegables de solo lectura quedaban con el texto resaltado (seleccionado) al elegir o al tener el
     # foco: se saca la selección.
     root.bind_class("TCombobox", "<FocusIn>", lambda event: event.widget.selection_clear(), add="+")
+    # Con la ruedita encima, una lista cambiaba de valor sola (y se guardaba) al bajar por la página: ahora la ruedita
+    # solo mueve la página.
+    root.bind_class("TCombobox", "<MouseWheel>", lambda _event: None)
     root.bind_all("<<ComboboxSelected>>", lambda event: (event.widget.selection_clear(),
                                                          root.after_idle(root.focus_set)), add="+")
     shell = ttk.Frame(root, padding=(22, 18, 22, 10))

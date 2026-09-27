@@ -179,6 +179,35 @@ def parse_chat(
     return [item.line for item in parse_chat_items(rows, is_known_name, frame_width) if item.kind == "player"]
 
 
+CONTINUATION_INDENT = 14  # px: una continuación empieza en el borde (la banderita de un mensaje corre ~35 px)
+FAR_FROM_COLUMN = 150  # px: lo que empieza más a la derecha que esto del borde izquierdo del chat no es chat
+
+
+def column_rows(rows: list[OcrRow]) -> list[OcrRow]:
+    """Solo las líneas de la columna del chat. Lo que empieza lejos a la derecha (la burbuja de otro jugador, un
+    nombre sobre una cabeza, un cartel del juego) se pegaba al mensaje o se tomaba como su continuación."""
+    starts = [row.left for row in rows if _STRONG.match(row.text.strip())]
+    if not starts:
+        return rows
+    column = min(starts)
+    return [row for row in rows if row.left - column <= FAR_FROM_COLUMN]
+
+
+_ICON_JUNK = re.compile(r"^\d{1,4}$")
+
+
+def _drop_icon_junk(name: str, body: str) -> tuple[str, str]:
+    """La banderita o el ícono antes del nombre, leído como números: "1151 melofruits" o "313: smegladon40: hola"."""
+    first, _, rest = name.partition(" ")
+    if rest and _ICON_JUNK.match(first):
+        name = rest
+    if _ICON_JUNK.match(name):
+        inner = _STRONG.match(body)
+        if inner:
+            return inner.group("name").strip(), inner.group("text").strip(_TRAILING_JUNK)
+    return name, body
+
+
 def parse_chat_items(
     rows: list[OcrRow],
     is_known_name: Callable[[str], bool] | None = None,
@@ -192,6 +221,10 @@ def parse_chat_items(
     descarta: pegarla al mensaje anterior producía mensajes mezclados y traducciones sin sentido.
     """
     is_known_name = is_known_name or (lambda _name: False)
+    rows = column_rows(rows)
+    # La continuación de un mensaje largo empieza en el borde izquierdo del chat; un mensaje nuevo, después de la
+    # banderita. Una línea corrida hacia la derecha es un mensaje al que el OCR le perdió los ":", no una continuación.
+    edge = min((row.left for row in rows if _LETTER.search(row.text)), default=0.0)
     # Una línea "llena" llega casi al borde donde Roblox corta el texto. Ese borde (`wrap_right`) se aprende
     # de los mensajes largos vistos; sin ese dato se usa el ancho calibrado.
     widest = wrap_right or frame_width
@@ -216,8 +249,7 @@ def parse_chat_items(
             if weak and (_looks_like_username(weak.group("name")) or is_known_name(weak.group("name"))):
                 match = weak
         if match:
-            name = match.group("name").strip()
-            body = match.group("text").strip(_TRAILING_JUNK)
+            name, body = _drop_icon_junk(match.group("name").strip(), match.group("text").strip(_TRAILING_JUNK))
             if not _LETTER.search(body + name):
                 last_row = None
                 continue
@@ -226,7 +258,7 @@ def parse_chat_items(
             last_row = row
             continue
         wrapped = last_row is not None and widest and last_row.right >= 0.85 * widest
-        if wrapped and not text.startswith(("[", "{")):
+        if wrapped and not text.startswith(("[", "{")) and row.left <= edge + CONTINUATION_INDENT:
             item = messages[-1]
             item.text = f"{item.text} {text.strip(_TRAILING_JUNK)}".strip()
             item.rows.append(row)
@@ -324,6 +356,10 @@ class _Entry:
     uid: int = field(default_factory=lambda: next(_ENTRY_IDS))  # identidad estable (aunque el texto se repita)
 
 
+LONG_TEXT = 10  # letras desde las que un texto casi igual identifica al mensaje aunque el nombre salga distinto
+MISREAD_NAME = 0.3  # parecido mínimo entre un nombre y su mala lectura ("Ana" y "Bruno" son 0.25: otra persona)
+
+
 class ChatTracker:
     """Decide qué mensajes son nuevos.
 
@@ -415,15 +451,26 @@ class ChatTracker:
         return self._same(a, b)
 
     def _matches(self, entry: _Entry, key: tuple[str, str]) -> bool:
-        return self._text_match(entry.text_key, key[1]) and self._name_match(entry.name_key, key[0])
+        if not self._text_match(entry.text_key, key[1]):
+            return False
+        # Con el chat sin fondo, el nombre (de color, sobre el juego) se lee muy distinto en cada captura
+        # ("Silleqlac101140" por "smegladon40"): un texto largo casi idéntico y un nombre algo parecido alcanzan.
+        return self._name_match(entry.name_key, key[0]) or (
+            SequenceMatcher(None, entry.name_key, key[0]).ratio() >= MISREAD_NAME
+            and self._same_long_text(entry.text_key, key[1]))
+
+    @staticmethod
+    def _same_long_text(a: str, b: str, ratio: float = 0.9) -> bool:
+        return min(len(a), len(b)) >= LONG_TEXT and SequenceMatcher(None, a, b).ratio() >= ratio
 
     @staticmethod
     def _resembles(entry: _Entry, key: tuple[str, str]) -> bool:
         """Parecido suficiente para ser el mismo mensaje leído bastante mal, en su mismo lugar del chat."""
         name = SequenceMatcher(None, entry.name_key, key[0]).ratio()
-        if name < 0.45:
-            return False  # otro jugador (aunque diga lo mismo)
         text = SequenceMatcher(None, entry.text_key, key[1]).ratio()
+        if name < 0.45:
+            # Otro jugador (aunque diga lo mismo)... salvo un texto largo casi igual: es el nombre mal leído.
+            return name >= MISREAD_NAME and min(len(entry.text_key), len(key[1])) >= LONG_TEXT and text >= 0.85
         return text >= 0.6 or (name >= 0.7 and text >= 0.4)
 
     @staticmethod
@@ -454,6 +501,28 @@ class ChatTracker:
                 i -= 1
         pairs.reverse()
         return pairs
+
+    ECHO_S = 90.0  # un mensaje leído mal se reconoce si se vio hace menos que esto
+
+    def _recent_echo(self, key: tuple[str, str], now: float, taken: set[int], repeat_ok: bool = True) -> _Entry | None:
+        """Un mensaje ya traducido del que esta línea es una lectura rota ("its soltoxic101Vt_here" por "its so toxic
+        on there"). Un texto idéntico abajo de todo (`repeat_ok`) no: la gente repite mensajes ("could u donate pls" dos
+        veces) y llegan abajo. Idéntico en el medio del chat es el mismo mensaje, que esta captura ubicó mal."""
+        name_key, text_key = key
+        if len(text_key) < 8:
+            return None
+        for entry in reversed(self._history[-40:]):
+            if id(entry) in taken or not entry.announced or now - entry.last_seen > self.ECHO_S:
+                continue
+            if entry.text_key == text_key and repeat_ok:
+                continue  # idéntico y abajo de todo: lo repitió
+            text = SequenceMatcher(None, entry.text_key, text_key).ratio()
+            if text < 0.6:
+                continue
+            name = SequenceMatcher(None, entry.name_key, name_key).ratio()
+            if name >= 0.6 or (name >= MISREAD_NAME and min(len(entry.text_key), len(text_key)) >= LONG_TEXT):
+                return entry
+        return None
 
     def _is_mine(self, line: ChatLine) -> bool:
         if self.username and similar(_name_key(line.speaker), _name_key(self.username), 0.8):
@@ -527,6 +596,11 @@ class ChatTracker:
                 assigned[first + k] = candidates[ci]
             for k in range(first, j):
                 if assigned[k] is not None:
+                    continue
+                echo = self._recent_echo(keys[k], now, {id(e) for e in assigned if e is not None},
+                                         repeat_ok=above is not None and below is None)
+                if echo is not None:
+                    assigned[k] = echo  # un mensaje reciente leído mal (sin fondo, sobre el juego): no es nuevo
                     continue
                 if above is not None and below is None:
                     announce = True  # debajo de lo último conocido: mensaje nuevo

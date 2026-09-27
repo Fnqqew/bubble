@@ -43,6 +43,9 @@ class TranslationConfig:
     timeout_s: float = 8.0
     # Aclarar entre paréntesis la jerga que no tiene equivalente en tu idioma.
     explain_slang: bool = True
+    # Pasar a tu variante los mensajes en tu idioma con jerga de otro país ("no mames wey" -> "no te puedo creer").
+    # Apagado: lo que ya está en tu idioma no se toca.
+    adapt_slang: bool = False
 
 
 @dataclass
@@ -63,7 +66,7 @@ class RobloxConfig:
     display_mode: str = "inline"
     # Traducir también las burbujas de texto sobre la cabeza de los jugadores.
     translate_bubbles: bool = True
-    bubble_interval_s: float = 0.12
+    bubble_interval_s: float = 0.06
     poll_interval_s: float = 0.08  # ver si el chat cambió es barato (~2 ms): se mira seguido
     # Rendimiento: "auto" se adapta al procesador de tu PC; "alta", "media" o "baja" lo fijan a mano.
     performance: str = "auto"
@@ -97,6 +100,8 @@ class VoiceConfig:
     # Tu micrófono real ("" = el predeterminado de Windows): pasa al micrófono virtual junto con la voz traducida.
     mic: str = ""
     pass_my_voice: bool = True
+    # Si estás muteado en Roblox, desmutearte solo mientras suena tu voz traducida (y volver a mutearte).
+    auto_unmute: bool = True
 
 
 @dataclass

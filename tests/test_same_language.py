@@ -42,7 +42,7 @@ async def test_messages_in_my_language_are_skipped_without_claude(detector, text
 
 @pytest.mark.parametrize("text", [
     "anyone wanna trade my dragon", "vc tá aí?", "obrigado mano", "the boss is too op", "bhai kidher hai tu",
-    "wer will traden?", "no mames wey",
+    "wer will traden?",
 ])
 async def test_messages_in_other_languages_are_translated(detector, text):
     translator, provider = make(detector)

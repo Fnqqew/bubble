@@ -81,6 +81,25 @@ def _error_log() -> None:
         sys.stderr = stream
 
 
+def _activity_log() -> None:
+    """Lo que va haciendo Bubble, para entender un problema después: %APPDATA%\\Bubble\\bubble.log (~2 MB como
+    mucho). Solo lo de Bubble: ni lo que dicen en el chat ni lo que tecleás."""
+    from logging.handlers import RotatingFileHandler
+
+    from .state import state_path
+
+    try:
+        handler = RotatingFileHandler(state_path().with_name("bubble.log"), maxBytes=1_000_000, backupCount=1,
+                                      encoding="utf-8")
+    except OSError:
+        return
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s", "%H:%M:%S"))
+    handler.setLevel(logging.INFO)
+    logger = logging.getLogger("bubble")
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="bubble", description="Traductor en tiempo real para Roblox")
     parser.add_argument("--console", action="store_true", help="modo consola en vez de ventana")
@@ -90,6 +109,11 @@ def main() -> None:
     if not args.console:
         _error_log()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    if not args.console:
+        if not args.verbose:
+            for handler in logging.getLogger().handlers:
+                handler.setLevel(logging.WARNING)  # errores.log sigue siendo solo de errores
+        _activity_log()
 
     config = load_config(args.config)
     if args.console:

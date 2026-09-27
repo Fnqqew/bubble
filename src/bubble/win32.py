@@ -104,6 +104,11 @@ def client_rect(hwnd: int) -> Rect:
 
 def roblox_running() -> bool:
     """¿Roblox está abierto? (cualquier ventana suya, aunque esté minimizada). Distingue "cerrado" de "minimizado"."""
+    return bool(roblox_pid())
+
+
+def roblox_pid() -> int:
+    """El proceso de Roblox (0 si está cerrado), aunque esté minimizado."""
     found = []
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -112,12 +117,37 @@ def roblox_running() -> bool:
             pid = wintypes.DWORD()
             user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
             if _process_name(pid.value).lower() == ROBLOX_PROCESS:
-                found.append(hwnd)
+                found.append(pid.value)
                 return False  # alcanza con una
         return True
 
     user32.EnumWindows(callback, 0)
-    return bool(found)
+    return found[0] if found else 0
+
+
+class _PROCESSENTRY32W(ctypes.Structure):
+    _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ULONG_PTR), ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD),
+                ("szExeFile", ctypes.c_wchar * 260)]
+
+
+def roblox_process_id() -> int:
+    """El proceso de Roblox (0 si no está), tenga o no una ventana a la vista: para escuchar solo su sonido."""
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if not snapshot or snapshot == wintypes.HANDLE(-1).value:
+        return 0
+    try:
+        entry = _PROCESSENTRY32W(ctypes.sizeof(_PROCESSENTRY32W))
+        ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while ok:
+            if entry.szExeFile.lower() == ROBLOX_PROCESS:
+                return int(entry.th32ProcessID)
+            ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+        return 0
+    finally:
+        kernel32.CloseHandle(snapshot)
 
 
 def find_roblox_window() -> int | None:

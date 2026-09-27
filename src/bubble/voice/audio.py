@@ -46,6 +46,48 @@ def speaker_loopback():
     return sc.get_microphone(id=str(sc.default_speaker().name), include_loopback=True)
 
 
+class _WithFallback:
+    """Una fuente que prueba primero `primary` y, si Windows no la deja abrir, usa la de `fallback()`."""
+
+    def __init__(self, primary, fallback) -> None:
+        self.primary, self.fallback = primary, fallback
+        self._active = None
+
+    def recorder(self, **options):
+        self._options = options
+        return self
+
+    def __enter__(self):
+        import logging
+
+        try:
+            self._active = self.primary.recorder(**self._options).__enter__()
+        except OSError as exc:
+            logging.getLogger(__name__).info("No se pudo escuchar solo a Roblox (%s): se escucha toda la PC", exc)
+            self._active = self.fallback().recorder(**self._options).__enter__()
+        return self._active
+
+    def __exit__(self, *exc):
+        return self._active.__exit__(*exc) if self._active is not None else False
+
+
+def game_audio():
+    """Lo que suena en Roblox, y nada más: ni YouTube, ni Discord, ni música (Windows 11). Si no se puede (Windows
+    más viejo, Roblox cerrado), todo lo que suena en la PC, como antes."""
+    from .. import win32
+
+    import logging
+
+    pid = win32.roblox_process_id()
+    if not pid:
+        logging.getLogger(__name__).info("Roblox no está abierto: se escucha todo lo que suena en la PC")
+        return speaker_loopback()
+    from .process_audio import ProcessLoopback
+
+    logging.getLogger(__name__).info("Se escucha solo el sonido de Roblox (proceso %s)", pid)
+    return _WithFallback(ProcessLoopback(pid), speaker_loopback)
+
+
 def microphone():
     return _sc().default_microphone()
 
@@ -91,10 +133,16 @@ def voice_output(prefer_cable: bool = True) -> Output:
     return Output(cable, True) if cable is not None else Output(default_speaker(), False)
 
 
+TAIL_S = 0.5
+
+
 def play(output: Output, audio: np.ndarray, rate: int) -> None:
-    """Reproduce (bloquea hasta terminar)."""
+    """Reproduce (bloquea hasta terminar). Termina con medio segundo de silencio: el reproductor se cierra apenas
+    recibe el último pedazo, y el final de la frase se cortaba."""
     com_ready()
-    output.device.play(np.clip(audio, -1, 1).astype(np.float32), samplerate=rate)
+    audio = np.clip(audio, -1, 1).astype(np.float32)
+    tail = np.zeros((int(rate * TAIL_S), *audio.shape[1:]), dtype=np.float32)
+    output.device.play(np.concatenate([audio, tail]), samplerate=rate)
 
 
 def monitor_output() -> Output:

@@ -25,6 +25,8 @@ cache_size = 2000
 timeout_s = 8.0
 # Aclarar entre paréntesis la jerga que no tiene equivalente en tu idioma (ej. "ratio (te ganaron en likes)").
 explain_slang = true
+# Pasar a tu variante los mensajes en tu idioma con jerga de otro país. Apagado: lo que está en tu idioma no se toca.
+adapt_slang = false
 
 [claude]
 # Usa la suscripción de Claude con la que iniciaste sesión en Claude Code.
@@ -51,7 +53,7 @@ read_chat = true
 display_mode = "inline"
 # Traducir también las burbujas de texto sobre la cabeza de los jugadores.
 translate_bubbles = true
-bubble_interval_s = 0.12
+bubble_interval_s = 0.06
 # Cada cuántos segundos se mira si el chat cambió (es barato: solo se lee con OCR cuando cambia).
 poll_interval_s = 0.08
 # Rendimiento: "auto" se adapta a tu procesador (mide lo que cuesta cada lectura y la espacia para no quitarle
@@ -89,6 +91,8 @@ hear_myself = true
 # pasa al virtual junto con la voz traducida; en Roblox elegís «CABLE Output».
 mic = ""
 pass_my_voice = true
+# Si estás muteado en Roblox, Bubble te desmutea solo mientras suena tu voz traducida y te vuelve a mutear.
+auto_unmute = true
 # Reconocimiento de voz (texto final): "auto" (según tu procesador), "tiny", "base" o "small".
 model = "auto"
 
