@@ -63,7 +63,9 @@ def vertical_gradient(size, top, bottom) -> Image.Image:
 
 
 def shade(color, factor):
-    return tuple(max(0, min(255, int(c * factor))) for c in color)
+    """Más claro u oscuro. La opacidad (si la hay) no se toca: antes el costado de la torre quedaba transparente."""
+    rgb = tuple(max(0, min(255, int(c * factor))) for c in color[:3])
+    return rgb + tuple(color[3:])
 
 
 def block(draw: ImageDraw.ImageDraw, box, color, depth=0, top_face=0):
@@ -120,21 +122,27 @@ def gradient_stops(size, stops) -> Image.Image:
 
 
 def cloud(scale: float, alpha: int) -> Image.Image:
-    """Nube de caricatura: bolas blancas, base plana y una sombra suave abajo."""
-    w, h = int(240 * scale), int(110 * scale)
-    img = Image.new("RGBA", (w, h), (255, 255, 255, 0))  # transparente pero blanco: el borde no se oscurece
-    d = ImageDraw.Draw(img)
-    base = int(h * 0.78)
-    parts = [(0.22, 0.62, 0.20), (0.40, 0.42, 0.24), (0.60, 0.48, 0.22), (0.78, 0.64, 0.16), (0.50, 0.66, 0.22)]
-    for color, lift in (((206, 216, 238), 0.0), ((255, 255, 255), 0.06)):
-        for cx, cy, r in parts:
-            r_px = r * w
-            x, y = cx * w, (cy - lift) * h
-            d.ellipse((x - r_px, y - r_px, x + r_px, y + r_px), fill=color + (alpha,))
-    arr = np.asarray(img).copy()
-    arr[base:, :, 3] = 0  # base plana
-    img = Image.fromarray(arr, "RGBA")
-    return img.filter(ImageFilter.GaussianBlur(0.6))
+    """Nube de caricatura: una base redondeada con bolas encima, y una sombra suave solo abajo."""
+    s3 = 3  # se dibuja a 3x y se achica: bordes suaves sin desenfocar
+    w, h = int(240 * scale), int(118 * scale)
+    big = (w * s3, h * s3)
+
+    def shape(dy: float) -> Image.Image:
+        mask = Image.new("L", big, 0)
+        d = ImageDraw.Draw(mask)
+        base_top, base_bottom = 0.55 * h, 0.86 * h
+        d.rounded_rectangle((0.08 * w * s3, (base_top + dy) * s3, 0.92 * w * s3, (base_bottom + dy) * s3),
+                            radius=(base_bottom - base_top) / 2 * s3, fill=255)
+        for cx, cy, r in ((0.28, 0.56, 0.16), (0.46, 0.40, 0.21), (0.64, 0.47, 0.18), (0.80, 0.62, 0.12)):
+            x, y, rr = cx * w * s3, (cy * h + dy) * s3, r * w * s3
+            d.ellipse((x - rr, y - rr, x + rr, y + rr), fill=255)
+        return mask.resize((w, h), Image.Resampling.LANCZOS)
+
+    shadow = Image.new("RGBA", (w, h), (214, 224, 246, 0))
+    shadow.putalpha(shape(4 * scale).point(lambda v: int(v * alpha / 255)))
+    body = Image.new("RGBA", (w, h), (255, 255, 255, 0))
+    body.putalpha(shape(0).point(lambda v: int(v * alpha / 255)))
+    return Image.alpha_composite(shadow, body)
 
 
 def soft_ridge(width: int, base: int, height: int, bumps: int, seed: int) -> list[tuple[float, float]]:
@@ -170,7 +178,7 @@ def backdrop() -> Image.Image:
     ImageDraw.Draw(glow).ellipse((690, 150, 910, 370), fill=255)
     glow = glow.filter(ImageFilter.GaussianBlur(64))
     img = Image.composite(Image.new("RGBA", (W, H), (255, 232, 196, 255)), img, glow.point(lambda v: int(v * 0.75)))
-    sun = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    sun = Image.new("RGBA", (W, H), (255, 246, 216, 0))  # transparente del mismo color: sin aro oscuro
     ImageDraw.Draw(sun).ellipse((764, 222, 840, 298), fill=(255, 246, 216, 255))
     img = Image.alpha_composite(img, sun.filter(ImageFilter.GaussianBlur(1.2)))
     for x, y, scale, alpha in ((500, 36, 0.95, 240), (760, 70, 0.72, 225), (880, 150, 0.5, 200), (640, 160, 0.42, 185)):
@@ -236,7 +244,7 @@ def backdrop() -> Image.Image:
     dist = np.sqrt(((xx - W / 2) / (W / 1.5)) ** 2 + ((yy - H / 2) / (H / 1.3)) ** 2)
     vignette = np.clip(1 - (dist - 0.6) * 0.45, 0.82, 1)[..., None]
     arr = np.asarray(img.convert("RGB")).astype(float) * vignette
-    arr += np.random.default_rng(3).normal(0, 1.6, arr.shape)
+    arr += np.random.default_rng(3).normal(0, 0.7, arr.shape)
     return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB").convert("RGBA")
 
 
@@ -661,8 +669,10 @@ def main() -> None:
         frame.save(folder / f"{index:04d}.png")
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
     path = OUT / "demo.gif"
-    graph = ("split[a][b];[a]palettegen=max_colors=256:stats_mode=diff[p];"
-             "[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle")
+    # Paleta armada con el cuadro entero (con "diff" se armaba solo con lo que se mueve y al fondo le quedaban pocos
+    # colores: se veía sucio) y un tramado ordenado fino, que respeta los degradés del cielo.
+    graph = ("split[a][b];[a]palettegen=max_colors=256:stats_mode=full[p];"
+             "[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle")
     subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", str(folder / "%04d.png"),
                     "-vf", graph, "-loop", "0", str(path)], check=True)
     video = OUT / "demo.mp4"
