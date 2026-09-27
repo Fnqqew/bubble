@@ -1,0 +1,430 @@
+"""Ventanas que se muestran encima de Roblox: overlay de traducciones, cuadro para escribir y calibración."""
+
+from __future__ import annotations
+
+import threading
+import time
+import tkinter as tk
+import zlib
+from dataclasses import dataclass
+from typing import Callable
+
+from .. import win32
+from ..geometry import Rect
+from ..translate.base import TONE_NAMES, clamp_tone
+from ..translate.languages import DISPLAY_NAMES
+
+BG = "#16181c"
+FG = "#f2f2f2"
+MUTED = "#9aa0a6"
+NAME_COLORS = ["#7cc4ff", "#ffb86b", "#8be28b", "#ff8fa3", "#d0a6ff", "#ffe07a"]
+FONT = ("Segoe UI", 11)
+FONT_BOLD = ("Segoe UI", 11, "bold")
+
+
+def _name_color(name: str) -> str:
+    return NAME_COLORS[zlib.crc32(name.casefold().encode()) % len(NAME_COLORS)]
+
+
+@dataclass(eq=False)
+class _Row:
+    frame: tk.Frame
+    label: tk.Label
+    expires: float
+
+
+class TranslationOverlay:
+    """Lista de traducciones recientes que desaparecen solas. No recibe clics ni foco.
+
+    Solo se ve mientras `visible_when()` es True (Roblox en primer plano): si salís del juego se oculta
+    y vuelve a aparecer al volver.
+    """
+
+    MAX_LINES = 6
+    WIDTH = 420
+
+    def __init__(
+        self,
+        root: tk.Tk,
+        seconds: float,
+        anchor: Callable[[], tuple[int, int] | None],
+        visible_when: Callable[[], bool] = lambda: True,
+    ) -> None:
+        self.seconds = seconds
+        self.anchor = anchor
+        self.visible_when = visible_when
+        self.win = tk.Toplevel(root)
+        self.win.withdraw()
+        self.win.overrideredirect(True)
+        self.win.attributes("-topmost", True)
+        self.win.attributes("-alpha", 0.9)
+        self.win.configure(bg=BG)
+        self.body = tk.Frame(self.win, bg=BG, padx=10, pady=6)
+        self.body.pack(fill="both", expand=True)
+        self._lines: list[_Row] = []
+        self._styled = False
+        root.after(500, self._tick)
+
+    def show(self, speaker: str, text: str, color: str | None = None, muted: bool = False) -> _Row:
+        """Agrega una fila al final (el orden de llegada es el orden del chat) y devuelve su referencia."""
+        frame = tk.Frame(self.body, bg=BG)
+        if speaker:
+            tk.Label(frame, text=f"{speaker}:", font=FONT_BOLD, fg=color or _name_color(speaker), bg=BG).pack(
+                side="left", anchor="n"
+            )
+        label = tk.Label(
+            frame, text=text, font=FONT, fg=MUTED if muted else FG, bg=BG, wraplength=self.WIDTH - 40, justify="left"
+        )
+        label.pack(side="left", anchor="n", padx=(4, 0))
+        frame.pack(fill="x", anchor="w", pady=1)
+        row = _Row(frame, label, time.monotonic() + self.seconds)
+        self._lines.append(row)
+        while len(self._lines) > self.MAX_LINES:
+            self._lines.pop(0).frame.destroy()
+        self._show_window()
+        return row
+
+    def set_text(self, row: _Row | None, text: str, muted: bool = False) -> bool:
+        """Cambia el texto de una fila (ej. el original por la traducción) sin moverla de lugar."""
+        if row is None or row not in self._lines:
+            return False
+        row.label.configure(text=text, fg=MUTED if muted else FG)
+        row.expires = time.monotonic() + self.seconds
+        return True
+
+    def remove(self, row: _Row | None) -> None:
+        if row is not None and row in self._lines:
+            self._lines.remove(row)
+            row.frame.destroy()
+        if not self._lines:
+            self.win.withdraw()
+
+    def _show_window(self) -> None:
+        if not self.visible_when():
+            self.win.withdraw()
+            return
+        position = self.anchor()
+        if position:
+            self.win.geometry(f"+{position[0]}+{position[1]}")
+        if self.win.state() == "withdrawn":
+            self.win.deiconify()
+        self.win.lift()
+        if not self._styled:
+            self.win.update_idletasks()
+            win32.make_overlay(win32.toplevel_hwnd(self.win), click_through=True)
+            self._styled = True
+
+    def _tick(self) -> None:
+        now = time.monotonic()
+        for row in [row for row in self._lines if row.expires <= now]:
+            row.frame.destroy()
+            self._lines.remove(row)
+        if self._lines:
+            self._show_window()  # se oculta si saliste de Roblox y reaparece al volver
+        else:
+            self.win.withdraw()
+        self.win.after(250, self._tick)
+
+
+class ComposeBar:
+    """Barra para escribir en tu idioma. Se abre con el atajo; mientras escribís muestra cómo va a quedar la
+    traducción, y con Enter la traduce (si todavía no estaba lista) y la manda al chat de Roblox.
+
+    Tab cambia el idioma, ↑/↓ el tono y Esc cierra (lo que escribiste vuelve si la abrís enseguida).
+    """
+
+    WIDTH = 700
+    PREVIEW_DELAY_MS = 650  # se traduce para la vista previa cuando dejás de escribir un momento
+    KEEP_DRAFT_S = 120
+
+    def __init__(
+        self,
+        root: tk.Tk,
+        on_preview: Callable[[str, str, int], None],
+        on_submit: Callable[[str, str, int], None],
+        on_close: Callable[[], None],
+    ) -> None:
+        self.on_preview = on_preview  # pedir la traducción de (texto, idioma, tono) para mostrarla
+        self.on_submit = on_submit  # traducir (si hace falta) y enviar
+        self.on_close = on_close  # se cerró sin enviar
+        self.targets: list[str] = []
+        self.labels: dict[str, str] = {}
+        self.index = 0
+        self.tone = 3
+        self.busy = False  # traduciendo para enviar: no se edita
+        self._after: str | None = None
+        self._requested: tuple[str, str, int] | None = None
+        self._draft = ""
+        self._draft_at = 0.0
+        self._x = self._bottom = 0
+        self.win = tk.Toplevel(root)
+        self.win.withdraw()
+        self.win.overrideredirect(True)
+        self.win.attributes("-topmost", True)
+        self.win.configure(bg=BG, highlightthickness=2, highlightbackground="#4a90e2")
+        header = tk.Frame(self.win, bg=BG)
+        header.pack(fill="x", padx=12, pady=(10, 4))
+        tk.Label(header, text="Escribí en tu idioma", font=("Segoe UI", 10, "bold"), fg=FG, bg=BG).pack(side="left")
+        self.target_label = tk.Label(header, font=("Segoe UI", 10), fg="#7cc4ff", bg=BG)
+        self.target_label.pack(side="right")
+        self.entry = tk.Entry(self.win, font=("Segoe UI", 15), bg="#23262b", fg=FG, insertbackground=FG,
+                              relief="flat", disabledbackground="#1d2024", disabledforeground=MUTED)
+        self.entry.pack(fill="x", padx=12, ipady=7)
+        self.preview = tk.Label(self.win, font=("Segoe UI", 12), fg=MUTED, bg=BG, anchor="w", justify="left",
+                                wraplength=self.WIDTH - 30)
+        self.preview.pack(fill="x", padx=12, pady=(6, 0))
+        self.hint = tk.Label(self.win, text="Enter: traducir y enviar   ·   Tab: idioma   ·   ↑↓: tono   ·   Esc: cerrar",
+                             font=("Segoe UI", 9), fg=MUTED, bg=BG, anchor="w")
+        self.hint.pack(fill="x", padx=12, pady=(4, 10))
+        self.entry.bind("<Return>", self._submit)
+        self.entry.bind("<KP_Enter>", self._submit)
+        self.entry.bind("<Escape>", self._cancel)
+        self.entry.bind("<Tab>", self._next_target)
+        self.entry.bind("<Up>", lambda _e: self._change_tone(+1))
+        self.entry.bind("<Down>", lambda _e: self._change_tone(-1))
+        self.entry.bind("<KeyRelease>", self._on_edit)
+        self.entry.bind("<FocusOut>", lambda _e: self.win.after(200, self._close_if_left))
+
+    @property
+    def visible(self) -> bool:
+        return self.win.state() != "withdrawn"
+
+    def current(self) -> tuple[str, str, int]:
+        return self.entry.get().strip(), self.targets[self.index] if self.targets else "", self.tone
+
+    def open(self, targets: list[str], area: Rect | None, tone: int = 3, labels: dict[str, str] | None = None) -> None:
+        self.targets = targets
+        self.labels = labels or {}
+        self.index = 0
+        self.tone = clamp_tone(tone)
+        self.busy = False
+        self._requested = None
+        self.entry.configure(state="normal")
+        self.entry.delete(0, "end")
+        if self._draft and time.monotonic() - self._draft_at < self.KEEP_DRAFT_S:
+            self.entry.insert(0, self._draft)
+        self._render_target()
+        self.preview.configure(text="", fg=MUTED)
+        if area:
+            self._x, self._bottom = area.left + (area.width - self.WIDTH) // 2, area.bottom - 90
+        else:
+            self._x = (self.win.winfo_screenwidth() - self.WIDTH) // 2
+            self._bottom = self.win.winfo_screenheight() - 140
+        self._fit()
+        self.win.deiconify()
+        self.win.lift()
+        self.win.after(10, self._grab_focus)
+        if self.entry.get().strip():
+            self._schedule_preview()
+
+    def _fit(self) -> None:
+        """Alto justo para el contenido; si la traducción ocupa más líneas, la barra crece hacia arriba."""
+        self.win.update_idletasks()
+        height = self.win.winfo_reqheight()
+        self.win.geometry(f"{self.WIDTH}x{height}+{self._x}+{self._bottom - height}")
+
+    def show_preview(self, key: tuple[str, str, int], text: str, state: str) -> None:
+        """Traducción de `key` para mostrar: state = "working" (llegando), "done" o "error"."""
+        if not self.visible or key != self.current():
+            return
+        if state == "error":
+            self.preview.configure(text=f"⚠ {text}", fg="#ff8fa3")
+        elif state == "working":
+            self.preview.configure(text=f"Traduciendo…  {text}", fg=MUTED)
+        else:
+            self.preview.configure(text=f"→ {text}", fg=FG)
+        self._fit()
+
+    def unlock(self) -> None:
+        """Falló la traducción al enviar: se puede corregir y volver a intentar."""
+        self.busy = False
+        self.entry.configure(state="normal")
+        self.entry.focus_set()
+
+    def close(self, sent: bool = False) -> None:
+        if self._after:
+            self.win.after_cancel(self._after)
+            self._after = None
+        text = self.entry.get().strip()
+        self._draft, self._draft_at = ("", 0.0) if sent else (text, time.monotonic())
+        self.busy = False
+        self.win.withdraw()
+
+    # --- interno
+    def _grab_focus(self) -> None:
+        win32.force_foreground(win32.toplevel_hwnd(self.win))
+        self.win.focus_force()
+        self.entry.focus_set()
+        self.entry.icursor("end")
+
+    def _render_target(self) -> None:
+        code = self.targets[self.index] if self.targets else ""
+        name = self.labels.get(code) or DISPLAY_NAMES.get(code, code)
+        self.target_label.configure(text=f"→ {name} (Tab)   ·   Tono {self.tone}: {TONE_NAMES[self.tone]} (↑↓)")
+
+    def _on_edit(self, event=None) -> None:
+        if self.busy or (event is not None and event.keysym in ("Return", "KP_Enter", "Escape", "Tab", "Up", "Down")):
+            return
+        self._schedule_preview()
+
+    def _schedule_preview(self) -> None:
+        if self._after:
+            self.win.after_cancel(self._after)
+        self._after = self.win.after(self.PREVIEW_DELAY_MS, self._request_preview)
+        if not self.entry.get().strip():
+            self.preview.configure(text="", fg=MUTED)
+
+    def _request_preview(self) -> None:
+        self._after = None
+        key = self.current()
+        if key[0] and key != self._requested:
+            self._requested = key
+            self.preview.configure(text="Traduciendo…", fg=MUTED)
+            self.on_preview(*key)
+
+    def _next_target(self, _event=None) -> str:
+        if self.targets and not self.busy:
+            self.index = (self.index + 1) % len(self.targets)
+            self._render_target()
+            self._schedule_preview()
+        return "break"
+
+    def _change_tone(self, delta: int) -> str:
+        tone = clamp_tone(self.tone + delta)
+        if tone != self.tone and not self.busy:
+            self.tone = tone
+            self._render_target()
+            self._schedule_preview()
+        return "break"
+
+    def _submit(self, _event=None) -> str:
+        if self.busy:
+            return "break"
+        key = self.current()
+        if not key[0]:
+            self._cancel()
+            return "break"
+        if self._after:
+            self.win.after_cancel(self._after)
+            self._after = None
+        self.busy = True
+        self.entry.configure(state="disabled")
+        self.on_submit(*key)
+        return "break"
+
+    def _cancel(self, _event=None) -> str:
+        self.close()
+        self.on_close()
+        return "break"
+
+    def _close_if_left(self) -> None:
+        # Si hiciste clic en el juego (u otra ventana), la barra se cierra; lo escrito vuelve si la reabrís.
+        if self.visible and not self.busy and self.win.focus_displayof() is None:
+            self.close()
+
+
+class HotkeyCaptureDialog:
+    """Ventanita que espera la tecla o botón del mouse que el usuario quiere usar como atajo."""
+
+    def __init__(self, root: tk.Tk, on_done: Callable[[str | None], None]) -> None:
+        self.on_done = on_done
+        self.cancel = threading.Event()
+        self.result: list[str | None] = []
+        self.win = tk.Toplevel(root, bg="#ffffff")
+        self.win.title("Elegí el atajo")
+        self.win.resizable(False, False)
+        self.win.transient(root)
+        self.win.attributes("-topmost", True)
+        self.win.protocol("WM_DELETE_WINDOW", self._cancel)
+        tk.Label(
+            self.win, text="Apretá la tecla o el botón del mouse\nque quieras usar para escribir en Roblox",
+            font=("Segoe UI", 13, "bold"), fg="#1f2328", bg="#ffffff", justify="center",
+        ).pack(padx=28, pady=(22, 8))
+        tk.Label(
+            self.win,
+            text="Sirve cualquier tecla (también con Ctrl, Alt o Shift), la rueda del mouse\n"
+                 "o sus botones laterales. El clic izquierdo y el derecho no se pueden usar.\n\nEsc para cancelar.",
+            font=("Segoe UI", 10), fg="#6b7280", bg="#ffffff", justify="center",
+        ).pack(padx=28, pady=(0, 20))
+        self.win.update_idletasks()
+        x = root.winfo_rootx() + (root.winfo_width() - self.win.winfo_width()) // 2
+        y = root.winfo_rooty() + (root.winfo_height() - self.win.winfo_height()) // 3
+        self.win.geometry(f"+{max(0, x)}+{max(0, y)}")
+        self.win.focus_force()
+        self.win.grab_set()  # las teclas no llegan a la ventana principal mientras elegís
+        threading.Thread(target=self._capture, name="bubble-capture", daemon=True).start()
+        self.win.after(50, self._poll)
+
+    def _capture(self) -> None:
+        self.result.append(win32.capture_binding(self.cancel))
+
+    def _poll(self) -> None:
+        if self.result:
+            self._finish(self.result[0])
+        elif self.win.winfo_exists():
+            self.win.after(50, self._poll)
+
+    def _cancel(self) -> None:
+        self.cancel.set()
+        self._finish(None)
+
+    def _finish(self, spec: str | None) -> None:
+        if not self.win.winfo_exists():
+            return
+        self.cancel.set()
+        self.win.grab_release()
+        self.win.destroy()
+        self.on_done(spec)
+
+
+class CalibrationOverlay:
+    """Pantalla semitransparente para marcar con el mouse dónde está el chat de Roblox."""
+
+    def __init__(self, root: tk.Tk, area: Rect, on_done: Callable[[Rect | None], None]) -> None:
+        self.area = area
+        self.on_done = on_done
+        self.start: tuple[int, int] | None = None
+        self.win = tk.Toplevel(root)
+        self.win.overrideredirect(True)
+        self.win.attributes("-topmost", True)
+        self.win.attributes("-alpha", 0.4)
+        self.win.geometry(f"{area.width}x{area.height}+{area.left}+{area.top}")
+        self.canvas = tk.Canvas(self.win, bg="black", highlightthickness=0, cursor="crosshair")
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.create_text(
+            area.width // 2, area.height // 2, fill="white", font=("Segoe UI", 20, "bold"),
+            text="Arrastrá un rectángulo sobre el chat de Roblox\n(incluí varias líneas de mensajes)\n\nEsc para cancelar",
+            justify="center",
+        )
+        self.rect_id = None
+        self.canvas.bind("<ButtonPress-1>", self._press)
+        self.canvas.bind("<B1-Motion>", self._drag)
+        self.canvas.bind("<ButtonRelease-1>", self._release)
+        self.win.bind("<Escape>", lambda _e: self._finish(None))
+        self.win.after(10, self._grab_focus)
+
+    def _grab_focus(self) -> None:
+        win32.force_foreground(win32.toplevel_hwnd(self.win))
+        self.win.focus_force()
+
+    def _press(self, event) -> None:
+        self.start = (event.x, event.y)
+        if self.rect_id:
+            self.canvas.delete(self.rect_id)
+        self.rect_id = self.canvas.create_rectangle(event.x, event.y, event.x, event.y, outline="#4af", width=3)
+
+    def _drag(self, event) -> None:
+        if self.start and self.rect_id:
+            self.canvas.coords(self.rect_id, *self.start, event.x, event.y)
+
+    def _release(self, event) -> None:
+        if not self.start:
+            return
+        rect = Rect.from_points(*self.start, event.x, event.y)
+        if rect.width < 40 or rect.height < 30:
+            return  # demasiado chico: probablemente un clic
+        self._finish(rect.offset(self.area.left, self.area.top))
+
+    def _finish(self, rect: Rect | None) -> None:
+        self.win.destroy()
+        self.on_done(rect)

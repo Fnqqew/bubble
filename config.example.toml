@@ -1,0 +1,72 @@
+# Copiá este archivo a %APPDATA%\Bubble\config.toml para personalizarlo.
+# Si no existe, se usan estos mismos valores por defecto.
+
+[user]
+# Tu idioma y variante: lo que llega se traduce a cómo hablás vos.
+# "auto" = el de Windows. Ejemplos: "es-AR" (rioplatense), "es-MX", "es-ES", "pt-BR", "en-US".
+language = "auto"
+# Idioma al que se traduce lo que escribís/decís. "auto" = el idioma (y variante) que más aparece en el chat.
+outgoing_language = "auto"
+# Tono de lo que enviás (1 a 5):
+#   1 = Neutro / formal: claro y correcto, sin jerga (el que menos confusiones genera)
+#   2 = Amable: natural y cálido, palabras completas
+#   3 = Casual: relajado, solo jerga muy conocida
+#   4 = Gamer: abreviaturas y jerga comunes de los jugadores de ese idioma
+#   5 = Jerga nativa: como escribe un pibe gamer de ese país
+tone = 3
+
+[translation]
+# Líneas recientes del chat que se mandan como contexto (mejora la precisión).
+context_lines = 6
+# Mensajes cortos (<= esta cantidad de palabras) se guardan en cache.
+cache_max_words = 6
+cache_size = 2000
+# Segundos máximos por traducción antes de pasar al siguiente proveedor.
+timeout_s = 8.0
+# Aclarar entre paréntesis la jerga que no tiene equivalente en tu idioma (ej. "ratio (te ganaron en likes)").
+explain_slang = true
+
+[claude]
+# Usa la suscripción de Claude con la que iniciaste sesión en Claude Code.
+# Alias: "opus", "sonnet", "haiku", o un ID completo como "claude-opus-5-5".
+model = "opus"
+# low = más rápido. medium/high = más razonamiento (más lento).
+effort = "low"
+# Sesiones de Claude abiertas en paralelo (permite traducir varios mensajes a la vez).
+pool_size = 3
+# Se reinicia la sesión cada N traducciones para que no crezca el historial.
+session_max_turns = 15
+# Ruta a claude.exe. Vacío = se busca solo (PATH, instalador nativo o extensión de VS Code).
+cli_path = ""
+
+[roblox]
+# Atajo para escribir un mensaje traducido dentro de Roblox. Se cambia más fácil desde la ventana ("Cambiar").
+# Ejemplos: "°" (Shift + tecla a la izquierda del 1 en teclado latinoamericano), "F8", "ctrl+shift+t",
+# "mouse3" (clic de la rueda), "mouse4" / "mouse5" (botones laterales del mouse).
+hotkey = "°"
+# Leer el chat de Roblox por OCR al iniciar.
+read_chat = true
+# "inline" = la traducción se dibuja encima de cada mensaje (el original queda borroso debajo).
+# "panel"  = lista de traducciones al costado del chat (modo anterior).
+display_mode = "inline"
+# Traducir también las burbujas de texto sobre la cabeza de los jugadores.
+translate_bubbles = true
+bubble_interval_s = 0.12
+# Cada cuántos segundos se mira si el chat cambió (es barato: solo se lee con OCR cuando cambia).
+poll_interval_s = 0.08
+# Rendimiento: "auto" se adapta a tu procesador (mide lo que cuesta cada lectura y la espacia para no quitarle
+# rendimiento a Roblox); "alta", "media" o "baja" lo fijan a mano. Los intervalos de arriba son el ritmo base.
+performance = "auto"
+# Capturar la pantalla con la placa de video (DXGI: AMD, NVIDIA o Intel). Usa mucho menos CPU; si falla, se
+# usa la captura normal sola.
+gpu_capture = true
+# Segundos que cada traducción queda visible en el overlay.
+overlay_seconds = 20
+# Tu nombre visible en Roblox: tus propios mensajes no se traducen.
+username = ""
+# Tecla que abre el chat en Roblox.
+open_chat_key = "/"
+# "paste" (pega con Ctrl+V, rápido) o "type" (tipea letra por letra).
+send_method = "paste"
+# Idioma del OCR de Windows (ej. "en-US"). Vacío = el de tu Windows.
+ocr_language = ""

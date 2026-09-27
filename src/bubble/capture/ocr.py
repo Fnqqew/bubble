@@ -1,0 +1,190 @@
+"""OCR nativo de Windows (Windows.Media.Ocr): rápido (~40 ms), local y sin costo."""
+
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass
+
+import numpy as np
+from PIL import Image
+from scipy import ndimage
+
+
+@dataclass(frozen=True)
+class OcrWord:
+    text: str
+    left: float
+    top: float
+    width: float
+    height: float
+
+    @property
+    def right(self) -> float:
+        return self.left + self.width
+
+
+@dataclass(frozen=True)
+class OcrRow:
+    text: str
+    top: float
+    height: float
+    left: float
+    width: float = 0.0
+    words: tuple[OcrWord, ...] = ()
+
+    @property
+    def bottom(self) -> float:
+        return self.top + self.height
+
+    @property
+    def right(self) -> float:
+        return self.left + self.width
+
+
+CHAT_TEXT_WHITE = 235  # brillo desde el que un píxel es letra plena
+
+
+def prepare_chat_image(image: Image.Image) -> Image.Image:
+    """Deja el chat como letras negras sobre blanco, sea cual sea el fondo del juego.
+
+    El texto del chat es claro (blanco, o nombres de colores) con borde oscuro, sobre un panel semitransparente
+    que deja ver la escena. Se toma el canal más brillante de cada píxel (un nombre rojo o azul queda tan claro
+    como el texto blanco), se estira el contraste desde el brillo típico del fondo y se invierte.
+    En el simulador, con fondos oscuros, de nieve y paneles claros, las líneas leídas pasan de 64 % a 99 %.
+    """
+    value = np.asarray(image.convert("RGB")).max(axis=2).astype(np.float32)
+    background = float(np.percentile(value, 50))
+    low = min(background + 15, CHAT_TEXT_WHITE - 40)
+    value = np.clip((value - low) * (255.0 / (CHAT_TEXT_WHITE - low)), 0, 255)
+    return Image.fromarray((255 - value).astype(np.uint8))
+
+
+def binarize_local_background(image: Image.Image, min_distance: float = 60, ratio: float = 0.75) -> Image.Image:
+    """Segunda forma de preparar el chat, para cuando su fondo oscuro se desvaneció y el texto queda directo sobre el
+    juego (cielo, pasto, paredes que se mueven con la cámara).
+
+    Estima el color del fondo alrededor de cada punto (mediana de la zona: las letras son finas y no la cambian) y
+    marca como letra lo que tiene un color muy distinto a ese fondo sin ser mucho más oscuro que él (el borde
+    semitransparente de las letras sí es más oscuro: queda afuera). Resultado en blanco y negro puro.
+    """
+    rgb = image.convert("RGB")
+    small = rgb.reduce(3)
+    background_small = np.stack(
+        [ndimage.median_filter(np.asarray(small)[..., channel], size=7) for channel in range(3)], axis=2)
+    background = np.asarray(Image.fromarray(background_small.astype(np.uint8)).resize(rgb.size, Image.Resampling.BILINEAR),
+                            dtype=np.float32)
+    pixels = np.asarray(rgb, dtype=np.float32)
+    distance = np.sqrt(((pixels - background) ** 2).sum(axis=2))
+    ink = (distance > min_distance) & (pixels.sum(axis=2) >= ratio * background.sum(axis=2))
+    return Image.fromarray(np.where(ink, 0, 255).astype(np.uint8))
+
+
+def looks_faded(image: Image.Image) -> bool:
+    """El fondo oscuro del chat se desvaneció (Roblox lo esconde a los pocos segundos sin actividad)."""
+    return float(np.median(np.asarray(image.convert("RGB")).max(axis=2))) > 120
+
+
+WHITE_TEXT = 230  # el texto de los mensajes de Roblox es blanco: todos los canales altos
+
+
+def white_text_bands(image: Image.Image, min_pixels: int = 2) -> list[tuple[int, int]]:
+    """Franjas (arriba, abajo) de la imagen donde hay letras blancas: dónde hay mensajes, sin OCR (~1 ms)."""
+    white = np.asarray(image.convert("RGB")).min(axis=2) >= WHITE_TEXT
+    busy = np.concatenate(([False], white.sum(axis=1) >= min_pixels, [False]))
+    edges = np.flatnonzero(busy[1:] != busy[:-1])
+    bands: list[list[int]] = []
+    for start, end in zip(edges[::2].tolist(), edges[1::2].tolist()):
+        if bands and start - bands[-1][1] <= 2:
+            bands[-1][1] = end  # huecos de 1-2 filas dentro de la misma línea (entre letras)
+        else:
+            bands.append([start, end])
+    return [(start, end) for start, end in bands if end - start >= 5]
+
+
+def _same_line(a: OcrRow, b: OcrRow) -> bool:
+    """Misma línea visual si se superponen verticalmente al menos la mitad de la más baja.
+
+    (Comparar centros con la altura máxima unía líneas vecinas cuando un ícono, como las
+    banderitas del chat, agrandaba una de ellas.)
+    """
+    overlap = min(a.bottom, b.bottom) - max(a.top, b.top)
+    return overlap >= 0.5 * min(a.height, b.height)
+
+
+def merge_rows(rows: list[OcrRow]) -> list[OcrRow]:
+    """Une fragmentos de la misma línea (Windows separa el nombre coloreado del mensaje)."""
+    merged: list[list[OcrRow]] = []
+    for row in sorted(rows, key=lambda r: r.top + r.height / 2):
+        if merged and any(_same_line(row, other) for other in merged[-1]):
+            merged[-1].append(row)
+        else:
+            merged.append([row])
+    result = []
+    for group in merged:
+        group.sort(key=lambda r: r.left)
+        top = min(r.top for r in group)
+        left = group[0].left
+        result.append(OcrRow(
+            text=" ".join(r.text for r in group),
+            top=top,
+            height=max(r.bottom for r in group) - top,
+            left=left,
+            width=max(r.right for r in group) - left,
+            words=tuple(w for r in group for w in r.words),
+        ))
+    return result
+
+
+class WindowsOcr:
+    def __init__(self, language_tag: str = "") -> None:
+        from winrt.windows.globalization import Language
+        from winrt.windows.media.ocr import OcrEngine
+
+        if language_tag:
+            self._engine = OcrEngine.try_create_from_language(Language(language_tag))
+        else:
+            self._engine = OcrEngine.try_create_from_user_profile_languages()
+        if self._engine is None:
+            raise RuntimeError("El OCR de Windows no está disponible para ese idioma")
+        self._max_dim = OcrEngine.max_image_dimension
+        # Un motor de OCR no admite dos lecturas al mismo tiempo ("Another RecognizeAsync operation is
+        # already running"): se hacen de a una. Para leer en paralelo, usar otra instancia.
+        self._lock = asyncio.Lock()
+
+    @property
+    def language(self) -> str:
+        return self._engine.recognizer_language.language_tag
+
+    async def recognize(self, image: Image.Image, upscale: bool = True) -> list[OcrRow]:
+        from winrt.windows.graphics.imaging import BitmapPixelFormat, SoftwareBitmap
+        from winrt.windows.storage.streams import DataWriter
+
+        # El chat de Roblox tiene letra chica: agrandarla mejora mucho la lectura.
+        # Para la pantalla completa (burbujas) no hace falta y sería más lento.
+        scale = 2 if upscale and max(image.size) * 2 <= self._max_dim else 1
+        if scale > 1:
+            image = image.resize((image.width * scale, image.height * scale), Image.Resampling.LANCZOS)
+        r, g, b = image.convert("RGB").split()
+        bgra = Image.merge("RGBA", (b, g, r, Image.new("L", image.size, 255))).tobytes()
+        writer = DataWriter()
+        writer.write_bytes(bgra)
+        bitmap = SoftwareBitmap.create_copy_from_buffer(
+            writer.detach_buffer(), BitmapPixelFormat.BGRA8, image.width, image.height
+        )
+        async with self._lock:
+            result = await self._engine.recognize_async(bitmap)
+        rows = []
+        for line in result.lines:
+            words = tuple(
+                OcrWord(w.text, w.bounding_rect.x / scale, w.bounding_rect.y / scale,
+                        w.bounding_rect.width / scale, w.bounding_rect.height / scale)
+                for w in line.words
+            )
+            if not words:
+                continue
+            top = min(w.top for w in words)
+            bottom = max(w.top + w.height for w in words)
+            left = min(w.left for w in words)
+            right = max(w.right for w in words)
+            rows.append(OcrRow(line.text, top, bottom - top, left, right - left, words))
+        return merge_rows(rows)

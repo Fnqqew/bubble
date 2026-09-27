@@ -1,0 +1,19 @@
+# Entorno y cachés
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Configuración y datos personales (viven en %APPDATA% y %LOCALAPPDATA%, pero por las dudas)
+config.toml
+state.json
+*.log
+
+# Editor / sistema
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

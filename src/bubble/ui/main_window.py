@@ -1,0 +1,900 @@
+"""Ventana principal de Bubble (diseño base; se rediseña más adelante)."""
+
+from __future__ import annotations
+
+import asyncio
+import itertools
+import os
+import queue
+import threading
+import tkinter as tk
+from dataclasses import replace
+from pathlib import Path
+from tkinter import ttk
+from tkinter.scrolledtext import ScrolledText
+
+from .. import roblox, shortcut, win32
+from ..async_runner import AsyncRunner
+from PIL import ImageDraw
+
+from ..capture.bubble_tracker import BubbleWatcher, find_bubble_boxes
+from ..capture.chat_parser import ChatTracker, SpamFilter, parse_chat
+from ..capture.chat_locator import find_chat_region
+from ..capture.chat_watcher import ChatWatcher
+from ..capture.ocr import WindowsOcr, prepare_chat_image
+from ..capture.screen import grab
+from ..config import Config, save_setting
+from ..geometry import Rect
+from ..performance import detect_hardware
+from ..translate import build_translator
+from ..translate.base import TONE_NAMES, ChatLine, TranslationResult, clamp_tone
+from ..translate.languages import LOCALE_CHOICES
+from ..state import load_state, update_state
+from .inline import BubbleView, Entry, InlineChatView
+from .overlays import CalibrationOverlay, ComposeBar, HotkeyCaptureDialog, TranslationOverlay
+from .tutorial import TutorialWindow, build_steps
+
+ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "bubble.ico"
+STATUS_TEXT = {
+    "translated": "",
+    "adapted": "jerga de otro país adaptada",
+    "same_language": "ya estaba en tu idioma",
+    "universal": "no necesita traducción",
+    "filtered": "tapado por el filtro de Roblox: no se traduce",
+    "local": "risa traducida al instante",
+    "cache": "desde cache",
+    "error": "ERROR",
+}
+LANG_CHOICES = [f"{code} - {name}" for code, name in LOCALE_CHOICES]
+AUTO_CHOICE = "auto - Idioma del chat"
+MULTI = "*"  # destino especial: todos los idiomas principales del chat
+MULTI_MAX = 3
+TONE_CHOICES = [f"{level} - {name}" for level, name in TONE_NAMES.items()]
+TONE_HINTS = {
+    1: "Claro y correcto, sin jerga: el que menos confusiones genera.",
+    2: "Natural y cálido, con palabras completas.",
+    3: "Relajado, solo jerga muy conocida.",
+    4: "Abreviaturas y jerga comunes de los jugadores de ese idioma.",
+    5: "Como escribe un gamer nativo de ese país.",
+}
+# Mensajes que se muestran en el overlay (los que ya estaban en tu idioma no hace falta).
+OVERLAY_STATUSES = {"translated", "adapted", "local", "cache", "error"}
+
+
+def _unchanged(original: str, translation: str) -> bool:
+    """La 'traducción' quedó igual al original (nombres, "Kikuuu"): no vale la pena mostrarla."""
+    def key(text: str) -> str:
+        return "".join(c for c in text.casefold() if c.isalnum())
+
+    return key(original) == key(translation)
+
+
+def _code(choice: str) -> str:
+    return choice.split(" - ", 1)[0]
+
+
+def _choice(code: str) -> str:
+    if code == "auto":
+        return AUTO_CHOICE
+    return next((c for c in LANG_CHOICES if _code(c) == code), code)
+
+
+def _debug_dir() -> Path:
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".cache")
+    path = Path(base) / "Bubble" / "debug"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+class BubbleWindow:
+    def __init__(self, config: Config) -> None:
+        self.config = config
+        self.runner = AsyncRunner()
+        self.translator = build_translator(config)
+        self.tracker = ChatTracker(username=config.roblox.username)
+        self.spam = SpamFilter()
+        self.ocr: WindowsOcr | None = None
+        self.watcher: ChatWatcher | None = None
+        self.bubble_watcher: BubbleWatcher | None = None
+        self.hardware = None  # procesador y placa de video (se detectan al arrancar)
+        self._detecting = False  # buscando el chat en la ventana de Roblox
+        self.inline_mode = config.roblox.display_mode != "panel"
+        # Barra para escribir: traducciones ya hechas (vista previa) y cuál se manda apenas esté lista.
+        self._compose_results: dict[tuple[str, str, int], tuple[list[str], list[str]]] = {}
+        self._compose_running: set[tuple[str, str, int]] = set()
+        self._send_when_ready: tuple[str, str, int] | None = None
+        self.saved_region = roblox.load_chat_region()
+        self.events: queue.Queue = queue.Queue()
+        self.ready = False
+        self.roblox_hwnd: int | None = None
+        self.compose_hwnd: int | None = None
+        self._msg_ids = itertools.count()
+        self._chat_rows: dict[int, object] = {}
+        self._chat_stream: dict[int, str] = {}
+
+        win32.enable_dpi_awareness()
+        win32.set_app_id("Bubble.Translator")
+        self.root = tk.Tk()
+        self.root.title("Bubble")
+        self.root.geometry("820x700")
+        self.root.minsize(620, 520)
+        if ICON_PATH.exists():
+            self.root.iconbitmap(default=str(ICON_PATH))
+        self._build()
+        self.overlay = TranslationOverlay(
+            self.root, config.roblox.overlay_seconds, self._overlay_anchor, self._overlay_visible
+        )
+        self.compose = ComposeBar(self.root, self._compose_preview, self._compose_submit, self._compose_closed)
+        self.inline_chat = InlineChatView(self.root, self.tracker.same_message)
+        self.bubbles = BubbleView(self.root, self.tracker.same_message)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.root.after(30, self._drain_events)
+        self.root.after(200, self._poll_roblox)
+
+        self.hotkey = None
+        self._start_hotkey()
+        # Mantener el acceso directo del escritorio al día (ícono y ubicación) sin frenar el arranque.
+        threading.Thread(target=self._sync_shortcut, name="bubble-shortcut", daemon=True).start()
+        # El tutorial se abre solo la primera vez; después, solo desde el botón "Tutorial".
+        self.tutorial: TutorialWindow | None = None
+        if not load_state().get("tutorial_seen"):
+            self.root.after(600, self.open_tutorial)
+        self._set_status("Conectando con tu suscripción de Claude...")
+        future = self.runner.submit(self._startup())
+        future.add_done_callback(lambda f: self.events.put(("started", f.exception())))
+
+    # ================= interfaz =================
+    def _build(self) -> None:
+        pad = {"padx": 8, "pady": 4}
+        top = ttk.Frame(self.root)
+        top.pack(fill="x", **pad)
+        ttk.Label(top, text="Tu idioma:").pack(side="left")
+        self.my_lang = ttk.Combobox(top, values=LANG_CHOICES, state="readonly", width=30)
+        self.my_lang.set(_choice(self.config.user.language))
+        self.my_lang.bind("<<ComboboxSelected>>", self._on_lang_change)
+        self.my_lang.pack(side="left", padx=(4, 16))
+        ttk.Label(top, text="Enviar en:").pack(side="left")
+        self.out_lang = ttk.Combobox(top, values=[AUTO_CHOICE, *LANG_CHOICES], state="readonly", width=30)
+        self.out_lang.set(_choice(self.config.user.outgoing_language))
+        self.out_lang.bind("<<ComboboxSelected>>", self._on_lang_change)
+        self.out_lang.pack(side="left", padx=4)
+
+        tone_row = ttk.Frame(self.root)
+        tone_row.pack(fill="x", **pad)
+        ttk.Label(tone_row, text="Tono al enviar:").pack(side="left")
+        self.tone = ttk.Combobox(tone_row, values=TONE_CHOICES, state="readonly", width=22)
+        self.tone.set(TONE_CHOICES[clamp_tone(self.config.user.tone) - 1])
+        self.tone.bind("<<ComboboxSelected>>", self._on_tone_change)
+        self.tone.pack(side="left", padx=(4, 8))
+        self.tone_hint = ttk.Label(tone_row, text=TONE_HINTS[clamp_tone(self.config.user.tone)], foreground="#666")
+        self.tone_hint.pack(side="left")
+        ttk.Button(tone_row, text="Tutorial", command=self.open_tutorial).pack(side="right")
+        ttk.Label(tone_row, text=f"Modelo: {self.config.claude.model} ({self.config.claude.effort})").pack(
+            side="right", padx=(0, 12)
+        )
+
+        rbx = ttk.LabelFrame(self.root, text="Roblox")
+        rbx.pack(fill="x", **pad)
+        self.roblox_status = ttk.Label(rbx, text="Buscando Roblox...")
+        self.roblox_status.grid(row=0, column=0, columnspan=4, sticky="w", padx=6, pady=(4, 2))
+        find_row = ttk.Frame(rbx)
+        find_row.grid(row=1, column=0, padx=6, pady=4)
+        ttk.Button(find_row, text="1. Detectar chat", command=self._detect_chat).pack(side="left")
+        ttk.Button(find_row, text="a mano…", width=8, command=self._calibrate).pack(side="left", padx=(4, 0))
+        ttk.Button(rbx, text="2. Probar captura", command=self._capture_test).grid(row=1, column=1, padx=6)
+        self.read_var = tk.BooleanVar(value=self.config.roblox.read_chat)
+        ttk.Checkbutton(rbx, text="Leer y traducir el chat", variable=self.read_var, command=self._toggle_reading).grid(
+            row=1, column=2, padx=6
+        )
+        self.bubbles_var = tk.BooleanVar(value=self.config.roblox.translate_bubbles)
+        ttk.Checkbutton(
+            rbx, text="Traducir burbujas de los jugadores", variable=self.bubbles_var, command=self._toggle_bubbles
+        ).grid(row=1, column=3, padx=6)
+        self.region_label = ttk.Label(rbx, text=self._region_text(), foreground="#666")
+        self.region_label.grid(row=2, column=0, columnspan=4, sticky="w", padx=6)
+        hotkey_row = ttk.Frame(rbx)
+        hotkey_row.grid(row=3, column=0, columnspan=4, sticky="w", padx=6, pady=(2, 6))
+        ttk.Label(hotkey_row, text="Para escribir en otro idioma, en el juego apretá").pack(side="left")
+        self.hotkey_label = ttk.Label(hotkey_row, text="", font=("Segoe UI", 10, "bold"))
+        self.hotkey_label.pack(side="left", padx=(6, 10))
+        ttk.Button(hotkey_row, text="Cambiar…", command=self._change_hotkey).pack(side="left")
+        ttk.Label(hotkey_row, text="(se abre una barra: escribís y Enter lo traduce y lo manda).",
+                  foreground="#666").pack(side="left", padx=6)
+        self._refresh_hotkey_label()
+        self.perf_label = ttk.Label(rbx, text="Detectando tu PC...", foreground="#666")
+        self.perf_label.grid(row=4, column=0, columnspan=4, sticky="w", padx=6, pady=(0, 6))
+
+        sim = ttk.LabelFrame(self.root, text="Prueba sin Roblox")
+        sim.pack(fill="x", **pad)
+        ttk.Label(sim, text="Jugador:").grid(row=0, column=0, sticky="w", padx=4, pady=4)
+        self.speaker = ttk.Entry(sim, width=14)
+        self.speaker.insert(0, "Player1")
+        self.speaker.grid(row=0, column=1, sticky="w", padx=4)
+        self.incoming_text = ttk.Entry(sim)
+        self.incoming_text.grid(row=0, column=2, sticky="ew", padx=4)
+        self.incoming_text.bind("<Return>", lambda _e: self._send_incoming())
+        ttk.Button(sim, text="Traducir entrante", command=self._send_incoming).grid(row=0, column=3, padx=4)
+        ttk.Label(sim, text="Vos:").grid(row=1, column=0, sticky="w", padx=4, pady=4)
+        self.outgoing_text = ttk.Entry(sim)
+        self.outgoing_text.grid(row=1, column=1, columnspan=2, sticky="ew", padx=4)
+        self.outgoing_text.bind("<Return>", lambda _e: self._send_outgoing())
+        ttk.Button(sim, text="Traducir y copiar", command=self._send_outgoing).grid(row=1, column=3, padx=4)
+        sim.columnconfigure(2, weight=1)
+
+        self.live = ttk.Label(self.root, text="", foreground="#666")
+        self.live.pack(fill="x", **pad)
+        self.log = ScrolledText(self.root, wrap="word", state="disabled", font=("Segoe UI", 10))
+        self.log.pack(fill="both", expand=True, **pad)
+        self.log.tag_configure("in", foreground="#0b5394")
+        self.log.tag_configure("out", foreground="#38761d")
+        self.log.tag_configure("meta", foreground="#888888", font=("Segoe UI", 8))
+        self.log.tag_configure("error", foreground="#cc0000")
+        self.log.tag_configure("info", foreground="#7a4d00")
+        self.status = ttk.Label(self.root, text="", anchor="w", relief="sunken")
+        self.status.pack(fill="x", side="bottom")
+
+    def _region_text(self) -> str:
+        r = self.saved_region
+        if not r:
+            return "Todavía no encontré el chat: abrí Roblox (se busca solo) o tocá «Detectar chat»."
+        where = "relativo a la ventana de Roblox" if r.get("relative") else "posición fija en pantalla"
+        return f"Chat calibrado: {r['w']}x{r['h']} px ({where})."
+
+    # ================= arranque y cierre =================
+    async def _startup(self) -> None:
+        await self.translator.start()
+        for provider in self.translator.router.providers:
+            if hasattr(provider, "keep_warm_when"):
+                provider.keep_warm_when = win32.roblox_is_foreground  # solo mientras jugás
+        self.ocr = WindowsOcr(self.config.roblox.ocr_language)
+        # Se adapta a esta PC: captura por GPU si hay, y lecturas más o menos seguidas según el procesador.
+        rbx = self.config.roblox
+        self.hardware = await asyncio.to_thread(detect_hardware, rbx.gpu_capture, rbx.performance)
+        self.events.put(("hardware", self.hardware))
+        self.watcher = ChatWatcher(
+            self.ocr, self.tracker, self._reading_region, self._on_chat_line,
+            on_error=lambda msg: self.events.put(("info", msg)),
+            interval_s=rbx.poll_interval_s,
+            on_frame=lambda frame: self.events.put(("chat_frame", frame)),
+            pacer=self.hardware.pacer("chat", rbx.poll_interval_s, max_s=0.5),
+            on_shift=lambda dy: self.events.put(("chat_shift", dy)),
+        )
+        self.bubble_watcher = BubbleWatcher(
+            WindowsOcr(rbx.ocr_language),  # motor propio: así chat y burbujas se leen en paralelo
+            self._game_area, self._reading_region,
+            on_bubbles=lambda area, items: self.events.put(("bubbles", (area, items))),
+            interval_s=rbx.bubble_interval_s,
+            pacer=self.hardware.pacer("bubbles", rbx.bubble_interval_s, max_s=1.0),
+        )
+        if self.read_var.get():
+            self.watcher.start()
+        if self.bubbles_var.get():
+            self.bubble_watcher.start()
+
+    def _start_hotkey(self) -> None:
+        if self.hotkey:
+            self.hotkey.stop()
+            self.hotkey = None
+        spec = self.config.roblox.hotkey
+        # Solo con Roblox al frente: en otros programas la tecla escribe normalmente.
+        fire, active = (lambda: self.events.put(("hotkey", None))), win32.roblox_is_foreground
+        try:
+            self.hotkey = win32.start_trigger(spec, fire, active)
+        except ValueError as exc:
+            # Ej. "°" en un teclado que no lo tiene: se usa F8 para no quedarse sin atajo.
+            self._append(f"Atajo inválido ({exc}). Se usa F8; cambialo con «Cambiar…».\n", "error")
+            self.config.roblox.hotkey = "F8"
+            self.hotkey = win32.start_trigger("F8", fire, active)
+        if self.hotkey.error:
+            self._append(f"{self.hotkey.error}. Elegí otro con «Cambiar…».\n", "error")
+        self._refresh_hotkey_label()
+
+    def _refresh_hotkey_label(self) -> None:
+        if hasattr(self, "hotkey_label"):
+            self.hotkey_label.configure(text=win32.describe_binding(self.config.roblox.hotkey))
+
+    def _change_hotkey(self) -> None:
+        if self.hotkey:
+            self.hotkey.stop()  # que el atajo actual no se dispare mientras elegís otro
+            self.hotkey = None
+        HotkeyCaptureDialog(self.root, self._on_hotkey_captured)
+
+    def _on_hotkey_captured(self, spec: str | None) -> None:
+        if spec:
+            self.config.roblox.hotkey = spec
+            save_setting("roblox", "hotkey", spec)
+            self._set_status(f"Nuevo atajo: {win32.describe_binding(spec)}")
+        self._start_hotkey()
+
+    def open_tutorial(self) -> None:
+        if self.tutorial is not None:
+            self.tutorial.lift()
+            return
+        steps = build_steps(win32.describe_binding(self.config.roblox.hotkey), self._detect_chat, self._capture_test)
+        self.tutorial = TutorialWindow(self.root, steps, self._on_tutorial_closed, ICON_PATH.with_suffix(".png"))
+
+    def _on_tutorial_closed(self, reason: str) -> None:
+        # Cualquier forma de cerrarlo (completado, saltado, "no mostrar más") cuenta como visto.
+        self.tutorial = None
+        update_state(tutorial_seen=True)
+        if reason != "completado":
+            self._set_status("Podés volver a ver el tutorial cuando quieras con el botón «Tutorial».")
+
+    def _sync_shortcut(self) -> None:
+        try:
+            shortcut.ensure_desktop_shortcut()
+        except Exception as exc:  # noqa: BLE001 - no es crítico
+            self.events.put(("info", f"No se pudo actualizar el acceso directo: {exc}"))
+
+    async def _shutdown(self) -> None:
+        if self.watcher:
+            self.watcher.stop()
+        if self.bubble_watcher:
+            self.bubble_watcher.stop()
+        await self.translator.close()
+
+    def _on_close(self) -> None:
+        self._set_status("Cerrando...")
+        if self.hotkey:
+            self.hotkey.stop()
+        try:
+            self.runner.submit(self._shutdown()).result(timeout=5)
+        except Exception:  # noqa: BLE001 - se cierra igual
+            pass
+        self.runner.stop()
+        self.root.destroy()
+
+    def run(self) -> None:
+        self.root.mainloop()
+
+    # ================= Roblox =================
+    def _current_region(self) -> Rect | None:
+        return roblox.resolve_chat_region(self.saved_region)
+
+    def _reading_region(self) -> Rect | None:
+        # Solo se lee con Roblox en primer plano: si no, en esa zona de la pantalla hay otra cosa.
+        return roblox.resolve_chat_region(self.saved_region, require_foreground=True)
+
+    def _overlay_visible(self) -> bool:
+        return win32.roblox_is_foreground() or self.compose.visible
+
+    def _poll_roblox(self) -> None:
+        hwnd = win32.find_roblox_window()
+        if hwnd:
+            rect = win32.client_rect(hwnd)
+            self.roblox_status.configure(text=f"Roblox detectado ({rect.width}x{rect.height})", foreground="#38761d")
+        else:
+            self.roblox_status.configure(text="Roblox no está abierto (o está minimizado)", foreground="#cc0000")
+        # Sin chat calibrado: se busca solo mientras jugás (apenas haya un par de mensajes a la vista).
+        if self.ready and not self.saved_region and hwnd and win32.roblox_is_foreground():
+            self._detect_chat(quiet=True)
+        self._refresh_perf_label()
+        self.root.after(2000, self._poll_roblox)
+
+    def _refresh_perf_label(self) -> None:
+        hardware = getattr(self, "hardware", None)
+        if hardware is None:
+            return
+        text = f"Tu PC: {hardware.summary()}"
+        paces = []
+        if self.watcher and self.watcher.running and self.watcher.pacer and self.watcher.pacer.cost:
+            paces.append(f"chat cada {self.watcher.pacer.sleep:.2f} s")
+        bubbles = self.bubble_watcher
+        if bubbles and bubbles.running and bubbles.pacer and bubbles.pacer.cost:
+            paces.append(f"burbujas cada {bubbles.pacer.sleep:.2f} s")
+        if paces:
+            text += " · lee " + ", ".join(paces)
+        self.perf_label.configure(text=text)
+
+    def _overlay_anchor(self) -> tuple[int, int] | None:
+        region = self._current_region()
+        if region:
+            return region.right + 12, region.top
+        hwnd = win32.find_roblox_window()
+        if hwnd:
+            client = win32.client_rect(hwnd)
+            return client.left + 12, client.top + 60
+        return None
+
+    def _calibrate(self) -> None:
+        hwnd = win32.find_roblox_window()
+        if hwnd:
+            area = win32.client_rect(hwnd)
+            win32.force_foreground(hwnd)
+        else:
+            area = Rect(0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight())
+        client = area if hwnd else None
+        self.root.after(250, lambda: CalibrationOverlay(self.root, area, lambda rect: self._on_calibrated(rect, client)))
+
+    def _detect_chat(self, quiet: bool = False) -> None:
+        """Busca el chat en la ventana de Roblox (cada juego puede ponerlo en otro lugar). Con `quiet`, sin traer
+        Roblox al frente ni avisar si no lo encuentra (se reintenta solo)."""
+        hwnd = win32.find_roblox_window()
+        if not hwnd or not self.ocr or self._detecting:
+            if not quiet:
+                self._set_status("Abrí Roblox (y esperá a que Bubble esté listo) para detectar el chat.")
+            return
+        self._detecting = True
+        if not quiet:
+            win32.force_foreground(hwnd)
+
+        async def detect():
+            await asyncio.sleep(0 if quiet else 0.35)
+            client = win32.client_rect(hwnd)
+            image = await asyncio.to_thread(grab, client)
+            prepared = await asyncio.to_thread(prepare_chat_image, image)
+            rows = await self.ocr.recognize(prepared)
+            return client, find_chat_region(rows, image.width, image.height)
+
+        future = self.runner.submit(detect())
+        future.add_done_callback(lambda f: self.events.put(("chat_detected", (f, quiet))))
+
+    def _ev_chat_detected(self, payload) -> None:
+        future, quiet = payload
+        self._detecting = False
+        if future.exception():
+            if not quiet:
+                self._append(f"No se pudo detectar el chat: {future.exception()}\n", "error")
+            return
+        client, guess = future.result()
+        if guess is None:
+            if not quiet:
+                self._set_status("No encontré el chat: esperá a que haya un par de mensajes y probá de nuevo, "
+                                 "o marcalo «a mano…».")
+            return
+        self._on_calibrated(guess.region.offset(client.left, client.top), client)
+        self._append(f"Chat encontrado automáticamente ({guess.lines} mensajes a la vista).\n", "info")
+
+    def _on_calibrated(self, rect: Rect | None, client: Rect | None) -> None:
+        if rect is None:
+            self._set_status("Calibración cancelada.")
+            return
+        roblox.save_chat_region(rect, client)
+        self.saved_region = roblox.load_chat_region()
+        self.region_label.configure(text=self._region_text())
+        self._set_status("Chat calibrado. Tocá 'Probar captura' para verificar la lectura.")
+
+    def _toggle_reading(self) -> None:
+        enabled = self.read_var.get()
+
+        async def apply() -> None:
+            if self.watcher:
+                self.watcher.start() if enabled else self.watcher.stop()
+
+        self.runner.submit(apply())
+        self._set_status("Leyendo el chat de Roblox." if enabled else "Lectura del chat pausada.")
+
+    def _toggle_bubbles(self) -> None:
+        enabled = self.bubbles_var.get()
+        save_setting("roblox", "translate_bubbles", enabled)
+
+        async def apply() -> None:
+            if self.bubble_watcher:
+                self.bubble_watcher.start() if enabled else self.bubble_watcher.stop()
+
+        self.runner.submit(apply())
+        self._set_status("Traduciendo burbujas de los jugadores." if enabled else "Burbujas sin traducir.")
+
+    def _game_area(self) -> Rect | None:
+        """Pantalla del juego (para buscar burbujas), solo con Roblox en primer plano."""
+        if not win32.roblox_is_foreground():
+            return None
+        hwnd = win32.find_roblox_window()
+        return win32.client_rect(hwnd) if hwnd else None
+
+    def _capture_test(self) -> None:
+        # Al tocar el botón, la ventana activa es Bubble: traer Roblox al frente antes de capturar.
+        hwnd = win32.find_roblox_window()
+        if hwnd:
+            win32.force_foreground(hwnd)
+
+        async def test() -> tuple:
+            await asyncio.sleep(0.4 if hwnd else 0)
+            region = self._current_region()
+            if region is None:
+                return None, [], []
+            image = await asyncio.to_thread(grab, region)
+            path = _debug_dir() / "captura_chat.png"
+            image.save(path)
+            rows = await self.ocr.recognize(prepare_chat_image(image)) if self.ocr else []
+            self._bubble_report = await self._bubble_diagnosis(region)
+            return path, rows, parse_chat(rows, self.tracker.is_known_name, frame_width=image.width)
+
+        future = self.runner.submit(test())
+        future.add_done_callback(lambda f: self.events.put(("capture_test", f)))
+
+    async def _bubble_diagnosis(self, chat_region: Rect | None) -> list[str]:
+        """Burbujas que se ven ahora: se marcan en rojo en una imagen y se lee su texto."""
+        hwnd = win32.find_roblox_window()
+        if not hwnd or not self.ocr:
+            return ["Roblox no está abierto: no se buscaron burbujas."]
+        area = win32.client_rect(hwnd)
+        image = await asyncio.to_thread(grab, area)
+        exclude = chat_region.offset(-area.left, -area.top) if chat_region else None
+        boxes = await asyncio.to_thread(find_bubble_boxes, image, exclude)
+        marked = image.copy()
+        draw = ImageDraw.Draw(marked)
+        report = [f"Burbujas encontradas: {len(boxes)}"]
+        for box in boxes:
+            draw.rectangle((box.left, box.top, box.right, box.bottom), outline=(255, 0, 0), width=3)
+            rows = await self.ocr.recognize(image.crop((box.left, box.top, box.right, box.bottom)))
+            text = " ".join(r.text for r in rows) or "(sin texto legible)"
+            report.append(f"   ({box.left},{box.top}) {box.width}x{box.height}: {text}")
+        path = _debug_dir() / "burbujas.png"
+        marked.save(path)
+        report.append(f"Imagen con las burbujas marcadas en rojo: {path}")
+        return report
+
+    def _on_chat_line(self, line: ChatLine) -> None:
+        # Hilo de asyncio: traducir sin frenar la lectura del chat. Cada mensaje lleva un número para
+        # que el overlay respete el orden del chat aunque las traducciones terminen en otro orden.
+        spam = self.spam.check(line)
+        if spam:
+            self.events.put(("info", f"Spam de {line.speaker} ({spam}), no se traduce: {line.text}"))
+            return
+        msg_id = next(self._msg_ids)
+
+        async def translate() -> None:
+            result = await self.translator.translate_incoming(
+                line.text, line.speaker,
+                on_delta=lambda chunk: self.events.put(("chat_delta", (msg_id, chunk))),
+                on_pending=lambda: self.events.put(("chat_pending", (msg_id, line))),
+            )
+            self.events.put(("chat", (msg_id, line, result)))
+
+        asyncio.get_running_loop().create_task(translate())
+
+    # ================= escribir en Roblox =================
+    def _targets(self) -> tuple[list[str], dict[str, str]]:
+        """Idiomas para Tab: el principal, "todos" (si el chat mezcla idiomas), el resto del chat y los comunes."""
+        mine = self.translator.my_locale[0]
+        in_chat = self.translator.chat_languages()
+        ordered = [self.translator.outgoing_target(), *in_chat, "en", "pt", "es", "fr", "hi", "ru", "tr", "id"]
+        targets = [c for c in dict.fromkeys(ordered) if c != mine] or ["en"]
+        labels = {}
+        if len(in_chat) >= 2:
+            targets.insert(1, MULTI)
+            labels[MULTI] = "Todos los del chat (" + " + ".join(c.upper() for c in in_chat[:MULTI_MAX]) + ")"
+        return targets, labels
+
+    def _on_hotkey(self) -> None:
+        """El atajo abre la barra para escribir. No toca el juego: ninguna tecla le llega a Roblox hasta que
+        mandás el mensaje (y ahí solo: abrir el chat, el texto y Enter)."""
+        if not self.ready:
+            self._set_status("Todavía conectando con tu suscripción de Claude…")
+            return
+        if self.compose.visible:
+            return
+        self.roblox_hwnd = win32.find_roblox_window()
+        area = win32.client_rect(self.roblox_hwnd) if self.roblox_hwnd else None
+        targets, labels = self._targets()
+        self.compose.open(targets, area, self.config.user.tone, labels)
+
+    def _compose_preview(self, text: str, target: str, tone: int) -> None:
+        """Traducción para ver mientras escribís (y que al apretar Enter ya esté lista)."""
+        key = (text, target, tone)
+        if key in self._compose_results:
+            messages, _own = self._compose_results[key]
+            self.compose.show_preview(key, " / ".join(messages), "done")
+        elif key not in self._compose_running:
+            self._compose_running.add(key)
+            self.runner.submit(self._compose_translate(key))
+
+    async def _compose_translate(self, key: tuple[str, str, int]) -> None:
+        text, target, tone = key
+        partial: list[str] = []
+
+        def on_delta(chunk: str) -> None:
+            partial.append(chunk)
+            self.events.put(("compose_partial", (key, "".join(partial))))
+
+        try:
+            if target == MULTI:
+                # Servidor con varios idiomas: se traduce a los principales en paralelo y se manda junto.
+                languages = self.translator.chat_languages()[:MULTI_MAX] or ["en"]
+                results = await asyncio.gather(
+                    *(self.translator.translate_outgoing(text, lang, tone=tone) for lang in languages)
+                )
+                ok = [(r.target_lang, r.translation) for r in results if r.status != "error"]
+                if not ok:
+                    raise RuntimeError(results[0].error or "No se pudo traducir")
+                messages = roblox.combine_translations(ok)
+                own = messages + [translation for _lang, translation in ok]
+            else:
+                result = await self.translator.translate_outgoing(text, target, on_delta=on_delta, tone=tone)
+                if result.status == "error":
+                    raise RuntimeError(result.error or "No se pudo traducir")
+                messages = own = [result.translation]
+            self.events.put(("compose_done", (key, messages, own, "")))
+        except Exception as exc:  # noqa: BLE001 - se muestra en la barra
+            self.events.put(("compose_done", (key, [], [], str(exc) or "No se pudo traducir")))
+
+    def _ev_compose_partial(self, payload) -> None:
+        key, text = payload
+        self.compose.show_preview(key, text, "working")
+
+    def _ev_compose_done(self, payload) -> None:
+        key, messages, own, error = payload
+        self._compose_running.discard(key)
+        if error:
+            self.compose.show_preview(key, error, "error")
+            if self._send_when_ready == key:
+                self._send_when_ready = None
+                self.compose.unlock()  # se puede corregir y apretar Enter de nuevo
+            return
+        if len(self._compose_results) > 60:
+            self._compose_results.clear()
+        self._compose_results[key] = (messages, own)
+        self.compose.show_preview(key, " / ".join(messages), "done")
+        if self._send_when_ready == key:
+            self._compose_send(key)
+
+    def _compose_submit(self, text: str, target: str, tone: int) -> None:
+        key = (text, target, tone)
+        if key in self._compose_results:
+            self._compose_send(key)  # la vista previa ya estaba lista: se manda al instante
+            return
+        self._send_when_ready = key
+        self.compose.show_preview(key, "", "working")
+        if key not in self._compose_running:
+            self._compose_running.add(key)
+            self.runner.submit(self._compose_translate(key))
+
+    def _compose_send(self, key: tuple[str, str, int]) -> None:
+        self._send_when_ready = None
+        messages, own = self._compose_results[key]
+        self.compose.close(sent=True)
+        for text in own:
+            self.tracker.mark_sent(text)  # que tu propio mensaje no se traduzca al aparecer en el chat
+        self._append(f"Vos: {key[0]}\n   → {' / '.join(messages)}\n", "out")
+        hwnd = self.roblox_hwnd
+        if hwnd is None:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(" / ".join(messages))
+            self._set_status("Roblox no está abierto: la traducción quedó en el portapapeles.")
+            return
+
+        def work() -> None:
+            try:
+                # Solo: Roblox al frente, abrir el chat, escribir el mensaje y Enter.
+                roblox.send_messages(messages, hwnd, self.config.roblox.open_chat_key, self.config.roblox.send_method)
+                self.events.put(("status", f"Enviado: {' / '.join(messages)}"))
+            except Exception as exc:  # noqa: BLE001 - se muestra al usuario
+                self.events.put(("info", f"No se pudo enviar al chat: {exc}"))
+
+        threading.Thread(target=work, name="bubble-send", daemon=True).start()
+
+    def _compose_closed(self) -> None:
+        if self.roblox_hwnd:
+            win32.force_foreground(self.roblox_hwnd)  # volver al juego
+
+    def _ev_status(self, message: str) -> None:
+        self._set_status(message)
+
+    # ================= prueba sin Roblox =================
+    def _on_lang_change(self, _event=None) -> None:
+        self.config.user.language = _code(self.my_lang.get())
+        self.config.user.outgoing_language = _code(self.out_lang.get())
+        save_setting("user", "language", self.config.user.language)
+        save_setting("user", "outgoing_language", self.config.user.outgoing_language)
+
+    def _on_tone_change(self, _event=None) -> None:
+        self.config.user.tone = int(_code(self.tone.get()))
+        self.tone_hint.configure(text=TONE_HINTS[self.config.user.tone])
+        save_setting("user", "tone", self.config.user.tone)
+
+    def _send_incoming(self) -> None:
+        text = self.incoming_text.get().strip()
+        if not text or not self.ready:
+            return
+        speaker = self.speaker.get().strip() or "Player"
+        self.incoming_text.delete(0, "end")
+        self._run_sim(self.translator.translate_incoming(text, speaker, self._on_delta), ("in", speaker))
+
+    def _send_outgoing(self) -> None:
+        text = self.outgoing_text.get().strip()
+        if not text or not self.ready:
+            return
+        self.outgoing_text.delete(0, "end")
+        self._run_sim(self.translator.translate_outgoing(text, on_delta=self._on_delta), ("out", "Yo"))
+
+    def _run_sim(self, coro, meta: tuple[str, str]) -> None:
+        self.events.put(("live_reset", None))
+        future = self.runner.submit(coro)
+        future.add_done_callback(lambda f: self.events.put(("sim_result", (meta, f))))
+
+    def _on_delta(self, chunk: str) -> None:
+        self.events.put(("delta", chunk))
+
+    # ================= eventos (hilo de la interfaz) =================
+    def _drain_events(self) -> None:
+        latest: dict[str, object] = {}  # capturas: solo importa la más reciente
+        try:
+            while True:
+                kind, payload = self.events.get_nowait()
+                if kind in ("chat_frame", "bubbles"):
+                    latest[kind] = payload
+                    continue
+                if kind == "chat_shift":
+                    latest.pop("chat_frame", None)  # una lectura anterior al desplazamiento ya quedó vieja
+                handler = getattr(self, f"_ev_{kind}", None)
+                if handler:
+                    handler(payload)
+        except queue.Empty:
+            pass
+        for kind, payload in latest.items():
+            getattr(self, f"_ev_{kind}")(payload)
+        if "bubbles" not in latest:
+            self.bubbles.animate()  # entre detecciones, la traducción sigue a la burbuja
+        self.root.after(15, self._drain_events)  # rápido: las burbujas se mueven con la cámara
+
+    def _ev_chat_frame(self, frame) -> None:
+        if self.inline_mode:
+            self.inline_chat.render(frame, win32.roblox_is_foreground())
+
+    def _ev_chat_shift(self, dy: int) -> None:
+        if self.inline_mode and win32.roblox_is_foreground():
+            self.inline_chat.shift(dy)
+
+    def _ev_bubbles(self, payload) -> None:
+        area, items = payload
+        visible = win32.roblox_is_foreground()
+        for item in items:
+            entry, is_new = self.bubbles.entry_for(item.text)
+            if is_new and self.ready:
+                self._translate_bubble(entry)
+        self.bubbles.render(area, items, visible, self._bubble_text)
+
+    def _bubble_text(self, entry: Entry) -> str:
+        """Si el mismo mensaje ya está (o se está) traduciendo en el chat, se reutiliza: no se gasta dos veces."""
+        chat = self.inline_chat.find_text(entry.original)
+        if chat is not None:
+            return chat.text if chat.status == "done" else ""
+        return entry.text if entry.status == "done" else ""
+
+    def _translate_bubble(self, entry: Entry) -> None:
+        async def translate() -> None:
+            await asyncio.sleep(0.6)  # casi siempre el mismo mensaje llega también por el chat
+            if self.inline_chat.find_text(entry.original) is not None:
+                entry.status = "linked"
+                return
+            result = await self.translator.translate_incoming(entry.original, "")
+            self.events.put(("bubble_result", (entry, result)))
+
+        self.runner.submit(translate())
+
+    def _ev_bubble_result(self, payload) -> None:
+        entry, result = payload
+        show = result.status in OVERLAY_STATUSES and not _unchanged(result.original, result.translation)
+        entry.status = "done" if show else "hidden"
+        entry.text = result.translation if show and result.status != "error" else ""
+        self._log_result("in", "(burbuja)", result)
+
+    def _ev_started(self, error: BaseException | None) -> None:
+        if error:
+            self._set_status(f"No se pudo iniciar: {error}")
+            self._append(f"{error}\n", "error")
+            return
+        self.ready = True
+        ocr_lang = self.ocr.language if self.ocr else "?"
+        self._set_status(f"Listo. OCR de Windows en {ocr_lang}.")
+
+    def _ev_hardware(self, hardware) -> None:
+        self.hardware = hardware
+        self._refresh_perf_label()
+
+    def _ev_hotkey(self, _payload) -> None:
+        self._on_hotkey()
+
+    def _ev_info(self, message: str) -> None:
+        self._append(f"{message}\n", "info")
+
+    def _ev_live_reset(self, _payload) -> None:
+        self.live.configure(text="Traduciendo...")
+
+    def _ev_delta(self, chunk: str) -> None:
+        current = self.live.cget("text")
+        self.live.configure(text=("" if current == "Traduciendo..." else current) + chunk)
+
+    def _ev_chat_pending(self, payload: tuple[int, ChatLine]) -> None:
+        # El mensaje queda "seleccionado" apenas aparece, en su lugar del chat, hasta que llega la traducción.
+        msg_id, line = payload
+        if self.inline_mode:
+            self.inline_chat.pending(msg_id, line)
+            return
+        self._chat_rows[msg_id] = self.overlay.show(line.speaker, f"{line.text} …", muted=True)
+        self._chat_stream[msg_id] = ""
+
+    def _ev_chat_delta(self, payload: tuple[int, str]) -> None:
+        msg_id, chunk = payload
+        if self.inline_mode:
+            self.inline_chat.delta(msg_id, chunk)
+            return
+        if msg_id in self._chat_stream:
+            self._chat_stream[msg_id] += chunk
+            self.overlay.set_text(self._chat_rows.get(msg_id), self._chat_stream[msg_id])
+
+    def _ev_chat(self, payload: tuple[int, ChatLine, TranslationResult]) -> None:
+        msg_id, line, result = payload
+        self._log_result("in", line.speaker, result)
+        show = result.status in OVERLAY_STATUSES and not _unchanged(result.original, result.translation)
+        # Si falla, se deja ver el original (sin parche) en vez de taparlo.
+        text = result.translation if show and result.status != "error" else None
+        if self.inline_mode:
+            self.inline_chat.final(msg_id, line, text)
+            return
+        row = self._chat_rows.pop(msg_id, None)
+        self._chat_stream.pop(msg_id, None)
+        if show:
+            text = result.translation if result.status != "error" else f"⚠ {result.original}"
+            if not self.overlay.set_text(row, text):
+                self.overlay.show(line.speaker, text)
+        else:
+            self.overlay.remove(row)  # nada nuevo que mostrar (ya estaba en tu idioma, nombres, etc.)
+
+    def _ev_sim_result(self, payload) -> None:
+        (direction, speaker), future = payload
+        self.live.configure(text="")
+        if future.exception():
+            self._append(f"{future.exception()}\n", "error")
+            return
+        result: TranslationResult = future.result()
+        self._log_result(direction, speaker, result)
+        if direction == "out":
+            self.root.clipboard_clear()
+            self.root.clipboard_append(result.translation)
+            self._set_status("Traducción copiada al portapapeles.")
+
+    def _ev_capture_test(self, future) -> None:
+        if future.exception():
+            self._append(f"Error en la captura: {future.exception()}\n", "error")
+            return
+        path, rows, messages = future.result()
+        if path is None:
+            self._append("Todavía no encontré el chat: abrí Roblox y tocá «Detectar chat».\n", "error")
+            return
+        self._append(f"Captura guardada en {path}\n", "info")
+        preview = self.inline_chat.preview() if self.inline_mode else None
+        if preview is not None:
+            # Los parches no salen en capturas de pantalla (a propósito): esta imagen muestra cómo se ven.
+            preview_path = path.with_name("vista_traducida.png")
+            preview.save(preview_path)
+            self._append(f"Vista del chat con las traducciones: {preview_path}\n", "info")
+        self._append(f"El OCR leyó {len(rows)} líneas:\n", "info")
+        for row in rows:
+            self._append(f"   | {row.text}\n", "meta")
+        self._append(f"Mensajes reconocidos: {len(messages)}\n", "info")
+        for message in messages:
+            self._append(f"   {message.speaker}: {message.text}\n", "in")
+        if rows and not messages:
+            self._append("No se reconoció el formato 'Nombre: mensaje'. Ajustá la región para que abarque el chat.\n", "error")
+        for line in getattr(self, "_bubble_report", []):
+            self._append(f"{line}\n", "info")
+
+    # ================= helpers =================
+    def _log_result(self, direction: str, speaker: str, r: TranslationResult) -> None:
+        tag = "in" if direction == "in" else "out"
+        arrow = "→" if r.status in ("translated", "adapted", "local", "cache") else "="
+        self._append(f"{speaker}: {r.original}\n", tag)
+        self._append(f"   {arrow} {r.translation}\n", "error" if r.status == "error" else tag)
+        details = [f"{r.source_lang or '?'} → {r.target_lang}", f"{r.total_s:.2f}s"]
+        if r.ttft_s is not None:
+            details.append(f"primera palabra {r.ttft_s:.2f}s")
+        if STATUS_TEXT.get(r.status):
+            details.append(STATUS_TEXT[r.status])
+        if r.error:
+            details.append(r.error)
+        self._append(f"   [{' · '.join(details)}]\n", "meta")
+
+    def _append(self, text: str, tag: str) -> None:
+        self.log.configure(state="normal")
+        self.log.insert("end", text, tag)
+        self.log.see("end")
+        self.log.configure(state="disabled")
+
+    def _set_status(self, text: str) -> None:
+        self.status.configure(text=f" {text}")
+
+
+def run_main_window(config: Config) -> None:
+    BubbleWindow(config).run()

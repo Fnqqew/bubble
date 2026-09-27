@@ -1,0 +1,124 @@
+"""Carga de configuración: valores por defecto + %APPDATA%\\Bubble\\config.toml."""
+
+from __future__ import annotations
+
+import os
+import tomllib
+from dataclasses import dataclass, field, fields
+from pathlib import Path
+
+
+def default_config_path() -> Path:
+    base = os.environ.get("APPDATA") or str(Path.home() / ".config")
+    return Path(base) / "Bubble" / "config.toml"
+
+
+def system_locale() -> str:
+    """Idioma y país configurados en Windows (ej. 'es-AR')."""
+    try:
+        import ctypes
+
+        buffer = ctypes.create_unicode_buffer(85)
+        if ctypes.windll.kernel32.GetUserDefaultLocaleName(buffer, 85):
+            return buffer.value
+    except (AttributeError, OSError):
+        pass
+    return "en-US"
+
+
+@dataclass
+class UserConfig:
+    # "auto" = el idioma y país de Windows (ej. es-AR para rioplatense).
+    language: str = "auto"
+    outgoing_language: str = "auto"
+    # Tono de lo que enviás: 1 = neutro/formal, 2 = amable, 3 = casual, 4 = gamer, 5 = jerga nativa.
+    tone: int = 3
+
+
+@dataclass
+class TranslationConfig:
+    context_lines: int = 6
+    cache_max_words: int = 6
+    cache_size: int = 2000
+    timeout_s: float = 8.0
+    # Aclarar entre paréntesis la jerga que no tiene equivalente en tu idioma.
+    explain_slang: bool = True
+
+
+@dataclass
+class ClaudeConfig:
+    model: str = "opus"
+    effort: str = "low"
+    pool_size: int = 3
+    session_max_turns: int = 15
+    cli_path: str = ""
+
+
+@dataclass
+class RobloxConfig:
+    # Atajo para escribir en Roblox: una tecla ("°", "F8", "ctrl+t") o un botón del mouse ("mouse4").
+    hotkey: str = "°"
+    read_chat: bool = True
+    # "inline" = traducción encima de cada mensaje del chat; "panel" = lista al costado del chat.
+    display_mode: str = "inline"
+    # Traducir también las burbujas de texto sobre la cabeza de los jugadores.
+    translate_bubbles: bool = True
+    bubble_interval_s: float = 0.12
+    poll_interval_s: float = 0.08  # ver si el chat cambió es barato (~2 ms): se mira seguido
+    # Rendimiento: "auto" se adapta al procesador de tu PC; "alta", "media" o "baja" lo fijan a mano.
+    performance: str = "auto"
+    # Capturar la pantalla con la placa de video (mucho menos uso de CPU). Si falla, se usa la CPU sola.
+    gpu_capture: bool = True
+    overlay_seconds: float = 20.0
+    username: str = ""
+    open_chat_key: str = "/"  # "/" = la tecla física del chat de Roblox (sin Shift, en cualquier teclado)
+    send_method: str = "type"  # "type": escribe los caracteres (sin Ctrl+V ni tocar el portapapeles); "paste"
+    ocr_language: str = ""
+
+
+@dataclass
+class Config:
+    user: UserConfig = field(default_factory=UserConfig)
+    translation: TranslationConfig = field(default_factory=TranslationConfig)
+    claude: ClaudeConfig = field(default_factory=ClaudeConfig)
+    roblox: RobloxConfig = field(default_factory=RobloxConfig)
+
+
+def _merge(section, values: dict) -> None:
+    known = {f.name for f in fields(section)}
+    for key, value in values.items():
+        if key in known:
+            setattr(section, key, value)
+
+
+SECTIONS = ("user", "translation", "claude", "roblox")
+
+
+def save_setting(section: str, key: str, value) -> None:
+    """Guarda un ajuste hecho desde la ventana. Tiene prioridad sobre config.toml."""
+    from .state import load_state, update_state
+
+    settings = load_state().get("settings", {})
+    settings.setdefault(section, {})[key] = value
+    update_state(settings=settings)
+
+
+def load_config(path: Path | None = None) -> Config:
+    """Valores por defecto < config.toml < ajustes guardados desde la ventana."""
+    from .state import load_state
+
+    config = Config()
+    path = path or default_config_path()
+    if path.exists():
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        for name in SECTIONS:
+            _merge(getattr(config, name), data.get(name, {}))
+    saved = load_state().get("settings", {})
+    for name in SECTIONS:
+        _merge(getattr(config, name), saved.get(name, {}))
+    if config.user.language in ("", "auto"):
+        from .translate.languages import LANGUAGES
+
+        locale = system_locale()
+        config.user.language = locale if locale.split("-")[0].lower() in LANGUAGES else "en-US"
+    return config
