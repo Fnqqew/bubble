@@ -144,3 +144,45 @@ def test_fast_closing_matches_scipy():
     for density in (0.3, 0.6, 0.9):
         mask = rng.random((61, 97)) < density
         assert np.array_equal(close_3x3(mask), _ndimage().binary_closing(mask, structure=np.ones((3, 3))))
+
+
+
+# Lecturas reales del OCR sobre una grabación de Roblox (una burbuja larga que quedaba tapada en parte).
+FULL = ("Once upon a time, there was a beautiful young princess named Snow White. She lived in a faraway kingdom "
+        "with her father and stepmother.")
+PARTIAL_READS = [
+    "upon a time, there was a beautiful princess named Snow White. She in a faraway kingdom with her father and "
+    "stepmother.",
+    "-e upon a time, there was a beautiful Ing princess named Snow White. She ved in a faraway kingdom with her "
+    "father and stepmother.",
+    "pon a time, there was a beautiful princess named Snow White. She in a faraway kingdom with her father and "
+    "stepmother.",
+]
+
+
+def test_partial_reads_never_replace_the_whole_bubble():
+    from bubble.capture.bubble_tracker import BubbleTexts
+
+    texts = BubbleTexts()
+    text, rows = texts.settle("", 1, FULL, 4, now=0.0)
+    for index, read in enumerate(PARTIAL_READS):
+        text, rows = texts.settle(text, rows, read, 4, now=1.0 + index)
+        assert text == FULL, read
+    # Otra pista (la misma burbuja vista de nuevo, tapada): toma el texto entero que se leyó hace poco.
+    assert texts.settle("", 1, "e upon a time, there was", 1, now=6.0)[0] == FULL
+    # Un mensaje nuevo en esa burbuja sí la reemplaza, y uno más largo que el anterior también.
+    assert texts.settle(FULL, 4, "Mirror mirror on the wall", 1, now=7.0)[0] == "Mirror mirror on the wall"
+    short = "The mirror would answer,"
+    longer = 'The mirror would answer, "You are the most beautiful of all women."'
+    assert texts.settle(short, 1, longer, 2, now=8.0)[0] == longer
+
+
+def test_things_that_are_not_bubbles_are_ignored():
+    from bubble.capture.bubble_tracker import usable_bubble_text
+
+    for junk in ("clil", "c(ll", "rill", "$333 (06S4)", "$333 (05S2)", "GRO (+3", "I GRO", "GR04", "IGNO (+3,",
+                 "GRO("):
+        assert not usable_bubble_text(junk), junk
+    for message in ("Lucha de Brazo", "hi", "gg", "sus", "lol", "ok", "who wants to trade?", "hola",
+                    'The mirror would answer, "You are the most beautiful of all women."'):
+        assert usable_bubble_text(message), message

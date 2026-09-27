@@ -12,8 +12,10 @@ Leer texto (OCR) tarda ~150-400 ms, demasiado para seguir una burbuja que se mue
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 import itertools
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -296,6 +298,65 @@ def _bubble_in(
     )
 
 
+_WORDS = re.compile(r"[^\W\d_]+")
+_ICON_LETTERS = set("cilrjt")  # el ícono de parlante de quien habla por voz se lee "clil", "c(ll", "rill"
+
+
+def _words(text: str) -> list[str]:
+    return [w.lower() for w in _WORDS.findall(text)]
+
+
+def usable_bubble_text(text: str) -> bool:
+    """¿Puede ser un mensaje? No lo son el ícono de parlante ("clil"), un contador del juego ("$333 (06:54)") ni un
+    nombre con sus puntos leído sobre algo claro ("GRO (+3,815)", "I GRO", "GR04")."""
+    from ..translate.langdetect import known_anywhere
+
+    words = [w for w in _WORDS.findall(text) if len(w) >= 2]
+    if not words:
+        return False
+    letters = "".join(words).lower()
+    if len(letters) <= 5 and set(letters) <= _ICON_LETTERS:
+        return False
+    if sum(c.isdigit() for c in text) > len(letters):
+        return False
+    shortish = all(len(w) <= 4 and not known_anywhere(w) for w in words)
+    looks_like_a_name = "(" in text or any(c.isdigit() for c in text) or all(w.isupper() for w in words)
+    return not (shortish and looks_like_a_name)
+
+
+def fragment_of(part: str, whole: str) -> bool:
+    """`part` es un pedazo (o una lectura rota) de `whole`: la burbuja quedó tapada en parte (otra burbuja, una
+    cabeza, una puerta) y el OCR leyó solo lo que se veía. Antes eso reemplazaba al texto entero y se traducía
+    cortado. Con las mismas palabras y alguna rota ("She ved in"), se queda la lectura de antes, la de la burbuja
+    entera."""
+    part_words, whole_words = _words(part), _words(whole)
+    if not part_words or len(part_words) > len(whole_words):
+        return False  # más largo: la burbuja creció o es otro mensaje
+    known = set(whole_words)
+    return sum(w in known for w in part_words) / len(part_words) >= 0.7
+
+
+class BubbleTexts:
+    """Qué texto le queda a cada burbuja cada vez que el OCR la relee."""
+
+    RECENT_S = 20.0
+
+    def __init__(self) -> None:
+        self._recent: deque[tuple[float, str, int]] = deque(maxlen=40)
+
+    def settle(self, current: str, current_rows: int, read: str, rows: int, now: float) -> tuple[str, int]:
+        """(texto, líneas) con los que queda la burbuja después de leer `read`."""
+        if not usable_bubble_text(read):
+            return current, current_rows
+        if current and fragment_of(read, current):
+            return current, current_rows  # se leyó la mitad: queda lo que ya se había leído entero
+        for when, text, text_rows in reversed(self._recent):
+            if now - when <= self.RECENT_S and fragment_of(read, text):
+                return text, text_rows  # parte de una burbuja que se leyó entera hace poco (otra pista)
+        self._recent.append((now, read, rows))
+        return read, rows
+
+
 @dataclass
 class Track:
     id: int
@@ -472,6 +533,7 @@ class BubbleWatcher:
         # Con `pacer`, cada cuánto se buscan burbujas se adapta a lo que cuesta en esta PC.
         self.pacer = pacer
         self.tracker = BubbleTracker()
+        self.texts = BubbleTexts()
         self._task: asyncio.Task | None = None
 
     @property
@@ -495,8 +557,8 @@ class BubbleWatcher:
             crop = image.crop((box.left, box.top, box.right, box.bottom))
             rows = await self.ocr.recognize(crop)  # recorte chico: se agranda x2 y se lee mucho mejor
             text = " ".join(r.text for r in rows).strip()
-            if any(c.isalpha() for c in text):
-                track.text, track.rows = text, max(1, len(rows))
+            track.text, track.rows = self.texts.settle(track.text, track.rows, text, max(1, len(rows)),
+                                                       time.monotonic())
             track.ocr_signature = box.signature  # también si no tenía texto: no se relee en cada captura
         except Exception:  # noqa: BLE001 - se reintenta en la próxima captura
             log.debug("No se pudo leer una burbuja", exc_info=True)
