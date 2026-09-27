@@ -127,15 +127,24 @@ class TranslationOverlay:
 
 
 class ComposeBar:
-    """Barra para escribir en tu idioma. Se abre con el atajo; mientras escribís muestra cómo va a quedar la
-    traducción, y con Enter la traduce (si todavía no estaba lista) y la manda al chat de Roblox.
+    """Barra para escribir en tu idioma: una sola línea, minimalista, flotando abajo al centro del juego.
 
-    Tab cambia el idioma, ↑/↓ el tono y Esc cierra (lo que escribiste vuelve si la abrís enseguida).
+    Mientras escribís muestra cómo va a quedar la traducción; con Enter la traduce (si todavía no estaba lista) y la
+    manda al chat de Roblox. Tab cambia el idioma (el chip de la izquierda), ↑/↓ el tono (los puntos de la derecha)
+    y Esc cierra (lo que escribiste vuelve si la abrís enseguida).
     """
 
-    WIDTH = 700
+    WIDTH = 640
     PREVIEW_DELAY_MS = 650  # se traduce para la vista previa cuando dejás de escribir un momento
     KEEP_DRAFT_S = 120
+    BG = "#16171b"
+    FIELD = BG  # una sola superficie: sin cajas adentro de cajas
+    LINE = "#25272d"
+    TEXT = "#f1f3f5"
+    HINT = "#5f656e"
+    PREVIEW = "#8fb8ff"
+    CHIP_BG = (35, 50, 74)
+    CHIP_FG = (159, 198, 255)
 
     def __init__(
         self,
@@ -153,29 +162,43 @@ class ComposeBar:
         self.tone = 3
         self.busy = False  # traduciendo para enviar: no se edita
         self._after: str | None = None
+        self._dots: str | None = None
         self._requested: tuple[str, str, int] | None = None
         self._draft = ""
         self._draft_at = 0.0
         self._x = self._bottom = 0
+        self._images: dict[str, object] = {}  # PhotoImage vivas (Tk no guarda la referencia)
         self.win = tk.Toplevel(root)
         self.win.withdraw()
         self.win.overrideredirect(True)
         self.win.attributes("-topmost", True)
-        self.win.configure(bg=BG, highlightthickness=2, highlightbackground="#4a90e2")
-        header = tk.Frame(self.win, bg=BG)
-        header.pack(fill="x", padx=12, pady=(10, 4))
-        tk.Label(header, text="Escribí en tu idioma", font=("Segoe UI", 10, "bold"), fg=FG, bg=BG).pack(side="left")
-        self.target_label = tk.Label(header, font=("Segoe UI", 10), fg="#7cc4ff", bg=BG)
-        self.target_label.pack(side="right")
-        self.entry = tk.Entry(self.win, font=("Segoe UI", 15), bg="#23262b", fg=FG, insertbackground=FG,
-                              relief="flat", disabledbackground="#1d2024", disabledforeground=MUTED)
-        self.entry.pack(fill="x", padx=12, ipady=7)
-        self.preview = tk.Label(self.win, font=("Segoe UI", 12), fg=MUTED, bg=BG, anchor="w", justify="left",
-                                wraplength=self.WIDTH - 30)
-        self.preview.pack(fill="x", padx=12, pady=(6, 0))
-        self.hint = tk.Label(self.win, text="Enter: traducir y enviar   ·   Tab: idioma   ·   ↑↓: tono   ·   Esc: cerrar",
-                             font=("Segoe UI", 9), fg=MUTED, bg=BG, anchor="w")
-        self.hint.pack(fill="x", padx=12, pady=(4, 10))
+        self.win.configure(bg=self.BG)
+        body = tk.Frame(self.win, bg=self.BG, padx=18, pady=14)
+        body.pack(fill="both", expand=True)
+
+        field = tk.Frame(body, bg=self.FIELD)
+        field.pack(fill="x")
+        self.chip = tk.Label(field, bg=self.FIELD, bd=0, cursor="hand2")
+        self.chip.pack(side="left", padx=(0, 10))
+        self.chip.bind("<Button-1>", self._next_target)
+        self.tone_view = tk.Label(field, bg=self.FIELD, bd=0)
+        self.tone_view.pack(side="right", padx=(10, 0))
+        holder = tk.Frame(field, bg=self.FIELD)
+        holder.pack(side="left", fill="x", expand=True)
+        self.entry = tk.Entry(holder, font=("Segoe UI", 15), bg=self.FIELD, fg=self.TEXT, insertbackground=self.TEXT,
+                              relief="flat", bd=0, highlightthickness=0, disabledbackground=self.FIELD,
+                              disabledforeground="#9aa0a6")
+        self.entry.pack(fill="x", ipady=2)
+        self.placeholder = tk.Label(holder, text="Escribí en tu idioma…", font=("Segoe UI", 15), bg=self.FIELD,
+                                    fg=self.HINT)
+        self.placeholder.bind("<Button-1>", lambda _e: self.entry.focus_set())
+
+        self.preview = tk.Label(body, font=("Segoe UI", 12), fg=self.PREVIEW, bg=self.BG, anchor="w", justify="left",
+                                wraplength=self.WIDTH - 40)
+        tk.Frame(body, bg=self.LINE, height=1).pack(fill="x", pady=(12, 0))
+        self.hint = tk.Label(body, font=("Segoe UI", 9), fg=self.HINT, bg=self.BG, anchor="w")
+        self.hint.pack(fill="x", pady=(8, 0))
+
         self.entry.bind("<Return>", self._submit)
         self.entry.bind("<KP_Enter>", self._submit)
         self.entry.bind("<Escape>", self._cancel)
@@ -184,6 +207,7 @@ class ComposeBar:
         self.entry.bind("<Down>", lambda _e: self._change_tone(-1))
         self.entry.bind("<KeyRelease>", self._on_edit)
         self.entry.bind("<FocusOut>", lambda _e: self.win.after(200, self._close_if_left))
+        self._styled = False
 
     @property
     def visible(self) -> bool:
@@ -204,7 +228,8 @@ class ComposeBar:
         if self._draft and time.monotonic() - self._draft_at < self.KEEP_DRAFT_S:
             self.entry.insert(0, self._draft)
         self._render_target()
-        self.preview.configure(text="", fg=MUTED)
+        self._show_preview("")
+        self._update_placeholder()
         if area:
             self._x, self._bottom = area.left + (area.width - self.WIDTH) // 2, area.bottom - 90
         else:
@@ -213,6 +238,9 @@ class ComposeBar:
         self._fit()
         self.win.deiconify()
         self.win.lift()
+        if not self._styled:
+            self._styled = True
+            _round_corners(self.win)
         self.win.after(10, self._grab_focus)
         if self.entry.get().strip():
             self._schedule_preview()
@@ -228,12 +256,11 @@ class ComposeBar:
         if not self.visible or key != self.current():
             return
         if state == "error":
-            self.preview.configure(text=f"⚠ {text}", fg="#ff8fa3")
+            self._show_preview(f"⚠  {text}", "#ff8fa3")
         elif state == "working":
-            self.preview.configure(text=f"Traduciendo…  {text}", fg=MUTED)
+            self._show_preview(text, "#6f8fbf", working=True)
         else:
-            self.preview.configure(text=f"→ {text}", fg=FG)
-        self._fit()
+            self._show_preview(text)
 
     def unlock(self) -> None:
         """Falló la traducción al enviar: se puede corregir y volver a intentar."""
@@ -242,9 +269,10 @@ class ComposeBar:
         self.entry.focus_set()
 
     def close(self, sent: bool = False) -> None:
-        if self._after:
-            self.win.after_cancel(self._after)
-            self._after = None
+        for job in (self._after, self._dots):
+            if job:
+                self.win.after_cancel(job)
+        self._after = self._dots = None
         text = self.entry.get().strip()
         self._draft, self._draft_at = ("", 0.0) if sent else (text, time.monotonic())
         self.busy = False
@@ -257,12 +285,44 @@ class ComposeBar:
         self.entry.focus_set()
         self.entry.icursor("end")
 
+    def _show_preview(self, text: str, color: str | None = None, working: bool = False) -> None:
+        if self._dots:
+            self.win.after_cancel(self._dots)
+            self._dots = None
+        if working:
+            self._animate_dots(text, 0)
+        else:
+            self.preview.configure(text=f"→  {text}" if text and color is None else text, fg=color or self.PREVIEW)
+        if text or working:
+            self.preview.pack(fill="x", pady=(10, 0), after=self.entry.master.master)
+        else:
+            self.preview.pack_forget()
+        self._fit()
+
+    def _animate_dots(self, text: str, step: int) -> None:
+        dots = "·" * (step % 3 + 1)
+        self.preview.configure(text=f"→  {text}  {dots}" if text else f"traduciendo  {dots}", fg="#6f8fbf")
+        self._dots = self.win.after(320, lambda: self._animate_dots(text, step + 1))
+
+    def _update_placeholder(self) -> None:
+        if self.entry.get():
+            self.placeholder.place_forget()
+        else:
+            self.placeholder.place(x=3, y=0, relheight=1)
+
     def _render_target(self) -> None:
         code = self.targets[self.index] if self.targets else ""
+        text = "TODOS" if code == MULTI_TARGET else code.split("-")[0].upper()
+        self._images["chip"] = _chip_image(text, self.CHIP_BG, self.CHIP_FG, _rgb(self.FIELD))
+        self.chip.configure(image=self._images["chip"])
+        self._images["tone"] = _tone_image(self.tone, _rgb(self.FIELD))
+        self.tone_view.configure(image=self._images["tone"])
         name = self.labels.get(code) or DISPLAY_NAMES.get(code, code)
-        self.target_label.configure(text=f"→ {name} (Tab)   ·   Tono {self.tone}: {TONE_NAMES[self.tone]} (↑↓)")
+        self.hint.configure(text=f"Enter  enviar en {name.split(' (')[0].lower()}   ·   Tab  idioma   ·   "
+                                 f"↑↓  tono: {TONE_NAMES[self.tone].lower()}   ·   Esc  cerrar")
 
     def _on_edit(self, event=None) -> None:
+        self._update_placeholder()
         if self.busy or (event is not None and event.keysym in ("Return", "KP_Enter", "Escape", "Tab", "Up", "Down")):
             return
         self._schedule_preview()
@@ -272,14 +332,14 @@ class ComposeBar:
             self.win.after_cancel(self._after)
         self._after = self.win.after(self.PREVIEW_DELAY_MS, self._request_preview)
         if not self.entry.get().strip():
-            self.preview.configure(text="", fg=MUTED)
+            self._show_preview("")
 
     def _request_preview(self) -> None:
         self._after = None
         key = self.current()
         if key[0] and key != self._requested:
             self._requested = key
-            self.preview.configure(text="Traduciendo…", fg=MUTED)
+            self._show_preview("", working=True)
             self.on_preview(*key)
 
     def _next_target(self, _event=None) -> str:
@@ -321,6 +381,60 @@ class ComposeBar:
         # Si hiciste clic en el juego (u otra ventana), la barra se cierra; lo escrito vuelve si la reabrís.
         if self.visible and not self.busy and self.win.focus_displayof() is None:
             self.close()
+
+
+MULTI_TARGET = "*"  # "todos los idiomas del chat" (ver main_window.MULTI)
+
+
+def _rgb(color: str) -> tuple[int, int, int]:
+    return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+
+
+def _chip_image(text: str, background: tuple, foreground: tuple, surface: tuple):
+    """Chip redondeado con el idioma (dibujado suave, a 3x, y achicado)."""
+    from PIL import Image, ImageDraw, ImageFont, ImageTk
+
+    scale = 3
+    try:
+        font = ImageFont.truetype("seguisb.ttf", 12 * scale)  # Segoe UI Semibold
+    except OSError:
+        font = ImageFont.load_default(12 * scale)
+    width = int(font.getlength(text)) + 22 * scale
+    height = 26 * scale
+    image = Image.new("RGB", (width, height), surface)
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((0, 0, width - 1, height - 1), height // 2, fill=background)
+    draw.text((width / 2, height / 2), text, font=font, fill=foreground, anchor="mm")
+    return ImageTk.PhotoImage(image.resize((width // scale, height // scale), Image.Resampling.LANCZOS))
+
+
+def _tone_image(tone: int, surface: tuple):
+    """Cinco puntos: cuántos llenos = qué tan informal (1 neutro … 5 jerga)."""
+    from PIL import Image, ImageDraw, ImageTk
+
+    scale = 3
+    size, gap = 7 * scale, 5 * scale
+    image = Image.new("RGB", (5 * size + 4 * gap, size), surface)
+    draw = ImageDraw.Draw(image)
+    for index in range(5):
+        x = index * (size + gap)
+        fill = (143, 184, 255) if index < tone else (52, 55, 63)
+        draw.ellipse((x, 0, x + size - 1, size - 1), fill=fill)
+    return ImageTk.PhotoImage(image.resize((image.width // scale, image.height // scale), Image.Resampling.LANCZOS))
+
+
+def _round_corners(window: tk.Misc) -> None:
+    """Esquinas redondeadas y borde sutil de Windows 11 (en Windows 10 queda recta, igual se ve bien)."""
+    import ctypes
+
+    try:
+        hwnd = win32.toplevel_hwnd(window)
+        round_corners = ctypes.c_int(2)  # DWMWCP_ROUND
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(round_corners), 4)
+        border = ctypes.c_uint(0x003A3530)  # COLORREF 0x00BBGGRR: #30353a
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 34, ctypes.byref(border), 4)
+    except Exception:  # noqa: BLE001 - es solo el aspecto
+        pass
 
 
 class HotkeyCaptureDialog:

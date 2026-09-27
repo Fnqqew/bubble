@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from .. import win32
 from ..config import save_setting
 from .subtitles import SubtitleView
+from .theme import MUTED, strong_font
 
 if TYPE_CHECKING:
     from .main_window import BubbleWindow
@@ -45,11 +46,11 @@ class VoicePanel:
         ttk.Checkbutton(speak_row, text="Traducir mi voz: mantené apretado", variable=self.speak_var,
                         command=self._toggle_speak).pack(side="left")
         self.ptt_label = ttk.Label(speak_row, text=win32.describe_binding(self.config.push_to_talk),
-                                   font=("Segoe UI", 10, "bold"))
+                                   font=strong_font())
         self.ptt_label.pack(side="left", padx=(6, 8))
         ttk.Button(speak_row, text="Cambiar…", command=self._change_key).pack(side="left")
-        ttk.Label(speak_row, text="hablá y soltalo.", foreground="#666").pack(side="left", padx=6)
-        self.status = ttk.Label(frame, text="", foreground="#666", wraplength=760, justify="left")
+        ttk.Label(speak_row, text="hablá y soltalo.", foreground=MUTED).pack(side="left", padx=6)
+        self.status = ttk.Label(frame, text="", foreground=MUTED, wraplength=760, justify="left")
         self.status.grid(row=2, column=0, sticky="w", padx=6, pady=(2, 6))
         self._tick()
 

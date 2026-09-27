@@ -1,0 +1,17 @@
+# Imágenes del README
+
+Scripts que generan `docs/demo.gif`, `docs/como-funciona.png` y `docs/interfaz.png` con el código real de Bubble
+(píldoras, burbujas, barra para escribir y subtítulos). Las ventanas se capturan con PrintWindow, transparentes y
+sin tomar el foco: nunca sale lo que hay detrás en tu pantalla.
+
+Desde la raíz del proyecto, con una carpeta de trabajo `$T` (y `imageio-ffmpeg` instalado en `$T/pylib`):
+
+```bash
+python=.venv/Scripts/python.exe
+mkdir -p "$T/media/compose"
+$python tools/media/capture_compose.py "$T/media/compose" tools/media   # la barra, en cada etapa
+$python tools/media/shot_main.py "$T/main_raw.png" tools/media          # la ventana principal
+PYTHONPATH="$T/pylib" $python tools/media/make_demo.py "$T" "$T/out"   # GIF (y MP4) + cuadros fijos
+$python tools/media/make_stills.py "$T" "$T/out"                       # cómo funciona + interfaz
+cp "$T/out/demo.gif" "$T/out/como-funciona.png" "$T/out/interfaz.png" docs/
+```
