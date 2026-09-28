@@ -41,6 +41,9 @@ from ..voice.models import models_dir
 OUT = models_dir().parent / "recording_lab"
 
 
+
+RAW = False  # --sin-filtro: sin radio de escucha ni filtro de ruido (para comparar)
+
 def ffmpeg() -> str:
     try:
         import imageio_ffmpeg
@@ -335,8 +338,11 @@ def run_voice(video: Path, reference: list[dict]) -> dict:
         if caption.final:
             finals[caption.id] = (caption, time.perf_counter())
 
+    from ..voice.hearing import Earshot
+
     listener = LiveListener(final, on_caption, partial_asr=partial, speakers=SpeakerTracker(),
-                            source_factory=lambda: source)
+                            source_factory=lambda: source, earshot=None if RAW else Earshot("normal"),
+                            noise_filter=not RAW)
     cpu0, wall0 = time.process_time(), time.perf_counter()
     listener.start()
     time.sleep(len(track) / 16000 + 4)
@@ -363,7 +369,11 @@ def main() -> None:
     parser.add_argument("--traducciones", type=Path, help="JSON {original: traducción} para ver traducciones reales")
     parser.add_argument("--referencia", type=Path, help="voz: JSON con segments [{start, end, text}]")
     parser.add_argument("--buscar-en", type=float, default=20.0, help="chat: segundo del video donde buscar el chat")
+    parser.add_argument("--sin-filtro", action="store_true",
+                        help="sin radio de escucha ni filtro de ruido (como antes de la 3.0)")
     args = parser.parse_args()
+    global RAW
+    RAW = args.sin_filtro
     load = lambda path, default: json.loads(path.read_text(encoding="utf-8")) if path else default  # noqa: E731
     OUT.mkdir(parents=True, exist_ok=True)
     if args.prueba == "chat":

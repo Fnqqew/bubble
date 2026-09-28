@@ -150,6 +150,38 @@ def pick_models(threads: int | None = None) -> tuple[str, str]:
     return "", "base"  # procesadores chicos: solo el texto final
 
 
+class LazyWhisper:
+    """Un Whisper que se carga recién cuando hace falta. Con Bubble Pro la voz se entiende en la nube: el de tu PC queda
+    de respaldo y no ocupa memoria ni tarda en arrancar (se carga solo si la nube falla o si volvés a Basic)."""
+
+    def __init__(self, name: str, threads: int = 4) -> None:
+        self.name = name
+        self.threads = threads
+        self._model = None
+        self._lock = threading.Lock()
+
+    @property
+    def loaded(self) -> bool:
+        return self._model is not None
+
+    def get(self):
+        with self._lock:
+            if self._model is None:
+                self._model = FastWhisper(self.name, self.threads)
+            return self._model
+
+    def load_soon(self) -> None:
+        threading.Thread(target=self.get, name="bubble-whisper-carga", daemon=True).start()
+
+    def transcribe(self, *args, **kwargs):
+        return self.get().transcribe(*args, **kwargs)
+
+    def __getattr__(self, attribute):
+        if attribute.startswith("_"):
+            raise AttributeError(attribute)
+        return getattr(self.get(), attribute)
+
+
 class FastWhisper:
     def __init__(self, name: str, threads: int | None = None) -> None:
         from faster_whisper import WhisperModel

@@ -96,14 +96,21 @@ mic = ""
 pass_my_voice = true
 # Reconocimiento de voz (texto final): "auto" (según tu procesador), "tiny", "base" o "small".
 model = "auto"
+# Radio de escucha de las voces del juego: "cerca", "normal", "lejos" o "todo". Los que están lejos suenan más bajo y no
+# se traducen; los ruidos (música, explosiones, risas) no se traducen nunca.
+earshot = "normal"
 
 [pro]
 # Bubble Pro: las voces del juego y tu voz se entienden en la nube (Deepgram), con tu propia cuenta. Se activa en la
 # página «✦ Pro» (ahí se pega la clave, que se guarda cifrada: no va en este archivo).
 enabled = false
 provider = "deepgram"
-# Quién habla (Voz 1, Voz 2…) según la nube: más preciso; Deepgram lo cobra aparte (~0,12 US$ por hora de voz).
-diarize = true
+# Quién habla (Voz 1, Voz 2…): lo hace tu PC gratis; con true lo hace la nube (más preciso con voces pisadas;
+# Deepgram lo cobra aparte, ~0,12 US$ por hora de voz).
+diarize = false
+# Las voces de la nube para tu voz traducida y el chat a voz, y su personalidad: "alegre", "canchera" o "tranquila".
+voices = true
+personality = "canchera"
 
 [appearance]
 # La ventana: "oscuro" o "claro".

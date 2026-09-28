@@ -143,6 +143,7 @@ class ComposeBar:
     TEXT = "#f1f3f5"
     HINT = "#5f656e"
     PREVIEW = "#8fb8ff"
+    PRO_PREVIEW = "#f5d58a"  # con Bubble Pro, la traducción que vas a mandar se ve dorada
     CHIP_BG = (35, 50, 74)
     CHIP_FG = (159, 198, 255)
 
@@ -158,6 +159,8 @@ class ComposeBar:
         self.on_close = on_close  # se cerró sin enviar
         # Cambiaste el idioma con Tab (o con un clic en el chip): es el mismo para tu voz y para chat a voz.
         self.on_target: Callable[[str], None] | None = None
+        # Ctrl+P: pasar de Basic a Pro (o al revés) sin salir del juego.
+        self.on_toggle_plan: Callable[[], None] | None = None
         self.targets: list[str] = []
         self.labels: dict[str, str] = {}
         self.index = 0
@@ -200,8 +203,14 @@ class ComposeBar:
         self.preview = tk.Label(body, font=("Segoe UI", 12), fg=self.PREVIEW, bg=self.BG, anchor="w", justify="left",
                                 wraplength=self.WIDTH - 40)
         tk.Frame(body, bg=self.LINE, height=1).pack(fill="x", pady=(12, 0))
-        self.hint = tk.Label(body, font=("Segoe UI", 9), fg=self.HINT, bg=self.BG, anchor="w")
-        self.hint.pack(fill="x", pady=(8, 0))
+        footer = tk.Frame(body, bg=self.BG)
+        footer.pack(fill="x", pady=(8, 0))
+        # En qué plan estás: "✦ PRO" dorado o "BASIC". Ctrl+P (o un clic acá) cambia sin salir del juego.
+        self.plan = tk.Label(footer, font=("Segoe UI Semibold", 9), bg=self.BG, cursor="hand2")
+        self.plan.pack(side="right")
+        self.plan.bind("<Button-1>", lambda _e: self._toggle_plan())
+        self.hint = tk.Label(footer, font=("Segoe UI", 9), fg=self.HINT, bg=self.BG, anchor="w")
+        self.hint.pack(side="left", fill="x", expand=True)
 
         self.entry.bind("<Return>", self._submit)
         self.entry.bind("<KP_Enter>", self._submit)
@@ -210,6 +219,8 @@ class ComposeBar:
         self.entry.bind("<Tab>", self._next_target)
         self.entry.bind("<Up>", lambda _e: self._change_tone(+1))
         self.entry.bind("<Down>", lambda _e: self._change_tone(-1))
+        self.entry.bind("<Control-p>", lambda _e: self._toggle_plan())
+        self.entry.bind("<Control-P>", lambda _e: self._toggle_plan())
         self.entry.bind("<KeyRelease>", self._on_edit)
         self.entry.bind("<FocusOut>", lambda _e: self.win.after(200, self._close_if_left))
         self._styled = False
@@ -244,6 +255,11 @@ class ComposeBar:
         self.showing = True
         self.win.deiconify()
         self.win.lift()
+        from . import motion
+
+        height = self.win.winfo_reqheight()
+        motion.appear(self.win, self._x, self._bottom - height, rise=12, seconds=0.18,
+                      alive=lambda: self.showing)  # sube desvaneciéndose
         if not self._styled:
             self._styled = True
             _round_corners(self.win)
@@ -283,7 +299,24 @@ class ComposeBar:
         self._draft, self._draft_at = ("", 0.0) if sent else (text, time.monotonic())
         self.busy = False
         self.showing = False
-        self.win.withdraw()
+        if sent:
+            self.win.withdraw()  # ya: el mensaje se escribe en el juego enseguida
+            return
+        from . import motion
+
+        # Se desvanece (si la volvés a abrir en el medio, queda abierta).
+        motion.vanish(self.win, self.win.withdraw, alive=lambda: not self.showing)
+
+    def _preview_color(self) -> str:
+        from .. import pro
+
+        return self.PRO_PREVIEW if pro.active() else self.PREVIEW
+
+    def _toggle_plan(self) -> str:
+        if self.on_toggle_plan and not self.busy:
+            self.on_toggle_plan()
+            self._render_target()
+        return "break"
 
     # --- interno
     def _grab_focus(self) -> None:
@@ -299,7 +332,8 @@ class ComposeBar:
         if working:
             self._animate_dots(text, 0)
         else:
-            self.preview.configure(text=f"→  {text}" if text and color is None else text, fg=color or self.PREVIEW)
+            self.preview.configure(text=f"→  {text}" if text and color is None else text,
+                                   fg=color or self._preview_color())
         if text or working:
             self.preview.pack(fill="x", pady=(10, 0), after=self.entry.master.master)
         else:
@@ -324,8 +358,10 @@ class ComposeBar:
 
         chip_bg, chip_fg = ((70, 57, 27), pro.GOLD_RGB) if pro.active() else (self.CHIP_BG, self.CHIP_FG)
         self._images["chip"] = _chip_image(text, chip_bg, chip_fg, _rgb(self.FIELD))
+        self.plan.configure(text="✦ PRO" if pro.active() else "BASIC  ·  Ctrl+P",
+                            fg="#%02x%02x%02x" % pro.GOLD_RGB if pro.active() else self.HINT)
         self.chip.configure(image=self._images["chip"])
-        self._images["tone"] = _tone_image(self.tone, _rgb(self.FIELD))
+        self._images["tone"] = _tone_image(self.tone, _rgb(self.FIELD), pro.GOLD_RGB if pro.active() else None)
         self.tone_view.configure(image=self._images["tone"])
         name = self.labels.get(code) or DISPLAY_NAMES.get(code, code)
         self.hint.configure(text=f"Enter  chat en {name.split(' (')[0].lower()}   ·   Ctrl+Enter  en voz   ·   "
@@ -420,7 +456,7 @@ def _chip_image(text: str, background: tuple, foreground: tuple, surface: tuple)
     return ImageTk.PhotoImage(image.resize((width // scale, height // scale), Image.Resampling.LANCZOS))
 
 
-def _tone_image(tone: int, surface: tuple):
+def _tone_image(tone: int, surface: tuple, color: tuple | None = None):
     """Cinco puntos: cuántos llenos = qué tan informal (1 neutro … 5 jerga)."""
     from PIL import Image, ImageDraw, ImageTk
 
@@ -430,7 +466,7 @@ def _tone_image(tone: int, surface: tuple):
     draw = ImageDraw.Draw(image)
     for index in range(5):
         x = index * (size + gap)
-        fill = (143, 184, 255) if index < tone else (52, 55, 63)
+        fill = (color or (143, 184, 255)) if index < tone else (52, 55, 63)
         draw.ellipse((x, 0, x + size - 1, size - 1), fill=fill)
     return ImageTk.PhotoImage(image.resize((image.width // scale, image.height // scale), Image.Resampling.LANCZOS))
 

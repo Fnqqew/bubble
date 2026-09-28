@@ -3,7 +3,9 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 2.5" src="https://img.shields.io/badge/versión-2.5-4a90e2?style=flat-square">
+  <img alt="Versión 3.0" src="https://img.shields.io/badge/versión-3.0-4a90e2?style=flat-square">
+  <img alt="Basic gratis" src="https://img.shields.io/badge/Basic-gratis-5b6270?style=flat-square">
+  <img alt="Bubble Pro" src="https://img.shields.io/badge/✦%20Bubble-Pro-f2c14e?style=flat-square&labelColor=2b2f36">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
   <img alt="Con tu suscripción de Claude" src="https://img.shields.io/badge/con%20tu%20suscripción-Claude-d97757?style=flat-square">
 </p>
@@ -75,10 +77,39 @@ voz (y cuánto tarda cada paso), y cómo va a andar Bubble en tu PC. Y si queré
 leés unas frases de juego y contestás con tus palabras, y aprende tu vocabulario, tus expresiones, cómo preguntás y
 cómo gritás. [Más](docs/GUIA.md#pruebas).
 
-**✦ Bubble Pro (opcional):** las voces se entienden en la nube en vez de en tu procesador. Entiende mucho mejor a
-los que hablan rápido o se pisan, mezcla idiomas en la misma frase ("hagamos pvp"), sabe quién habla y deja tu
-procesador libre para Roblox. Se paga por uso con tu propia cuenta de Deepgram (~0,35 US$ por hora de voz; la cuenta
-nueva trae 200 US$ gratis), y cuando está activo la ventana se pone dorada. [Cómo se activa](docs/GUIA.md#bubble-pro).
+<br>
+
+## ✦ Bubble Pro
+
+<p align="center">
+  <img src="docs/pro.png" alt="Bubble Basic y Bubble Pro lado a lado: la ventana de siempre y la ventana dorada de Pro con la comparación, la barra para escribir en dorado y el aviso «Bubble Pro activado» dentro del juego" width="100%">
+</p>
+
+<p align="center">
+  <b>El mismo Bubble, con oídos y voz de primera.</b><br>
+  Basic es gratis y corre todo en tu PC. Pro lleva la voz a la nube: entiende a todos y habla por vos con personalidad.
+</p>
+
+| | **Basic** · gratis | **✦ Pro** |
+|---|---|---|
+| **Entender voces** | Whisper, en tu PC | Nova-3 en la nube: entiende a los que hablan rápido o se pisan |
+| **Idiomas** | uno por frase | más de 60, y mezclados en la misma frase (*"hagamos pvp"*) |
+| **Voces que hablan por vos** | las de tu PC | naturales y con personalidad: alegre, canchera o tranquila (hay acento argentino) |
+| **Tu voz traducida** | suena cuando está lista | empieza a sonar en **~0,25 s** |
+| **Tu procesador** | trabaja para la voz | queda libre para Roblox |
+| **Se ve** | como siempre | dorado, adentro y afuera del juego |
+| **Costo** | gratis | por uso, con tu cuenta de Deepgram: **~0,35 US$ por hora de voz** (la cuenta nueva trae 200 US$) |
+
+**Cambiás en el momento.** En la barra para escribir, **Ctrl+P** pasa de Basic a Pro (o al revés) sin salir del
+juego, y un aviso dorado te lo confirma.
+
+**Gasta lo justo.** Solo se manda voz cuando alguien habla (los silencios no se pagan), ni las voces lejanas ni los
+ruidos, nada fuera del juego, y una frase que ya se dijo (*"gg"*, *"gracias"*) no se vuelve a pagar. Quién habla lo
+reconoce tu PC, gratis. En la página **✦ Pro** ves cuánto usaste este mes.
+
+**Siempre funciona.** Si se corta internet, esa frase la entiende tu PC. Si la cuenta se queda sin saldo, Bubble
+vuelve solo a Basic y te avisa. La traducción, en los dos planes, la hace tu suscripción de Claude.
+[Cómo se activa](docs/GUIA.md#bubble-pro).
 
 <br>
 
@@ -90,14 +121,18 @@ nueva trae 200 US$ gratis), y cuando está activo la ventana se pone dorada. [C�
   para no quitarle fluidez al juego.
 - **Entiende el chat como una conversación:** mensajes repetidos, spam, avisos del juego y mensajes viejos cuando
   subís en el chat.
+- **Escucha a los que tenés cerca:** con el radio de escucha, las voces de la otra punta del mapa no se traducen, y
+  los ruidos (música, explosiones, risas) tampoco.
+- **Se mueve suave:** las traducciones, los subtítulos y la barra para escribir aparecen con una animación corta, sin
+  parpadeos.
 
 <br>
 
 ## Tu PC, tu cuenta
 
 Bubble corre en tu computadora y traduce con **tu propia suscripción de Claude**, a través de Claude Code. No hay
-claves que pegar ni servidores de por medio. La voz se reconoce y se sintetiza en tu PC: Claude solo ve texto (con
-Bubble Pro, que es opcional, la voz se reconoce en la nube de Deepgram con tu cuenta).
+claves que pegar ni servidores de por medio. En Basic la voz se reconoce y se sintetiza en tu PC; con Pro, en la nube
+de Deepgram, con tu cuenta. Claude solo ve texto.
 Cada traducción usa muy poco (medido: [cuánto usa de tu suscripción](docs/USO-DE-CLAUDE.md)).
 
 Nunca toca el programa de Roblox: solo mira la pantalla, como una app de grabación, y escribe como lo harías vos.
@@ -148,7 +183,15 @@ Y con el laboratorio de voz (varias personas, siete idiomas, música de fondo):
 | La traducción | **~2 s** después de que terminan |
 | Tu voz traducida | suena **~2 s** después de que terminás (antes ~4,7 s) |
 | Quién habla | acierta **9 de cada 10** frases o más |
-| Tu voz traducida suena | **~2 s** después de que terminás de hablar |
+
+Y con Bubble Pro (medido con una cuenta real de Deepgram):
+
+| | |
+|---|---|
+| Voz de la nube | empieza a sonar en **0,22 a 0,25 s** (esperando la frase entera: 1 a 2,5 s) |
+| Una frase con el botón | entendida en **0,6 s** (inglés) · con *pvp*, *Blox Fruits* y *farmear* bien escritos |
+| Conexión en vivo | sigue abierta en los silencios largos · **14 s** sin hablar, sin cortes |
+| Costo de toda esa prueba | **0,006 US$** |
 
 <br>
 

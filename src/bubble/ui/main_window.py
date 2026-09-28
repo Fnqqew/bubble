@@ -154,6 +154,12 @@ class BubbleWindow:
         self.compose = ComposeBar(self.root, self._compose_preview, self._compose_submit, self._compose_closed)
         self._compose_multi = False  # la última vez mandaste a "todos los del chat"
         self.compose.on_target = self._use_language  # cambiar el idioma con Tab cambia también el de tu voz
+        self.compose.on_toggle_plan = self._toggle_plan_in_game  # Ctrl+P: Basic ↔ Pro sin salir del juego
+        from .. import layered
+        from .toast import Toast
+
+        layered.animate_with(self.root)  # las traducciones en el juego aparecen suave
+        self.toast = Toast(self.root)
         # El micrófono virtual pasa a ser el de Windows ya (Roblox elige su micrófono al abrirse).
         self.voice_panel.early_start()
         self.inline_chat = InlineChatView(self.root, self.tracker.same_message)
@@ -181,11 +187,15 @@ class BubbleWindow:
         self._connect()
 
     def show(self) -> None:
-        """Muestra la ventana ya armada (una sola vez, completa)."""
+        """Muestra la ventana ya armada (una sola vez, completa), apareciendo suave."""
+        from . import motion
+
         self.root.update_idletasks()
+        self.root.attributes("-alpha", 0.0)
         self.root.deiconify()
         self.root.lift()
         self.root.focus_set()  # que ninguna lista arranque con el texto resaltado
+        motion.appear(self.root, rise=0, seconds=0.22)
 
     # ================= interfaz (ver app_view.py) =================
     def _region_text(self) -> str:
@@ -681,8 +691,9 @@ class BubbleWindow:
         self.translator.remember_target(target)
         configured = self.config.user.outgoing_language
         if configured != "auto" and configured.split("-")[0] != target.split("-")[0]:
-            self._set_outgoing(target.split("-")[0])  # elegiste otro con Tab: queda ese
-        self.voice_panel.language_changed()
+            self._set_outgoing(target.split("-")[0])  # elegiste otro con Tab: queda ese (y prepara su voz)
+        else:
+            self.voice_panel.language_changed()
 
     def _set_outgoing(self, code: str) -> None:
         """El idioma en que te leen y te escuchan (el mismo para la barra, tu voz y Ctrl+Enter)."""
@@ -1012,8 +1023,24 @@ class BubbleWindow:
     def _ev_hotkey(self, _payload) -> None:
         self._on_hotkey()
 
-    def set_pro(self, enabled: bool, reason: str = "") -> None:
-        """Prende o apaga Bubble Pro. `reason`: por qué se apagó solo (la clave dejó de andar, se quedó sin saldo)."""
+    def _toggle_plan_in_game(self) -> None:
+        """Ctrl+P en la barra para escribir: Basic ↔ Pro, con un aviso en el juego."""
+        from ..cloud.keys import load_key
+
+        area = None
+        hwnd = win32.find_roblox_window()
+        if hwnd:
+            area = win32.client_rect(hwnd)
+        if not load_key():
+            self.toast.show("Para Bubble Pro, guardá tu clave en la ventana (✦ Pro)", False, area)
+            return
+        self.set_pro(not pro.active(), in_game=True)
+        self.toast.show("✦  Bubble Pro activado" if pro.active() else "Bubble Basic", pro.active(), area)
+
+    def set_pro(self, enabled: bool, reason: str = "", in_game: bool = False) -> None:
+        """Prende o apaga Bubble Pro. `reason`: por qué se apagó solo (la clave dejó de andar, se quedó sin saldo).
+        `in_game`: desde el juego (Ctrl+P): la ventana de Bubble se recolorea un momento después y sin la transición
+        (que abre una ventanita y le podía sacar el foco a la barra para escribir)."""
         from ..cloud.keys import load_key
 
         enabled = bool(enabled and load_key())
@@ -1021,13 +1048,16 @@ class BubbleWindow:
         save_setting("pro", "enabled", enabled)
         if enabled != pro.active():
             pro.set_active(enabled)
-            # el cambio de colores, de una vez y suave (como el tema)
-            cover = app_view._freeze(self.root) if self.root.winfo_viewable() else None
-            app_view.apply_pro_look(self)
-            self.root.update_idletasks()
-            if cover is not None:
-                app_view._fade(cover)
             self.voice_panel.pro_changed()
+            if in_game:
+                self.root.after(350, lambda: app_view.apply_pro_look(self))
+            else:
+                # el cambio de colores, de una vez y suave (como el tema)
+                cover = app_view._freeze(self.root) if self.root.winfo_viewable() else None
+                app_view.apply_pro_look(self)
+                self.root.update_idletasks()
+                if cover is not None:
+                    app_view._fade(cover)
         self.pro_panel.refresh()
         if reason:
             self._set_status(f"Bubble Pro se apagó: {reason}. Sigo con el reconocimiento de tu PC.")

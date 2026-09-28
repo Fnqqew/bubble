@@ -104,6 +104,9 @@ class VoiceConfig:
     # Tu micrófono real ("" = el predeterminado de Windows): pasa al micrófono virtual junto con la voz traducida.
     mic: str = ""
     pass_my_voice: bool = True
+    # Radio de escucha de las voces del juego: "cerca", "normal", "lejos" o "todo" (las lejanas suenan más bajo y no se
+    # traducen). Lo que suena a ruido y no a alguien hablando no se traduce nunca.
+    earshot: str = "normal"
 
 
 @dataclass
@@ -112,8 +115,13 @@ class ProConfig:
 
     enabled: bool = False
     provider: str = "deepgram"
-    # Quién habla (Voz 1, Voz 2…) según la nube: más preciso, Deepgram lo cobra aparte (~0,12 US$ por hora de voz).
-    diarize: bool = True
+    # Quién habla (Voz 1, Voz 2…): lo hace tu PC gratis; con esto lo hace la nube (Deepgram lo cobra aparte, ~0,12 US$
+    # por hora de voz).
+    diarize: bool = False
+    # Las voces de la nube para tu voz traducida y el chat a voz (Aura-2), y su personalidad: "alegre", "canchera" o
+    # "tranquila".
+    voices: bool = True
+    personality: str = "canchera"
 
 
 @dataclass

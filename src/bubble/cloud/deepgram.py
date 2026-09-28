@@ -35,6 +35,9 @@ import numpy as np
 
 from .. import pro
 from ..voice.asr import Heard
+from .connection import pool
+from .errors import BadKey, CloudError, NoCredit, error_for
+from ..voice.hearing import cloud_noise, speech_level
 from ..voice.live import Caption
 
 log = logging.getLogger(__name__)
@@ -46,16 +49,19 @@ MULTI = {"en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"}
 SAMPLE_RATE = 16000
 
 
-class CloudError(RuntimeError):
-    """La nube no respondió bien: se sigue con el reconocimiento de tu PC."""
-
-
-class BadKey(CloudError):
-    """Deepgram no acepta la clave."""
-
-
-class NoCredit(CloudError):
-    """La cuenta de Deepgram se quedó sin saldo."""
+_error_for = error_for
+# Idiomas que Nova-3 entiende de a uno (tu voz, cuando tu idioma no está entre los que se mezclan), según la
+# documentación de Deepgram (28/9/2026). Si alguno lo rechaza, la conexión sigue con Nova-2 (el modelo anterior).
+NOVA3 = MULTI | set("""af ar hy as be bn bs bg ca zh hr cs da et fi fr ka de el gu he hi hu id it ja kn kk ko lv lt mk
+    ms mr mn ne no ps fa pl pt ro ru sr sk sl es sv tl ta te th tr uk ur vi""".split())
+NOVA2 = set("""bg ca zh cs da nl en et fi fr de el hi hu id it ja ko lv lt ms no pl pt ro ru sk es sv th tr uk
+    vi""".split())
+# Palabras de juego que la nube tiene que reconocer bien (Deepgram las prioriza: "keyterm"). Se suman tus palabras.
+GAME_TERMS = ("pvp", "obby", "noob", "lag", "gg", "afk", "Robux", "Roblox", "tradear", "farmear", "spawn", "loot",
+              "nerf", "buff", "boss", "lobby", "tryhard", "carry", "clutch", "Brookhaven", "Blox Fruits", "Adopt Me",
+              "Murder Mystery", "Bedwars", "Tower of Hell", "Jailbreak", "Doors", "Arsenal", "Da Hood", "Rivals",
+              "Grow a Garden", "Steal a Brainrot", "99 Nights in the Forest")
+KEYTERM_TOKENS = 450  # Deepgram acepta hasta 500 "tokens" entre todas
 
 
 def language_param(language: str | None) -> str:
@@ -63,12 +69,34 @@ def language_param(language: str | None) -> str:
     return "multi" if not code or code in MULTI else code
 
 
-def _error_for(status: int, detail: str = "") -> CloudError:
-    if status in (401, 403):
-        return BadKey("Deepgram no acepta tu clave")
-    if status == 402:
-        return NoCredit("Tu cuenta de Deepgram no tiene saldo")
-    return CloudError(f"Deepgram respondió {status} {detail}".strip())
+def model_for(language: str | None) -> str:
+    """Nova-3 para casi todo; Nova-2 para un idioma que Nova-3 todavía no entiende."""
+    code = (language or "").split("-")[0].lower()
+    if not code or code in NOVA3:
+        return MODEL
+    return "nova-2" if code in NOVA2 else MODEL
+
+
+def understands(language: str | None) -> bool:
+    """¿La nube entiende ese idioma? (si no, tu voz se entiende con tu PC)."""
+    code = (language or "").split("-")[0].lower()
+    return not code or code in NOVA3 or code in NOVA2
+
+
+def fit_keyterms(terms) -> list[str]:
+    """Las palabras para priorizar, sin repetir y dentro del límite de Deepgram (las primeras son las que importan)."""
+    chosen, used, seen = [], 0, set()
+    for term in terms or ():
+        term = " ".join(str(term).split())
+        if not term or term.casefold() in seen or len(term) > 60:
+            continue
+        cost = max(1, round(len(term) / 3.5))  # ~3,5 letras por token
+        if used + cost > KEYTERM_TOKENS or len(chosen) >= 100:
+            break
+        chosen.append(term)
+        seen.add(term.casefold())
+        used += cost
+    return chosen
 
 
 def check_key(key: str, timeout: float = 8.0) -> tuple[bool, str]:
@@ -97,6 +125,22 @@ def _wav(audio: np.ndarray) -> bytes:
     return buffer.getvalue()
 
 
+def trim_silence(audio: np.ndarray, pad_s: float = 0.25) -> np.ndarray:
+    """Saca el silencio del principio y del final (deja un poquito): Deepgram cobra por segundo mandado."""
+    audio = np.asarray(audio, dtype=np.float32).ravel()
+    frame = 512
+    count = len(audio) // frame
+    if count < 4:
+        return audio
+    rms = np.sqrt(np.mean(audio[:count * frame].reshape(count, frame) ** 2, axis=1)) + 1e-9
+    level = 20 * np.log10(rms)
+    loud = np.flatnonzero(level > max(-50.0, float(level.max()) - 35.0))
+    if not len(loud):
+        return audio[:0]
+    pad = int(pad_s * SAMPLE_RATE)
+    return audio[max(0, loud[0] * frame - pad):min(len(audio), (loud[-1] + 1) * frame + pad)]
+
+
 def _majority(values, default):
     values = [v for v in values if v is not None and v != ""]
     return Counter(values).most_common(1)[0][0] if values else default
@@ -119,28 +163,36 @@ def parse_clip(data: dict, language: str | None, seconds: float, took: float) ->
 class DeepgramClip:
     """Una frase entera a la nube (misma forma que FastWhisper.transcribe)."""
 
-    def __init__(self, key: str, timeout: float = 6.0) -> None:
+    def __init__(self, key: str, timeout: float = 6.0, keyterms: Callable[[], list[str]] | list[str] = ()) -> None:
         self.key = key
         self.timeout = timeout
         self.name = "deepgram"
+        self.keyterms = keyterms
+
+    def warm(self) -> None:
+        pool(self.timeout).warm()
 
     def transcribe(self, audio: np.ndarray, language: str | None = None, beam_size: int = 1,
                    prior: dict[str, float] | None = None, retry_beam: int = 0, hint="", clean: bool = False
                    ) -> Heard | None:
         started = time.perf_counter()
+        audio = trim_silence(audio)  # el silencio de antes y después no se paga
         seconds = len(audio) / SAMPLE_RATE
-        params = {"model": MODEL, "language": language_param(language), "smart_format": "true",
+        if seconds < 0.2:
+            return None
+        params = {"model": model_for(language), "language": language_param(language), "smart_format": "true",
                   "punctuate": "true"}
-        request = urllib.request.Request(f"{API}/listen?{urllib.parse.urlencode(params)}", data=_wav(audio),
-                                         headers={"Authorization": f"Token {self.key}", "Content-Type": "audio/wav"})
+        terms = self.keyterms() if callable(self.keyterms) else self.keyterms
+        query = [*params.items()]
+        chosen = fit_keyterms(terms) if params["model"] == MODEL else []
+        query += [("keyterm", term) for term in chosen]
+        raw = pool(self.timeout).request("POST", f"/v1/listen?{urllib.parse.urlencode(query)}", _wav(audio),
+                                         {"Authorization": f"Token {self.key}", "Content-Type": "audio/wav"})
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                data = json.loads(response.read())
-        except urllib.error.HTTPError as exc:
-            raise _error_for(exc.code) from exc
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            raise CloudError(f"Sin respuesta de Deepgram: {exc}") from exc
-        pro.count_seconds(seconds)
+            data = json.loads(raw)
+        except ValueError as exc:
+            raise CloudError("Deepgram respondió algo que no se entiende") from exc
+        pro.count_seconds(seconds, multi=params["language"] == "multi", keyterms=bool(chosen), clip=True)
         heard = parse_clip(data, language, seconds, time.perf_counter() - started)
         if heard is not None and clean and heard.logprob < math.log(0.35):
             return None  # casi seguro que era un ruido, no una frase
@@ -178,14 +230,19 @@ class DeepgramListener:
     completando hasta `final`."""
 
     PREROLL_S = 0.4  # se manda un poco de antes de que empiece a hablar (si no, se come la primera sílaba)
-    HOLD_S = 1.2  # y se sigue mandando un rato después de la última voz (las pausas dentro de la frase)
-    KEEPALIVE_S = 5.0
+    # Después de la última voz se manda un poquito de silencio (para que Deepgram note la pausa y cierre la frase
+    # enseguida) y no más: los silencios largos dentro de una frase no se pagan. A los HOLD_S se da por terminada.
+    TAIL_S = 0.4
+    HOLD_S = 1.2
+    KEEPALIVE_S = 3.0  # Deepgram corta si pasan 10 s sin recibir nada
     BLOCK = 1536  # ~96 ms por lectura
 
     def __init__(self, key: str, on_caption: Callable[[Caption], None], source_factory: Callable,
                  on_error: Callable[[str], None] = lambda _msg: None,
                  on_fatal: Callable[[CloudError], None] = lambda _exc: None, language: str | None = None,
-                 diarize: bool = True, judge=None, vad=None, endpointing_ms: int = 300) -> None:
+                 diarize: bool = True, judge=None, vad=None, endpointing_ms: int = 300, earshot=None,
+                 noise_filter: bool = False, keyterms: Callable[[], list[str]] | list[str] = (),
+                 speakers=None) -> None:
         self.key = key
         self.on_caption = on_caption
         self.source_factory = source_factory
@@ -195,6 +252,17 @@ class DeepgramListener:
         self.diarize = diarize
         self.judge = judge  # cómo lo dijo esa voz (tu perfil); sin eso, se compara cada voz con cómo viene hablando
         self.endpointing_ms = endpointing_ms
+        self._older_model = False  # Nova-3 no aceptó el idioma: se usa Nova-2
+        # Radio de escucha y filtro de ruido (voice/hearing.py): lo que suena lejos ni se manda (no se paga).
+        self.earshot = earshot
+        self.noise_filter = noise_filter
+        self._far = False  # la voz que está sonando quedó fuera del radio: no se manda hasta el próximo silencio
+        # Palabras que conviene reconocer bien (jerga de juego, tus palabras): Deepgram las prioriza (cobra aparte).
+        self.keyterms = keyterms
+        self._with_keyterms = False
+        # Quién habla sin pagar la separación de la nube: el reconocimiento de voces de tu PC (voice/speakers.py).
+        self.speakers = speakers if not diarize else None
+        self._open = False  # hay una frase abierta (se está hablando o hubo voz hace menos de HOLD_S)
         self.muted_until = 0.0  # mientras suena tu voz traducida por los parlantes, no se escucha
         self._vad = vad
         self._running = threading.Event()
@@ -265,15 +333,23 @@ class DeepgramListener:
         voice = len(probs) > 0 and float(np.max(probs)) >= 0.5
         if voice:
             self._last_voice = now
-            if not self._sending:
-                self._sending = True
+            if not self._open and not self._far and self.earshot is not None:
+                level = speech_level(np.concatenate([self._recent, samples]))
+                self._far = not self.earshot.hears(level)
+                self.earshot.learn(level)
+            if not self._sending and not self._far:
+                self._sending = self._open = True
                 self._send(self._recent)  # lo de antes: el comienzo de la palabra
+        elif self._far and now - self._last_voice > self.HOLD_S:
+            self._far = False  # terminó esa voz: la próxima se vuelve a medir
         self._recent = np.concatenate([self._recent, samples])[-int(self.PREROLL_S * SAMPLE_RATE):]
         if self._sending:
             self._send(samples)
-            if now - self._last_voice > self.HOLD_S:
-                self._sending = False
-                self._outbox.put(_FINALIZE)  # terminó de hablar: que Deepgram cierre la frase ya
+            if now - self._last_voice > self.TAIL_S:
+                self._sending = False  # pausa: no se manda más silencio (si vuelve a hablar, se retoma)
+        if self._open and now - self._last_voice > self.HOLD_S:
+            self._open = False
+            self._outbox.put(_FINALIZE)  # terminó de hablar: que Deepgram cierre la frase ya
 
     def _send(self, samples: np.ndarray) -> None:
         if not len(samples):
@@ -291,17 +367,25 @@ class DeepgramListener:
     def _flush_usage(self) -> None:
         seconds, self._unbilled = self._unbilled, 0.0
         try:
-            pro.count_seconds(seconds, diarized=self.diarize)
+            pro.count_seconds(seconds, diarized=self.diarize, multi=language_param(self.language) == "multi",
+                              keyterms=self._with_keyterms)
         except Exception:  # noqa: BLE001 - es solo la cuenta
             log.debug("No se pudo anotar el uso de la nube", exc_info=True)
 
     # ------------------------------------------------------------ la conexión con Deepgram
     def url(self) -> str:
-        params = {"model": MODEL, "language": language_param(self.language), "encoding": "linear16",
+        model = "nova-2" if self._older_model else model_for(self.language)
+        params = {"model": model, "language": language_param(self.language), "encoding": "linear16",
                   "sample_rate": SAMPLE_RATE, "channels": 1, "interim_results": "true",
                   "endpointing": self.endpointing_ms, "utterance_end_ms": 1000, "smart_format": "true",
                   "punctuate": "true", "diarize": "true" if self.diarize else "false"}
-        return f"{LISTEN_WS}?{urllib.parse.urlencode(params)}"
+        terms = self.keyterms() if callable(self.keyterms) else self.keyterms
+        if params["model"] != MODEL:
+            terms = ()  # Nova-2 no las acepta
+        chosen = fit_keyterms(terms)
+        self._with_keyterms = bool(chosen)
+        query = urllib.parse.urlencode([*params.items(), *(("keyterm", term) for term in chosen)])
+        return f"{LISTEN_WS}?{query}"
 
     def _network(self, run: threading.Event, outbox: queue.Queue) -> None:
         loop = asyncio.new_event_loop()
@@ -333,6 +417,9 @@ class DeepgramListener:
                     self.on_fatal(error)
                     run.clear()
                     return
+                if exc.response.status_code == 400 and not self._older_model and self.language in NOVA2:
+                    self._older_model = True  # ese idioma, con el modelo anterior
+                    continue
                 self.on_error(str(error))
             except Exception as exc:  # noqa: BLE001 - se reintenta
                 if run.is_set():
@@ -343,23 +430,23 @@ class DeepgramListener:
 
     async def _sender(self, socket, run: threading.Event, outbox: queue.Queue) -> None:
         loop = asyncio.get_running_loop()
-        idle = 0.0
+        await socket.send(json.dumps({"type": "KeepAlive"}))
+        last = time.monotonic()
         while run.is_set():
             item = await loop.run_in_executor(None, _next, outbox)
-            if item is None:
-                if not run.is_set():
-                    await socket.send(json.dumps({"type": "CloseStream"}))
-                    return
-                idle += 1.0
-                if idle >= self.KEEPALIVE_S:
-                    idle = 0.0
-                    await socket.send(json.dumps({"type": "KeepAlive"}))  # sin audio, la conexión sigue abierta
-                continue
-            idle = 0.0
+            if item is None and not run.is_set():
+                await socket.send(json.dumps({"type": "CloseStream"}))
+                return
             if item is _FINALIZE:
                 await socket.send(json.dumps({"type": "Finalize"}))
-            else:
+            elif item is not None:
                 await socket.send(item)
+                last = time.monotonic()
+            if time.monotonic() - last >= self.KEEPALIVE_S:
+                # Sin audio (silencio, fuera del juego) la conexión sigue abierta: se cuenta desde el último audio,
+                # no solo en los ratos sin nada (antes, tras un "Finalize" se cortaba a los 10 s: NET-0001).
+                await socket.send(json.dumps({"type": "KeepAlive"}))
+                last = time.monotonic()
 
     # ------------------------------------------------------------ lo que responde → frases
     def handle(self, message: dict) -> None:
@@ -389,7 +476,11 @@ class DeepgramListener:
         text = " ".join(p[0] for p in pieces if p[0]).strip()
         words = [w for p in pieces for w in p[1]]
         start, end = pieces[0][2], pieces[-1][3]
+        if final and self.noise_filter and cloud_noise(text, [float(w.get("confidence", 0.0)) for w in words]):
+            text = ""  # ruido, no una voz: si se estaba mostrando, se retira
         speaker = int(_majority([w.get("speaker") for w in words], -1)) + 1 if self.diarize else 0
+        if final and text and self.speakers is not None:
+            speaker = self._local_speaker(start, end)
         language = str(_majority([w.get("language") for w in words], self.language or "en")).split("-")[0]
         confidence = float(np.mean([w.get("confidence", 0.0) for w in words])) if words else 0.0
         intonation = self._intonation(start, end, speaker) if final else ""
@@ -398,6 +489,22 @@ class DeepgramListener:
         if final:
             self._pieces = []
             self._current = next(self._ids)
+
+    def _segment(self, start: float, end: float) -> np.ndarray:
+        """El audio que se mandó para esa frase (los tiempos de Deepgram son de ese audio)."""
+        begin = int((start - self._sent_offset) * SAMPLE_RATE)
+        stop = int((end - self._sent_offset) * SAMPLE_RATE)
+        if begin < 0 or stop <= begin:
+            return np.zeros(0, dtype=np.float32)
+        return self._sent[begin:stop]
+
+    def _local_speaker(self, start: float, end: float) -> int:
+        try:
+            audio = self._segment(start, end)
+            return self.speakers.identify(audio) if len(audio) >= SAMPLE_RATE // 2 else 0
+        except Exception:  # noqa: BLE001 - sin saber quién es, queda "Voz"
+            log.debug("No se pudo reconocer la voz", exc_info=True)
+            return 0
 
     def _intonation(self, start: float, end: float, speaker: int) -> str:
         """Cómo lo dijo (pregunta, grito…), con el audio que se mandó para esa frase."""

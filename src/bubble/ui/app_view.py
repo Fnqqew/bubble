@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 LOGO = Path(__file__).resolve().parent.parent / "assets" / "bubble.png"
 PAGES = {"inicio": "Inicio", "voz": "Voz", "pruebas": "Pruebas", "pro": "✦ Pro", "ajustes": "Ajustes",
          "actividad": "Actividad"}
+# Páginas que se arman recién la primera vez que las abrís (son las más pesadas): Bubble abre un poco antes.
+LAZY = ("pruebas", "pro")
 PILL_NAMES = {"grafito": "Grafito", "medianoche": "Medianoche", "violeta": "Violeta", "bosque": "Bosque",
               "negro": "Negro"}
 ACCENT_NAMES = {"azul": "Azul", "verde": "Verde", "rosa": "Rosa", "naranja": "Naranja", "ninguno": "Sin color"}
@@ -71,13 +73,17 @@ def build(app: BubbleWindow) -> None:
     builders = {"inicio": lambda page: _home(app, page), "voz": app.voice_panel.build_page,
                 "pruebas": app.tests_panel.build_page, "pro": app.pro_panel.build_page,
                 "ajustes": lambda page: _settings(app, page), "actividad": lambda page: _activity(app, page)}
+    app.lazy_pages = {}
     for key in PAGES:
         if key == "actividad":
             parent = app.pages[key] = ttk.Frame(stack)
         else:
             scroll = app.pages[key] = widgets.Scrollable(stack)  # se desplaza si la ventana es chica
             parent = scroll.body
-        builders[key](parent)
+        if key in LAZY:
+            app.lazy_pages[key] = (parent, builders[key])  # se arma la primera vez que la abrís
+        else:
+            builders[key](parent)
 
     footer = ttk.Frame(shell)
     footer.pack(fill="x", side="bottom", pady=(8, 0))
@@ -124,6 +130,10 @@ def set_state(app: BubbleWindow, kind: str, greeting: str, chip: str) -> None:
 
 
 def _show_page(app: BubbleWindow) -> None:
+    pending = getattr(app, "lazy_pages", {}).pop(app.page_var.get(), None)
+    if pending is not None:
+        parent, builder = pending
+        builder(parent)  # (se arma con los colores del plan de ahora: no hace falta recolorear)
     for key, page in app.pages.items():
         if key == app.page_var.get():
             page.pack(fill="both", expand=True)
@@ -368,16 +378,18 @@ def apply_pro_look(app: BubbleWindow) -> None:
 
 
 def _pro_header(app: BubbleWindow) -> None:
+    """"Bubble Pro" con la insignia PRO dorada y la franja arriba; en Basic, "Bubble" con una insignia BASIC gris."""
     on = pro.active()
+    colors = widgets.palette()
     app.title_label.configure(text="Bubble Pro" if on else "Bubble")
     if on:
-        app.pro_badge.configure(background=pro.gold(), foreground=widgets.palette()["bg"])
-        app.pro_badge.pack(side="left", padx=(8, 0), pady=(4, 0))
+        app.pro_badge.configure(text="PRO", background=pro.gold(), foreground=colors["bg"])
         app.pro_stripe.configure(background=pro.gold())
         app.pro_stripe.pack(fill="x", side="top", before=app.shell)
     else:
-        app.pro_badge.pack_forget()
+        app.pro_badge.configure(text="BASIC", background=colors["card"], foreground=colors["muted"])
         app.pro_stripe.pack_forget()
+    app.pro_badge.pack(side="left", padx=(8, 0), pady=(4, 0))
 
 
 def recolor(app: BubbleWindow) -> None:
@@ -394,7 +406,9 @@ def recolor(app: BubbleWindow) -> None:
 
     def walk(widget):
         for child in widget.winfo_children():
-            if isinstance(child, ttk.Label):
+            if getattr(child, "gold", False):
+                child.configure(foreground=pro.gold())  # lo de Pro, dorado siempre (con el dorado del tema)
+            elif isinstance(child, ttk.Label):
                 current = str(child.cget("foreground"))
                 for old in olds:
                     for key in ("muted", "faint", "accent", "good", "warn", "bad"):

@@ -10,9 +10,15 @@ from printwin import print_window, show_quietly
 
 from bubble import win32
 from bubble.geometry import Rect
-from bubble.ui import overlays
+from bubble.ui import motion, overlays
+
+motion.appear = lambda *args, **kwargs: None  # sin animación: queda invisible (transparente) mientras se captura
 
 out = sys.argv[1]
+if "pro" in sys.argv[3:]:  # la barra con Bubble Pro activo (chip dorado y "✦ PRO")
+    from bubble import pro
+
+    pro.set_active(True)
 TEXT = "dale, esperame en la torre"
 TRANSLATION = "sure, wait for me at the tower"
 

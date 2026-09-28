@@ -101,12 +101,20 @@ def segmented(parent, variable: tk.StringVar, options: dict[str, str], command: 
     return box
 
 
+WHEEL_PX = 64  # píxeles por "clic" de la ruedita
+GLIDE = 0.4  # en cada paso se recorre esta parte de lo que falta (se frena suave al llegar)
+
+
 class Scrollable(ttk.Frame):
-    """Una página con barra de desplazamiento (para Ajustes, que es larga). Se mueve con la ruedita."""
+    """Una página con barra de desplazamiento (para Ajustes, que es larga). Se mueve con la ruedita, suave y de a
+    píxeles (también con touchpad: antes los movimientos chicos no la movían y los grandes la hacían saltar)."""
 
     def __init__(self, parent) -> None:
         super().__init__(parent)
-        self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0, background=palette()["bg"])
+        self._goal: float | None = None  # hasta dónde se está desplazando (píxeles desde arriba)
+        self._gliding = None
+        self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0, background=palette()["bg"],
+                                yscrollincrement=1)
         bar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.body = ttk.Frame(self.canvas, padding=(0, 0, 14, 0))
         self._window = self.canvas.create_window((0, 0), window=self.body, anchor="nw")
@@ -135,7 +143,35 @@ class Scrollable(ttk.Frame):
         while widget is not None and widget is not self:
             widget = widget.master
         if widget is self:
-            self.canvas.yview_scroll(int(-event.delta / 120), "units")
+            self.scroll_by(-event.delta / 120 * WHEEL_PX)
+
+    def scroll_by(self, pixels: float) -> None:
+        """Desplaza la página, deslizándose (si ya se estaba moviendo, sigue desde adonde iba)."""
+        top = self.canvas.canvasy(0)
+        bottom = max(0.0, self.body.winfo_reqheight() - self.canvas.winfo_height())
+        start = self._goal if self._goal is not None else top
+        self._goal = min(max(0.0, start + pixels), bottom)
+        if self._gliding is None:
+            self._glide()
+
+    def _glide(self) -> None:
+        top = self.canvas.canvasy(0)
+        remaining = (self._goal if self._goal is not None else top) - top
+        if abs(remaining) < 1:
+            self._gliding = self._goal = None
+            return
+        step = int(remaining * GLIDE) or (1 if remaining > 0 else -1)
+        self.canvas.yview_scroll(step, "units")
+        if self.canvas.canvasy(0) == top:  # llegó al borde
+            self._gliding = self._goal = None
+            return
+        self._gliding = self.after(10, self._glide)
 
     def recolor(self) -> None:
         self.canvas.configure(background=palette()["bg"])
+
+    def scroll_to_top(self) -> None:
+        if self._gliding is not None:
+            self.after_cancel(self._gliding)
+        self._gliding = self._goal = None
+        self.canvas.yview_moveto(0)

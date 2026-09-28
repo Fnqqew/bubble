@@ -120,7 +120,8 @@ def test_only_voice_is_sent_and_the_phrase_is_closed_after_the_pause():
     audio = [item for item in sent if isinstance(item, bytes)]
     assert sent[-1] is deepgram._FINALIZE  # terminó de hablar: Deepgram cierra la frase enseguida
     seconds = sum(len(item) for item in audio) / 2 / 16000
-    assert 0.5 + 1.2 <= seconds <= 0.4 + 0.5 + 1.4  # un poco de antes, la voz y la pausa (no los 2,9 s)
+    # un poco de antes, la voz y un poquito de pausa (no los 2,9 s ni el resto del silencio: no se pagan)
+    assert 0.4 + 0.5 + 0.4 <= seconds <= 0.4 + 0.5 + 0.6
     listener._flush_usage()
     minutes, cost = pro.month_usage()
     assert minutes == pytest.approx(seconds / 60, abs=0.01) and cost > 0
@@ -162,8 +163,9 @@ def test_audio_keepalive_finalize_and_close_are_sent_in_order():
         await asyncio.wait_for(task, 3)
 
     asyncio.run(main())
-    assert socket.sent[0] == b"\x01\x00"
-    assert json.loads(socket.sent[1]) == {"type": "Finalize"}
+    assert json.loads(socket.sent[0]) == {"type": "KeepAlive"}  # apenas se conecta
+    assert socket.sent[1] == b"\x01\x00"
+    assert json.loads(socket.sent[2]) == {"type": "Finalize"}
     assert json.loads(socket.sent[-1]) == {"type": "CloseStream"}
 
 

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from typing import Callable
+
 import numpy as np
 
 SAMPLE_RATE = 16000
@@ -134,6 +136,35 @@ def play(output: Output, audio: np.ndarray, rate: int) -> None:
     audio = np.clip(audio, -1, 1).astype(np.float32)
     tail = np.zeros((int(rate * TAIL_S), *audio.shape[1:]), dtype=np.float32)
     output.device.play(np.concatenate([audio, tail]), samplerate=rate)
+
+
+def play_stream(output: Output, pieces, rate: int, on_piece: Callable[[float], None] | None = None) -> float:
+    """Reproduce pedazos a medida que llegan (bloquea hasta terminar). Se junta ~0,25 s antes de empezar, así una
+    demora de la red no corta la voz. `on_piece(segundos)`: antes de cada pedazo. Devuelve los segundos que sonó."""
+    com_ready()
+    played = 0.0
+    buffer: list[np.ndarray] = []
+    buffered = 0
+    with output.device.player(samplerate=rate, channels=1) as player:
+        for piece in pieces:
+            buffer.append(np.asarray(piece, dtype=np.float32).ravel())
+            buffered += len(buffer[-1])
+            if played == 0.0 and buffered < rate * 0.25:
+                continue
+            chunk = np.clip(np.concatenate(buffer), -1, 1)
+            buffer, buffered = [], 0
+            if on_piece:
+                on_piece(len(chunk) / rate)
+            player.play(chunk)
+            played += len(chunk) / rate
+        if buffer:
+            chunk = np.clip(np.concatenate(buffer), -1, 1)
+            if on_piece:
+                on_piece(len(chunk) / rate)
+            player.play(chunk)
+            played += len(chunk) / rate
+        player.play(np.zeros(int(rate * TAIL_S), dtype=np.float32))
+    return played
 
 
 def monitor_output() -> Output:

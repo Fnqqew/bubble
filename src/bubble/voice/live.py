@@ -22,6 +22,7 @@ from typing import Callable
 import numpy as np
 
 from . import audio as audio_io
+from .hearing import looks_like_noise, speech_level
 from .asr import FastWhisper, Heard
 from .speakers import SpeakerTracker
 from .speech import Usual, melody, sounds_finished, sounds_unfinished
@@ -118,6 +119,7 @@ class _Utterance:
         self.language = ""
         self.speaker = 0
         self.text = ""
+        self.far = False  # fuera del radio de escucha: no se entiende ni se muestra
 
     def audio(self) -> np.ndarray:
         if len(self.chunks) > 1:
@@ -141,10 +143,13 @@ class LiveListener:
         hint="",
         judge=None,
         clean: bool = False,
+        earshot=None,
+        noise_filter: bool = False,
     ) -> None:
         """`hint`: ejemplo de cómo se habla, para Whisper (texto o función idioma → texto). `judge`: función que dice
         cómo lo dijo esa voz (tu perfil: con tu voz de siempre y tus umbrales); sin eso, se compara cada voz del juego
-        con cómo viene hablando."""
+        con cómo viene hablando. `earshot`: radio de escucha (voice/hearing.py): las voces lejanas no se entienden.
+        `noise_filter`: lo que suena a ruido y no a alguien hablando no se muestra."""
         self.final_asr = final_asr
         self.partial_asr = partial_asr
         self.speakers = speakers
@@ -161,6 +166,8 @@ class LiveListener:
         self.hint = hint
         self.judge = judge
         self.clean = clean  # tu micrófono (no el juego): el ruido que se vuelve texto se descarta más estricto
+        self.earshot = earshot
+        self.noise_filter = noise_filter
         self._usual: dict[int, Usual] = {}  # cómo habla cada voz del juego (para notar sus gritos)
         self._running = threading.Event()
         self._wake = threading.Condition()
@@ -344,11 +351,16 @@ class LiveListener:
             new = (current.samples - current.partial_samples) / SAMPLE_RATE
             first = current.partial_samples == 0
             tail = current.want_tail and seconds >= min(s.first_partial_s, 0.45)
+            if current.far:
+                return None
             if tail or (first and seconds >= s.first_partial_s) or (not first and new >= s.partial_every_s):
+                audio = current.audio().copy()
+                if first and self.earshot is not None and not self.earshot.hears(speech_level(audio)):
+                    current.far = True  # suena lejos: ni se lee ni se muestra (y no gasta procesador)
+                    return None
                 current.partial_samples = current.samples
                 current.want_tail = False
                 current.tail_pending = tail
-                audio = current.audio().copy()
                 return lambda: self._partial(current, audio, tail)
         return None
 
@@ -416,6 +428,14 @@ class LiveListener:
 
     def _finalize(self, utterance: _Utterance) -> None:
         audio = utterance.audio()
+        if self.earshot is not None:
+            level = speech_level(audio)
+            near = self.earshot.hears(level)
+            self.earshot.learn(level)
+            if not near:
+                if utterance.partial_samples:
+                    self.on_caption(self._caption(utterance, "", utterance.language, final=True))  # se retira
+                return
         heard: Heard | None = None
         if utterance.tail:
             quick, covered = utterance.tail
@@ -429,6 +449,11 @@ class LiveListener:
             # Si no alcanza el audio para reconocer la voz, queda la que se supo mientras hablaba (o "Voz").
             utterance.speaker = self.speakers.identify(audio, hint=utterance.speaker)
         text = heard.text if heard else ""
+        if text and self.noise_filter:
+            ratio = min(1.0, utterance.speech_frames * FRAME / max(1, len(audio)))
+            if looks_like_noise(text, heard.no_speech, heard.logprob, heard.language_prob, ratio):
+                log.debug("Ruido, no una voz: %r", text)
+                text = ""
         if text and utterance.overlaps:
             text = drop_overlap(self._final_texts.get(utterance.overlaps, ""), text)
         self._final_texts[utterance.number] = heard.text if heard else ""

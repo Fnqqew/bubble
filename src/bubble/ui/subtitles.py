@@ -7,6 +7,8 @@ van solas. Como las demás traducciones, no salen en capturas de pantalla ni rec
 
 from __future__ import annotations
 
+import time
+
 from PIL import Image, ImageDraw
 
 from ..voice.captions import MINE, NOTICE, Line
@@ -62,9 +64,23 @@ def _body(line: Line) -> tuple[str, tuple]:
     return (line.original + ("" if line.final else " …")).strip(), PENDING
 
 
-def render_subtitles(lines: list[Line], scale: float | None = None, show_original: bool | None = None
-                     ) -> Image.Image:
-    """Tarjeta con las frases (la más nueva abajo)."""
+FRESH_S = 0.28  # una frase nueva aparece deslizándose y desvaneciéndose durante este tiempo
+
+
+def freshness(lines: list[Line], now: float) -> dict[int, float]:
+    """Frases que recién aparecen → cuánto de su animación ya pasó (0 a 1, suavizado)."""
+    fresh = {}
+    for line in lines:
+        if line.heard_at and now - line.heard_at < FRESH_S:
+            t = max(0.0, (now - line.heard_at) / FRESH_S)
+            fresh[line.id] = round(1 - (1 - t) ** 3, 2)
+    return fresh
+
+
+def render_subtitles(lines: list[Line], scale: float | None = None, show_original: bool | None = None,
+                     fresh: dict[int, float] | None = None) -> Image.Image:
+    """Tarjeta con las frases (la más nueva abajo). `fresh`: frases que están apareciendo (ver `freshness`)."""
+    fresh = fresh or {}
     k = SETTINGS.scale if scale is None else scale
     original_too = SETTINGS.show_original if show_original is None else show_original
     width, line_h, body, head = int(WIDTH * k), int(LINE_H * k), int(BODY * k), int(24 * k)
@@ -80,7 +96,15 @@ def render_subtitles(lines: list[Line], scale: float | None = None, show_origina
     draw = ImageDraw.Draw(image)
     y = int(12 * k)
     label_font = _font(int(14 * k))
+    base = image
     for line, _text, color, size, wrapped in blocks:
+        appearing = fresh.get(line.id, 1.0)
+        top = y
+        if appearing < 1.0:
+            # La frase nueva se dibuja aparte y entra subiendo un poco y desvaneciéndose.
+            image = Image.new("RGBA", base.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(image)
+            y += int(10 * k * (1 - appearing))
         accent = speaker_color(line.speaker)
         dot = int(22 * k)
         draw.ellipse((dot, y + int(5 * k), dot + int(9 * k), y + int(14 * k)), fill=(*accent, 255))
@@ -97,7 +121,13 @@ def render_subtitles(lines: list[Line], scale: float | None = None, show_origina
             draw.text((width / 2, y + line_h / 2), text, font=_font(size, text), fill=color, anchor="mm")
             y += line_h
         y += int(10 * k)
-    return image
+        if appearing < 1.0:
+            layer = image
+            layer.putalpha(layer.getchannel("A").point(lambda value: int(value * appearing)))
+            base.alpha_composite(layer)
+            image, draw = base, ImageDraw.Draw(base)
+            y = top + head + line_h * len(wrapped) + int(10 * k)
+    return base
 
 
 class SubtitleView:
@@ -107,6 +137,7 @@ class SubtitleView:
         self.window = LayeredWindow()
         self._key: tuple | None = None
         self._image: Image.Image | None = None
+        self.animating = False  # hay una frase apareciendo: conviene llamar más seguido
 
     def update(self, lines: list[Line], area, visible: bool) -> None:
         """Llamar seguido (desde el bucle de la ventana) con las frases a la vista."""
@@ -114,10 +145,13 @@ class SubtitleView:
             self.window.hide()
             self._key = None
             return
-        key = (SETTINGS.version, *((line.id, line.speaker, line.language, line.original, line.translation,
-                                     line.final) for line in lines))
+        fresh = freshness(lines, time.monotonic())
+        self.animating = bool(fresh)
+        key = (SETTINGS.version, tuple(sorted(fresh.items())),
+               *((line.id, line.speaker, line.language, line.original, line.translation, line.final)
+                 for line in lines))
         if key != self._key:
-            self._image = render_subtitles(lines)
+            self._image = render_subtitles(lines, fresh=fresh)
             self._key = key
             drawn = True
         else:

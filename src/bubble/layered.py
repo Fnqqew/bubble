@@ -139,6 +139,36 @@ def to_premultiplied_bgra(image: Image.Image) -> bytes:
     return Image.merge("RGBA", (b, g, r, a)).tobytes()
 
 
+FADE_S = 0.18  # las traducciones aparecen desvaneciéndose (solo cambia la opacidad: casi no gasta)
+_fading: dict["LayeredWindow", float] = {}  # ventana → cuándo empezó a aparecer
+_driver = None  # la ventana de Tk que mueve las animaciones (ver animate_with)
+
+
+def animate_with(root) -> None:
+    """Las traducciones aparecen suave. Sin esto (pruebas, herramientas) aparecen de golpe."""
+    global _driver
+    _driver = root
+
+
+def _fade_step() -> None:
+    import time as _time
+
+    now = _time.perf_counter()
+    for window, start in list(_fading.items()):
+        t = min(1.0, (now - start) / FADE_S)
+        if window.hwnd and window.visible:
+            window.set_opacity(int(255 * (1 - (1 - t) ** 3)))
+        if t >= 1 or not window.visible:
+            _fading.pop(window, None)
+            if window.hwnd and window.visible:
+                window.set_opacity(255)
+    if _fading and _driver is not None:
+        try:
+            _driver.after(15, _fade_step)
+        except Exception:  # noqa: BLE001 - la ventana se cerró
+            _fading.clear()
+
+
 class LayeredWindow:
     """Ventana siempre arriba, sin foco, que deja pasar los clics y no sale en capturas (salvo las tuyas)."""
 
@@ -155,6 +185,7 @@ class LayeredWindow:
         self.visible = False
         self.position = (0, 0)
         self.size = (0, 0)
+        self.opacity = 255
 
     def update(self, image: Image.Image, x: int, y: int) -> None:
         """Muestra `image` (RGBA, con transparencia) en (x, y) de la pantalla."""
@@ -169,7 +200,7 @@ class LayeredWindow:
             data = to_premultiplied_bgra(image)
             ctypes.memmove(bits, data, len(data))
             previous = gdi32.SelectObject(memory_dc, bitmap)
-            blend = BLENDFUNCTION(AC_SRC_OVER, 0, 255, AC_SRC_ALPHA)
+            blend = BLENDFUNCTION(AC_SRC_OVER, 0, self._starting_opacity(), AC_SRC_ALPHA)
             user32.UpdateLayeredWindow(
                 self.hwnd, screen_dc, ctypes.byref(wintypes.POINT(x, y)), ctypes.byref(wintypes.SIZE(width, height)),
                 memory_dc, ctypes.byref(wintypes.POINT(0, 0)), 0, ctypes.byref(blend), ULW_ALPHA,
@@ -188,16 +219,45 @@ class LayeredWindow:
             self.position = (x, y)
         self._show()
 
+    def _starting_opacity(self) -> int:
+        """Si va a aparecer (estaba escondida), arranca transparente y se anima."""
+        if not self.visible and _driver is not None:
+            self.opacity = 0
+        return self.opacity
+
+    def set_opacity(self, alpha: int) -> None:
+        """Cambia solo la opacidad (sin redibujar)."""
+        alpha = max(0, min(255, int(alpha)))
+        if alpha == self.opacity:
+            return
+        blend = BLENDFUNCTION(AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA)
+        user32.UpdateLayeredWindow(self.hwnd, None, None, None, None, None, 0, ctypes.byref(blend), ULW_ALPHA)
+        self.opacity = alpha
+
     def _show(self) -> None:
         if not self.visible:
+            if _driver is not None:
+                self.set_opacity(0)  # (si ya estaba en 0 por `update`, no hace nada)
             user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
             user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | 0x2)
             self.visible = True
+            if _driver is not None:
+                import time as _time
+
+                start = not _fading
+                _fading[self] = _time.perf_counter()
+                if start:
+                    try:
+                        _driver.after(0, _fade_step)
+                    except Exception:  # noqa: BLE001
+                        _fading.clear()
+                        self.set_opacity(255)
 
     def hide(self) -> None:
         if self.visible:
             user32.ShowWindow(self.hwnd, SW_HIDE)
             self.visible = False
+            _fading.pop(self, None)
 
     def destroy(self) -> None:
         if self.hwnd:

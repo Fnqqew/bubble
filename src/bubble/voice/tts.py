@@ -22,7 +22,9 @@ STYLES = {"": (1.0, 0.7, 1.0), "shout": (1.1, 0.9, 1.4), "exclaim": (1.05, 0.85,
 QUALITY_ORDER = {"medium": 0, "high": 1, "low": 2, "x_low": 3}
 # Idiomas cuya voz de Piper necesita programas extra que no vienen instalados (tailandés: tltk; japonés: pyopenjtalk).
 MAX_LOADED = 3  # voces sintéticas cargadas a la vez (la tuya, la femenina y la masculina, casi siempre)
-NO_VOICE = {"th", "ja"}
+# Sin voz de Piper: tailandés y japonés no hay; la china necesita paquetes extra (g2pW, unicode_rbnf) que no se
+# instalan (antes fallaba cada vez que pasabas por el chino con Tab).
+NO_VOICE = {"th", "ja", "zh"}
 # Variante preferida por idioma (la más neutra / más hablada entre jugadores).
 PREFERRED_REGION = {"en": "en_US", "es": "es_MX", "pt": "pt_BR", "fr": "fr_FR", "de": "de_DE", "zh": "zh_CN",
                     "ar": "ar_JO", "hi": "hi_IN", "nl": "nl_NL"}

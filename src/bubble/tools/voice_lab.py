@@ -76,6 +76,9 @@ CAST = {
 }
 
 
+
+RAW = False  # --sin-filtro: sin radio de escucha ni filtro de ruido (para comparar)
+
 def scenarios() -> list[Scenario]:
     return [
         Scenario("una_persona", "Una persona en inglés, a ritmo normal", CAST, [
@@ -327,7 +330,7 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
     records: dict[int, Record] = {}
     lock = threading.Lock()
 
-    def translate(text, language, speaker, on_piece, on_done, *, _records=records):
+    def translate(text, language, speaker, on_piece, on_done, intonation="", *, _records=records):
         caption_id = current_caption[0]
         with lock:
             if caption_id in _records:
@@ -375,8 +378,11 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
 
     final_asr, partial_asr, speakers = pipeline
     speakers.voices.clear()
+    from ..voice.hearing import Earshot
+
     listener = LiveListener(final_asr, on_caption, partial_asr=partial_asr, speakers=speakers,
-                            source_factory=lambda: source)
+                            source_factory=lambda: source, earshot=None if RAW else Earshot("normal"),
+                            noise_filter=not RAW)
     cpu0 = time.process_time()
     wall0 = time.perf_counter()
     listener.start()
@@ -579,7 +585,7 @@ def make_translate(use_claude: bool, outgoing: bool = False):
     runner = AsyncRunner()
     runner.submit(translator.start()).result(timeout=90)
 
-    def translate(text, language, speaker, on_piece, on_done):
+    def translate(text, language, speaker, on_piece, on_done, intonation=""):
         async def work():
             try:
                 result = await translator.translate_incoming(text, f"Voz {speaker}", on_delta=on_piece)
@@ -608,7 +614,11 @@ def main() -> None:
     parser.add_argument("--hilos-parcial", type=int, default=2)
     parser.add_argument("--idioma", default="", help="tu idioma (por defecto, el de tu configuración)")
     parser.add_argument("--directo", action="store_true", help="probar tu voz: traducción directa a voz")
+    parser.add_argument("--sin-filtro", action="store_true",
+                        help="sin radio de escucha ni filtro de ruido (como antes de la 3.0)")
     args = parser.parse_args()
+    global RAW
+    RAW = args.sin_filtro
     if args.directo:
         held, translate_out = make_translate(True, outgoing=True)
         pipeline = make_pipeline(args.final, "" if args.parcial == "no" else args.parcial, args.hilos_final,

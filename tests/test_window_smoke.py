@@ -53,7 +53,7 @@ def test_bubble_pro_turns_the_window_gold_and_back(window, monkeypatch):
     assert window.pro_panel.enabled_var.get()
     window.set_pro(False, reason="Tu cuenta de Deepgram no tiene saldo")
     assert not pro.active() and not window.config.pro.enabled
-    assert window.title_label.cget("text") == "Bubble" and not window.pro_badge.winfo_manager()
+    assert window.title_label.cget("text") == "Bubble" and window.pro_badge.cget("text") == "BASIC"
     assert "sin saldo" in window.status.cget("text") or "saldo" in window.status.cget("text")
     assert changes == [True, False]  # la voz se rearmó las dos veces
 

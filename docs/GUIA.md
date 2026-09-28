@@ -1,4 +1,4 @@
-# Guía de Bubble 2.0
+# Guía de Bubble 3.0
 
 Todo lo que no entra en la portada: instalación paso a paso, cómo se usa cada parte, la configuración y cómo está
 hecho por dentro.
@@ -139,6 +139,15 @@ que se use (~60 MB). Quedan en `%LOCALAPPDATA%\Bubble\models`.
 
 **Subtítulos de lo que te dicen.** Interruptor **Lo que te dicen por voz**, en Inicio.
 
+- **Radio de escucha** (página Voz): en el chat de voz de Roblox, los que están lejos suenan más bajo. Bubble aprende
+  cómo suenan las voces que tenés cerca y deja afuera las que suenan bastante más bajo: **Cerca**, **Normal**, **Lejos**
+  o **Todas**. Si nadie habla cerca por un rato (te alejaste, bajaste el volumen), el radio se va abriendo solo.
+- **Filtro de ruido:** lo que no es alguien hablando (música, explosiones, risas, balbuceos, algo que no se entiende
+  en ningún idioma) no se traduce. Está medido con grabaciones reales para no tirar voces de verdad aunque haya
+  ruido o se pisen.
+- Si hace más de 3 s que no estás en el juego, no se escucha (los subtítulos igual no se verían): no gasta
+  procesador, y con Pro no se paga.
+
 - Mientras la persona habla ya ves lo que va diciendo, en gris (aparece ~0,5 s después de que empieza).
 - Apenas hace una pausa se pide la traducción, que llega palabra por palabra y reemplaza al gris, en blanco.
   Tarda ~2 s desde que termina de hablar; casi todo es lo que tarda Claude.
@@ -161,7 +170,8 @@ escucha todo lo que suena en la PC.
   - **tocalo y hablá:** cuando terminás de hablar, se traduce y se dice solo (o tocalo otra vez para terminar);
   - o **mantenelo apretado** mientras hablás y soltalo.
 - **Directo, sin botón:** hablás normal. Cada frase que decís sale traducida en voz ~2 s después de que terminás.
-  Ojo: traduce todo lo que diga tu micrófono.
+  Escucha solo mientras estás en Roblox (el juego al frente, o la barra para escribir abierta): fuera del juego (en
+  Discord, en el navegador) no traduce nada.
 - **Escribiendo:** en la barra para escribir, **Ctrl+Enter** en vez de Enter.
 
 **Te escuchan en** (en la página **Voz**) es el idioma de tu voz: el mismo que el de la barra para escribir.
@@ -308,24 +318,59 @@ La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus 
 
 ## Bubble Pro
 
-Opcional. Las voces del juego y tu voz se entienden **en la nube** (Deepgram, modelo Nova-3) en vez de en tu
-procesador. La traducción sigue igual, con tu suscripción de Claude; lo que cambia es quién pasa la voz a texto.
+Bubble viene en dos planes. **Basic** es gratis y todo corre en tu PC. **✦ Pro** lleva la voz a la nube (Deepgram):
+entiende y habla mejor. La traducción, en los dos, la hace tu suscripción de Claude.
 
-**Qué mejora:**
-
-| | Tu PC (Whisper) | Bubble Pro (nube) |
+| | Basic (tu PC) | ✦ Pro (la nube) |
 |---|---|---|
-| Gente que habla rápido o se pisa | se pierde mucho (en una pelea real: 2 de cada 3 palabras mal) | modelo grande en servidores con placas de video: mucho mejor |
-| Idiomas mezclados ("hagamos pvp") | un idioma por frase | el idioma de cada palabra (inglés, español, portugués, francés, alemán, italiano, ruso, hindi, japonés, neerlandés) |
-| Quién habla | por la voz, en tu PC | lo separa la nube (Voz 1, Voz 2…) |
-| Cuándo aparece el texto | ~1 s | mientras hablan (~0,3 s) y la frase entera ~0,5 s después de la pausa |
-| Tu procesador | casi un núcleo ocupado | libre para Roblox |
+| Entender voces | Whisper | Nova-3: mucho mejor con gente que habla rápido o se pisa (en una pelea real, tu PC erraba 2 de cada 3 palabras) |
+| Idiomas | ~100, uno por frase | más de 60; inglés, español, portugués, francés, alemán, italiano, ruso, hindi, japonés y neerlandés mezclados en la misma frase |
+| Voces que hablan por vos | Piper | Aura-2: naturales y con personalidad (ver abajo) |
+| Tu voz traducida | suena cuando está lista | empieza a sonar a los ~0,25 s (mientras la nube la sigue armando) |
+| Palabras tuyas y de juego | Whisper con ejemplos | la nube las prioriza (*pvp*, *Blox Fruits*, *farmear* y lo que aprendió de vos) |
+| Tu procesador | trabaja para la voz | libre: Whisper ni se carga (queda de respaldo) |
+| Se ve | como siempre, con la insignia BASIC | dorado: ventana, insignia PRO, barra para escribir y traducciones en el juego |
 
-**Cómo se paga:** con tu propia cuenta de [Deepgram](https://console.deepgram.com/signup). No es una suscripción: se
-paga por minuto de voz que se le manda (~0,35 US$ por hora; saber quién habla suma ~0,12 US$ por hora). Bubble solo
-manda audio cuando alguien habla (lo detecta tu PC), así que los silencios de la partida no se pagan. La cuenta nueva
-trae 200 US$ de crédito gratis: cientos de horas de partidas. En la página **✦ Pro** ves cuántos minutos se usaron
-este mes y cuánto costaron (aproximado).
+**Cambiar de plan:** en la página **✦ Pro**, o **en el juego**: en la barra para escribir, **Ctrl+P** (o un clic en
+«BASIC» / «✦ PRO», abajo a la derecha). Arriba del juego aparece un aviso que confirma el cambio. La escucha y tu voz
+se rearman solas en menos de un segundo.
+
+**Las voces de Pro.** Tres personalidades, en voz femenina o masculina (la de la página Voz):
+
+- **Alegre:** enérgica y entusiasta.
+- **Canchera:** casual y expresiva (la de siempre). En español rioplatense, la femenina es **Antonia**, argentina.
+- **Tranquila:** calma y natural.
+
+Hay voces en inglés (también británico y australiano), español (argentino, mexicano, colombiano, de España y
+latinoamericano), francés, alemán, italiano, neerlandés y japonés. En los demás idiomas (portugués, ruso…) habla la
+voz de tu PC. **Probar voz Pro** la hace sonar en tus auriculares, aunque estés en Basic.
+
+**Cómo se paga:** con tu propia cuenta de [Deepgram](https://console.deepgram.com/signup), por uso (precios de
+septiembre de 2026):
+
+| | US$ |
+|---|---|
+| Voces del juego, en vivo (varios idiomas mezclados) | 0,0058 por minuto de voz (~0,35 por hora) |
+| Tu voz, en vivo (tu idioma) | 0,0048 por minuto + 0,0013 por las palabras priorizadas |
+| Una frase con el botón | 0,0052 por minuto |
+| Voces de Pro | 0,030 cada 1.000 letras (una frase típica: ~0,001) |
+| Quién habla, según la nube (opcional) | +0,0020 por minuto |
+
+La cuenta nueva trae **200 US$ de crédito gratis**: cientos de horas de partidas. En **✦ Pro** ves cuántos minutos y
+cuántas letras se usaron este mes, y cuánto costaron (aproximado).
+
+**Cómo ahorra, sin perder nada:**
+
+- Solo se manda audio cuando alguien habla (lo detecta tu PC). Dentro de una frase, las pausas largas tampoco: se
+  manda un poquito de silencio (para que la nube note el final enseguida) y nada más.
+- Las voces lejanas (fuera del [radio de escucha](#voz)) y los ruidos no se mandan.
+- Fuera del juego no se escucha nada (ni tu micrófono en modo directo, ni el juego).
+- Una frase que ya dijo una voz de Pro (*"gg"*, *"gracias"*) se guarda y no se vuelve a pagar.
+- Quién habla lo reconoce tu PC, gratis (la opción de la nube es aparte).
+- Las palabras priorizadas se usan solo para tu voz, que es donde más importa entenderte bien; lo del juego lo
+  corrige Claude al traducir.
+- Con el botón, el silencio de antes y después de tu frase se recorta.
+- La conexión con Deepgram queda abierta entre frases: no se paga, y cada pedido sale ~0,3 s antes.
 
 **Cómo se activa:**
 
@@ -333,14 +378,14 @@ este mes y cuánto costaron (aproximado).
 2. En Deepgram: **API Keys** → **Create a New API Key** → copiala.
 3. Pegala en Bubble y tocá **Guardar y probar**. Se guarda cifrada con Windows: solo tu usuario la puede leer, y no
    queda en ningún archivo de texto.
-4. Prendé **Bubble Pro**. La ventana se pone dorada y dice «Bubble Pro»; las traducciones en el juego y la barra para
-   escribir también toman el dorado.
+4. Prendé **Bubble Pro**.
 
 **Comparar con mi voz:** decís una frase y ves lo que entiende tu PC y lo que entiende la nube, y cuánto tarda cada
 uno.
 
-**Si algo falla:** sin internet, esa frase se entiende con tu PC y te avisa. Si la clave deja de andar o la cuenta se
-queda sin saldo, Bubble Pro se apaga solo, te avisa y todo sigue con tu PC.
+**Si algo falla:** sin internet, esa frase se entiende con tu PC (y habla la voz de tu PC) y te avisa. Si la clave deja
+de andar o la cuenta se queda sin saldo, Bubble vuelve solo a Basic, te avisa y todo sigue con tu PC. Si la nube no
+entiende un idioma con su modelo nuevo, usa el anterior (Nova-2).
 
 ## Jerga, dialectos y tono
 

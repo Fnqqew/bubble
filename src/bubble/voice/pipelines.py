@@ -14,6 +14,7 @@ activado: si no, no te escucha nadie (la página Voz te avisa).
 from __future__ import annotations
 
 import ctypes
+import itertools
 import logging
 import queue
 import threading
@@ -64,16 +65,43 @@ class VoiceOut:
         self.monitor_volume = 0.7
         self.listeners: list[Callable[[float], None]] = []  # avisos "va a sonar tanto tiempo" (para no escucharla)
         self._lock = threading.Lock()  # una frase a la vez
+        self._warm_lock = threading.Lock()
+        self._warm_next: str | None = None
+        self._warming = False
 
     def warm_up(self, language: str) -> None:
-        """Carga ya la voz de ese idioma (la primera vez tarda ~3 s): así tu primera frase no espera."""
-        threading.Thread(target=lambda: self.voices.synthesize("ok", language), name="bubble-voz-precarga",
-                         daemon=True).start()
+        """Carga ya la voz de ese idioma (la primera vez tarda ~3 s): así tu primera frase no espera. De a una: si
+        piden varias seguidas, se carga la que está en curso y después solo la última pedida (las del medio no)."""
+        with self._warm_lock:
+            self._warm_next = language
+            if self._warming:
+                return
+            self._warming = True
+        threading.Thread(target=self._warm_worker, name="bubble-voz-precarga", daemon=True).start()
+
+    def _warm_worker(self) -> None:
+        while True:
+            with self._warm_lock:
+                language, self._warm_next = self._warm_next, None
+                if language is None:
+                    self._warming = False
+                    return
+            try:
+                is_loaded = getattr(self.voices, "is_loaded", None)
+                if is_loaded is None or not is_loaded(language):
+                    self.voices.synthesize("ok", language)
+            except Exception:  # noqa: BLE001 - es solo para adelantar
+                log.debug("No se pudo preparar la voz de %s", language, exc_info=True)
 
     def say(self, text: str, language: str, on_ready: Callable[[float], None] | None = None, style: str = "") -> bool:
         """Bloquea hasta que termina de sonar. False si no hay voz para ese idioma. `on_ready(segundos)`: la voz ya
         está lista y empieza a sonar (para medir cuánto tardó). `style`: cómo lo dijiste (gritando, bajito…)."""
         started = time.perf_counter()
+        streaming = getattr(self.voices, "stream", None)
+        if streaming is not None:
+            opened = streaming(text, language, style=style)
+            if opened is not None:
+                return self._say_streaming(text, opened, started, on_ready)
         speech = self.voices.synthesize(text, language, style=style)
         if speech is None:
             return False
@@ -90,6 +118,53 @@ class VoiceOut:
                                  daemon=True).start()
             audio_io.play(self.output, speech.audio, speech.sample_rate)
         return True
+
+    def _say_streaming(self, text: str, opened, started: float, on_ready) -> bool:
+        """Las voces de la nube: suenan apenas llega el primer pedazo. Los avisos ("va a sonar tanto") se van
+        renovando con cada pedazo, porque el largo total no se sabe hasta el final."""
+        rate, pieces = opened
+        first = next(pieces, None)
+        if first is None:
+            return False
+        if on_ready:
+            on_ready(time.perf_counter() - started)
+        monitor: queue.Queue | None = queue.Queue() if self.hear_myself and self.output.is_cable else None
+        if monitor is not None:
+            threading.Thread(target=self._monitor_stream, args=(monitor, rate), name="bubble-tu-voz-escucha",
+                             daemon=True).start()
+
+        def tee():
+            for piece in itertools.chain([first], pieces):
+                if monitor is not None:
+                    monitor.put(piece)
+                yield piece
+            if monitor is not None:
+                monitor.put(None)
+
+        def ahead(seconds: float) -> None:
+            for listener in self.listeners:
+                listener(seconds + 0.3)
+            if self.bridge is not None and self.bridge.running:
+                self.bridge.duck(seconds + 0.25)
+
+        with self._lock:
+            ahead(max(len(first) / rate, len(text) / 16))
+            try:
+                audio_io.play_stream(self.output, tee(), rate, on_piece=ahead)
+            finally:
+                if monitor is not None:
+                    monitor.put(None)
+        return True
+
+    def _monitor_stream(self, pieces: queue.Queue, rate: int) -> None:
+        def take():
+            while (piece := pieces.get()) is not None:
+                yield piece * self.monitor_volume
+
+        try:
+            audio_io.play_stream(audio_io.monitor_output(), take(), rate)
+        except Exception:  # noqa: BLE001 - es solo para que la escuches
+            log.debug("No se pudo reproducir tu voz traducida en tus parlantes", exc_info=True)
 
     def _monitor(self, speech) -> None:
         try:
@@ -355,6 +430,7 @@ class DirectVoice:
         self._asked: dict[int, tuple[str, Future]] = {}
         self._queue: queue.Queue = queue.Queue()
         self._running = threading.Event()
+        self.listening = True  # False: fuera del juego no se escucha (ver set_listening)
         # Mientras suena tu voz traducida por tus auriculares, el micrófono no la tiene que escuchar como tuya.
         out.listeners.append(self._mute)
 
@@ -377,8 +453,16 @@ class DirectVoice:
         if self._mute in self.out.listeners:
             self.out.listeners.remove(self._mute)
 
+    def set_listening(self, on: bool) -> None:
+        """Solo se escucha mientras jugás (Roblox al frente, o la barra para escribir abierta). Fuera del juego el
+        micrófono no se traduce (ni se manda a la nube, con Bubble Pro)."""
+        if on == self.listening:
+            return
+        self.listening = on
+        self.listener.muted_until = 0.0 if on else float("inf")
+
     def _mute(self, seconds: float) -> None:
-        if not self.out.output.is_cable or self.out.hear_myself:
+        if self.listening and (not self.out.output.is_cable or self.out.hear_myself):
             self.listener.muted_until = time.monotonic() + seconds + 0.3
 
     def _caption(self, caption) -> None:
