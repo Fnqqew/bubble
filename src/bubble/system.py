@@ -41,6 +41,7 @@ class Claude:
     version: str = ""
     logged_in: bool | None = None  # None: no se sabe (un Claude Code viejo no tiene `claude auth status`)
     plan: str = ""  # "pro", "max"… (lo que dice la sesión de Claude Code)
+    auth: str = ""  # "claude.ai" (tu suscripción) o "console" (una cuenta de la API: cobra por uso)
     api_key: bool = False  # hay ANTHROPIC_API_KEY: Claude Code cobraría por uso en vez de usar tu suscripción
 
 
@@ -152,6 +153,8 @@ def roblox_installed() -> str:
 
 
 PAID_PLANS = {"pro", "max", "team", "enterprise"}
+PRO_URL = "https://claude.com/pricing"  # los planes de Claude (Pro alcanza para Bubble)
+NO_CLAUDE = {"sin_claude", "sin_sesion", "gratis"}  # sin esto no se puede traducir con Claude (ver claude_problem)
 
 
 def claude_status() -> Claude:
@@ -175,9 +178,25 @@ def claude_status() -> Claude:
         data = json.loads(out[out.index("{"):out.rindex("}") + 1])
         status.logged_in = bool(data.get("loggedIn"))
         status.plan = str(data.get("subscriptionType") or "")
+        status.auth = str(data.get("authMethod") or "")
     except (OSError, ValueError, subprocess.SubprocessError):
         pass  # no se pudo saber: queda en None (no se avisa nada que no sea seguro)
     return status
+
+
+def claude_problem(claude: Claude) -> str:
+    """Qué le falta a tu Claude para que Bubble traduzca: "sin_claude" (no está Claude Code), "sin_sesion",
+    "gratis" (la cuenta gratuita no incluye Claude Code), "por_uso" (una cuenta de la API: cobra cada traducción) o
+    "" (está bien, o no se puede saber: nunca se avisa algo que no sea seguro)."""
+    if not claude.installed:
+        return "sin_claude"
+    if claude.logged_in is False:
+        return "sin_sesion"
+    if claude.logged_in and claude.auth and claude.auth != "claude.ai":
+        return "por_uso"
+    if claude.logged_in and claude.plan and claude.plan.lower() not in PAID_PLANS:
+        return "gratis"
+    return ""
 
 
 def plan_label(plan: str) -> str:
@@ -245,6 +264,7 @@ def detect(internet: bool = False) -> System:
 class Advice:
     level: str  # "ok", "aviso", "problema"
     text: str
+    action: str = ""  # "claude": con un link a cómo conseguir Claude (ver ui/claude_window.py)
 
 
 @dataclass
@@ -253,6 +273,20 @@ class Plan:
     whisper_ram_limit: bool = False  # poca memoria: el reconocimiento de voz de tu PC, el más liviano
     slow_internet: bool = False
     advice: list[Advice] = field(default_factory=list)
+
+
+WITHOUT_CLAUDE = ("Mientras tanto, Bubble Pro traduce con los créditos gratis de Deepgram (200 US$ al crear la "
+                  "cuenta, sin tarjeta).")
+CLAUDE_ADVICE = {
+    "sin_claude": ("problema", "Falta Claude Code, que es lo que traduce. Si tenés Claude Pro o Max, instalalo desde "
+                               "«Revisar instalación» (Ajustes). " + WITHOUT_CLAUDE),
+    "sin_sesion": ("problema", "Claude Code no tiene la sesión iniciada: entrá con tu cuenta de Claude (Pro o Max). "
+                               + WITHOUT_CLAUDE),
+    "gratis": ("problema", "Tu cuenta de Claude es la gratuita, y esa no incluye Claude Code (lo que traduce). "
+                           + WITHOUT_CLAUDE),
+    "por_uso": ("aviso", "Claude Code está conectado a una cuenta de la API, que cobra cada traducción aparte. Con una "
+                         "suscripción (Claude Pro alcanza) no pagás por traducción."),
+}
 
 
 def sessions_for(ram_gb: float, wanted: int = 3) -> int:
@@ -282,15 +316,10 @@ def recommend(info: System) -> Plan:
                             "reconocimiento de voz más liviano, para no quitarle memoria a Roblox."))
     if info.threads and info.threads < 4:
         add(Advice("aviso", "Tu procesador tiene pocos núcleos: para la voz conviene Bubble Pro (se entiende en la nube)."))
-    if not info.claude.installed:
-        add(Advice("problema", "Falta Claude Code: es lo que traduce con tu suscripción. Instalalo desde «Revisar "
-                               "instalación» (Ajustes)."))
-    elif info.claude.logged_in is False:
-        add(Advice("problema", "Claude Code no tiene la sesión iniciada: abrí «claude» una vez e iniciá sesión con tu "
-                               "cuenta de Claude."))
-    elif info.claude.plan and info.claude.plan.lower() not in PAID_PLANS:
-        add(Advice("problema", "Tu cuenta de Claude es gratuita: Bubble necesita un plan pago (Pro o Max) para "
-                               "traducir con Claude Code."))
+    problem = claude_problem(info.claude)
+    if problem in CLAUDE_ADVICE:
+        level, text = CLAUDE_ADVICE[problem]
+        add(Advice(level, text, "claude"))
     if info.claude.api_key:
         add(Advice("aviso", "Hay una ANTHROPIC_API_KEY en tu PC: Claude Code podría cobrar por uso en vez de usar tu "
                             "suscripción."))

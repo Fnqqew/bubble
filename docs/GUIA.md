@@ -381,6 +381,24 @@ nube lo nota (~0,9 s) y el texto ya está: no se manda de nuevo (antes se leía 
 vez, pagándolo varias veces). Los nombres de los jugadores del chat se reconocen como se dicen ("xXShadowXx_2012" →
 "Shadow"), y las siglas deletreadas se juntan ("p v p" → "pvp").
 
+**Sin Claude.** Si no tenés Claude Code, no iniciaste sesión o tu cuenta de Claude es la gratuita (que no incluye
+Claude Code), Bubble te lo dice al abrirse y te ofrece dos caminos (también desde **Pruebas → Tu equipo → Cómo
+seguir** y desde **Preparar Bubble**):
+
+- **Bubble Pro con créditos:** con la clave de Deepgram (la cuenta nueva trae 200 US$, sin tarjeta), Pro también
+  traduce: usa el agente de voz de Deepgram, que trae a Claude Haiku 4.5, con las mismas instrucciones que usa Bubble
+  con tu Claude. Traduce en ~1 a 3 s (medido con una cuenta real). Deepgram lo cobra por minuto de conexión abierta
+  (0,075 US$), así que la conexión se abre recién cuando hay algo para traducir y se corta sola a los 20 s sin
+  mensajes: una partida tranquila gasta centavos por hora; un servidor muy activo, hasta ~4,50 US$ por hora. El chat
+  y la voz van por conexiones separadas (la voz no espera detrás del chat), y la voz nunca abre dos a la vez para lo
+  mismo. Lo que gastás aparece en **✦ Pro → Gasto y ahorro**.
+- **Conectar Claude:** iniciás sesión (con Claude Pro alcanza) y tocás **Listo, revisar**: Bubble se reconecta con tu
+  suscripción, la traducción deja de gastar crédito y Basic se desbloquea.
+
+Mientras traduce sin Claude, **Pro queda activado**: en la página **✦ Pro** lo de Basic se ve difuminado, con un
+candado («Basic necesita Claude»), y ni el interruptor ni **Ctrl+P** pasan a Basic hasta que conectes Claude. Si la
+cuenta de Deepgram se queda sin crédito, Bubble te avisa y te vuelve a mostrar los dos caminos.
+
 **Cambiar de plan:** en la página **✦ Pro**, o **en el juego**: en la barra para escribir, **Ctrl+P** (o un clic en
 «BASIC» / «✦ PRO», abajo a la derecha). Arriba del juego aparece un aviso que confirma el cambio. La escucha y tu voz
 se rearman solas en menos de un segundo.

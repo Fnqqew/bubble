@@ -33,6 +33,10 @@ COMPARISON = (
     ("Tu procesador", "Trabaja para la voz", "Queda libre para Roblox"),
     ("Costo", "Gratis", "Por uso: ~0,35 US$ por hora de voz (200 US$ gratis al empezar)"),
 )
+INTRO = ("La mejor experiencia: entiende a todos (aunque hablen rápido o mezclen idiomas) y habla por vos con voces "
+         "naturales. La traducción sigue con tu suscripción de Claude.")
+INTRO_WITHOUT_CLAUDE = ("La mejor experiencia: entiende a todos y habla por vos con voces naturales. Y como todavía no "
+                        "tenés Claude, también traduce, con los créditos de Deepgram.")
 SAVINGS = ("Solo se manda cuando alguien habla: los silencios no se pagan.",
            "Las voces lejanas (fuera del radio de escucha) y los ruidos no se mandan.",
            "Fuera del juego no se escucha nada.",
@@ -75,9 +79,7 @@ class ProPanel:
         gold = pro.gold()
         hero = widgets.card(page)
         _gold(ttk.Label(hero, text="✦ Bubble Pro", font="SunValleySubtitleFont", foreground=gold)).pack(anchor="w")
-        widgets.muted(hero, "La mejor experiencia: entiende a todos (aunque hablen rápido o mezclen idiomas) y habla por "
-                            "vos con voces naturales. La traducción sigue con tu suscripción de Claude.",
-                      pady=(2, 10))
+        self.intro = widgets.muted(hero, INTRO, pady=(2, 10))
         row = ttk.Frame(hero)
         row.pack(fill="x")
         self.switch = ttk.Checkbutton(row, text="Bubble Pro", variable=self.enabled_var, command=self._toggle,
@@ -86,20 +88,34 @@ class ProPanel:
         self.plan_label = ttk.Label(row, text="", font="SunValleyCaptionFont", foreground=colors["muted"])
         self.plan_label.pack(side="right")
         widgets.muted(hero, "En el juego: Ctrl+P en la barra para escribir cambia entre Basic y Pro al instante.")
+        # Sin Claude: Pro es lo que traduce (con créditos), así que Basic queda bloqueado hasta que conectes Claude.
+        self.no_claude = ttk.Frame(hero)
+        row = ttk.Frame(self.no_claude)
+        row.pack(fill="x")
+        ttk.Label(row, text="🔒  Basic necesita Claude · conectalo para poder usarlo", font="SunValleyCaptionFont",
+                  foreground=colors["muted"]).pack(side="left")
+        link = ttk.Label(row, text="Conectar Claude", font="SunValleyCaptionFont", foreground=colors["accent"],
+                         cursor="hand2")
+        link.pack(side="right")
+        link.bind("<Button-1>", lambda _event: self.app.open_no_claude())
+        ttk.Label(self.no_claude, text=pro.NO_CLAUDE_WARNING, font="SunValleyCaptionFont",
+                  foreground=colors["warn"], wraplength=460, justify="left").pack(anchor="w", pady=(6, 0))
 
         box = widgets.card(page, "Basic y Pro")
-        grid = ttk.Frame(box)
+        grid = self.comparison = ttk.Frame(box)
         grid.pack(fill="x")
         grid.columnconfigure(1, weight=1, uniform="plan")
         grid.columnconfigure(2, weight=1, uniform="plan")
-        ttk.Label(grid, text="Basic", font="SunValleyBodyStrongFont").grid(row=0, column=1, sticky="w", padx=(10, 0))
+        self._basic_cells = [ttk.Label(grid, text="Basic", font="SunValleyBodyStrongFont")]
+        self._basic_cells[0].grid(row=0, column=1, sticky="w", padx=(10, 0))
         _gold(ttk.Label(grid, text="✦ Pro", font="SunValleyBodyStrongFont", foreground=gold)).grid(
             row=0, column=2, sticky="w", padx=(10, 0))
         for index, (what, basic, cloud) in enumerate(COMPARISON, start=1):
             ttk.Label(grid, text=what, font="SunValleyCaptionFont", foreground=colors["muted"], wraplength=110,
                       justify="left").grid(row=index, column=0, sticky="nw", pady=(8, 0))
-            ttk.Label(grid, text=basic, font="SunValleyCaptionFont", wraplength=150, justify="left").grid(
-                row=index, column=1, sticky="nw", padx=(10, 0), pady=(8, 0))
+            cell = ttk.Label(grid, text=basic, font="SunValleyCaptionFont", wraplength=150, justify="left")
+            cell.grid(row=index, column=1, sticky="nw", padx=(10, 0), pady=(8, 0))
+            self._basic_cells.append(cell)
             _gold(ttk.Label(grid, text=cloud, font="SunValleyCaptionFont", foreground=gold, wraplength=170,
                             justify="left")).grid(row=index, column=2, sticky="nw", padx=(10, 0), pady=(8, 0))
 
@@ -167,12 +183,22 @@ class ProPanel:
     def apply_plan(self, animate: bool = True) -> None:
         """En Basic, lo de Pro se ve pero difuminado y no se puede tocar ni probar (así nada anda a medias); en Pro,
         se desbloquea con una animación."""
+        if not self.built:
+            return  # (la página se arma la primera vez que la abrís: ahí se aplica)
         on = pro.active()
         colors = widgets.palette()
         for box, note in self._locked:
             widgets.dim(box, not on, animate)
             note.configure(text="✦  Incluido en tu plan Pro" if on else "🔒  Solo en Pro · activalo arriba",
                            foreground=pro.gold() if on else colors["muted"])
+        # Sin Claude, lo de Basic se ve difuminado (como lo de Pro en Basic): se usa recién con Claude conectado.
+        without_claude = self.app.cloud_translation
+        widgets.dim(self.comparison, without_claude, animate, only=self._basic_cells)
+        self.intro.configure(text=INTRO_WITHOUT_CLAUDE if without_claude else INTRO)
+        if without_claude and not self.no_claude.winfo_manager():
+            self.no_claude.pack(fill="x", pady=(8, 0))
+        elif not without_claude and self.no_claude.winfo_manager():
+            self.no_claude.pack_forget()
 
     # ------------------------------------------------------------ estado
     def refresh(self) -> None:
@@ -186,15 +212,18 @@ class ProPanel:
             self.key_state.configure(text="✓ Tenés una clave guardada.")
         elif not has_key:
             self.key_state.configure(text="Todavía no hay una clave.")
-        self.switch.state(["!disabled"] if has_key else ["disabled"])  # (lo demás de Pro: ver apply_plan)
+        locked = self.app.cloud_translation  # sin Claude, Pro no se apaga (es lo que traduce: ver app.set_pro)
+        self.switch.state(["!disabled"] if has_key else ["disabled"])  # (lo demás: ver apply_plan)
         self.enabled_var.set(pro.active())
-        self.plan_label.configure(text="Estás usando Pro" if pro.active() else
+        self.plan_label.configure(text="Pro traduce sin Claude" if locked else "Estás usando Pro" if pro.active() else
                                   ("Estás usando Basic" if has_key else "Primero guardá tu clave (abajo)"))
         minutes, cost = pro.month_usage()
         chars = pro.month_characters()
+        translating = pro.month_translating()
         letters = f"{chars:,}".replace(",", ".")
-        self.usage.configure(text=f"Este mes: {minutes:.0f} min de voz entendida y {letters} letras dichas · ~"
-                                  f"{_money(cost)} US$" if minutes >= 0.5 or chars
+        extra = f", {translating:.0f} min traduciendo sin Claude" if translating >= 0.5 else ""
+        self.usage.configure(text=f"Este mes: {minutes:.0f} min de voz entendida y {letters} letras dichas{extra} · ~"
+                                  f"{_money(cost)} US$" if minutes >= 0.5 or chars or extra
                              else "Este mes todavía no se usó la nube.")
 
     def _ui(self, action) -> None:

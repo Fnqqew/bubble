@@ -151,10 +151,11 @@ def _hex(widget: tk.Misc, color: str) -> str:
     return f"#{red // 256:02x}{green // 256:02x}{blue // 256:02x}"
 
 
-def dim(container: tk.Misc, dimmed: bool, animate: bool = True) -> None:
+def dim(container: tk.Misc, dimmed: bool, animate: bool = True, only: list | None = None) -> None:
     """Bloquea (o desbloquea) todo lo de adentro: los textos se difuminan suave hacia el fondo y los controles no se
     pueden tocar. Sirve para lo que no corresponde en este momento (lo de Pro en Basic, lo de tu voz si no está
-    prendida…): se ve que existe, pero no se puede usar ni probar por error."""
+    prendida…): se ve que existe, pero no se puede usar ni probar por error. `only`: solo esas partes del contenedor
+    (por ejemplo, una columna de una tabla)."""
     from . import motion
 
     if getattr(container, "dimmed", False) == dimmed:
@@ -171,7 +172,15 @@ def dim(container: tk.Misc, dimmed: bool, animate: bool = True) -> None:
                 controls.append(child)
             collect(child)
 
-    collect(container)
+    if only is None:
+        collect(container)
+    else:
+        for widget in only:
+            if isinstance(widget, ttk.Label):
+                labels.append(widget)
+            elif isinstance(widget, CONTROLS):
+                controls.append(widget)
+            collect(widget)
     for control in controls:
         if dimmed:
             control.locked_before = control.instate(["disabled"])  # (si ya estaba bloqueado por otra cosa, sigue)

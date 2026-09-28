@@ -42,6 +42,7 @@ class Translator:
         """`voice_router`: el carril de la voz (su propia sesión, sin pensar antes de responder): lo que decís y lo que
         te dicen por voz no hace fila detrás del chat."""
         self.config = config
+        self.hedge = True  # si la voz tarda, probar también por el carril del chat (ver _hedged)
         self.router = router
         self.voice_router = voice_router
         self._voice_lane: asyncio.Task | None = None
@@ -311,6 +312,8 @@ class Translator:
         - los mensajes del chat: en lotes (llegan en ráfagas)."""
         voice = request.spoken or request.from_speech or fast
         if voice and self._voice_ready():
+            if not self.hedge:  # (sin Claude se paga por conexión abierta: nunca dos a la vez para lo mismo)
+                return await self.voice_router.translate(request, on_delta)
             return await self._hedged(request, on_delta)
         if voice or request.direction == "outgoing":
             return await self.router.translate(request, on_delta)

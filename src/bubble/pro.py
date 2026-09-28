@@ -22,7 +22,12 @@ CLIP_PER_MIN = 0.0052  # una frase entera (multilingüe)
 DIARIZE_PER_MIN = 0.0020
 KEYTERM_PER_MIN = 0.0013
 TTS_PER_1K_CHARS = 0.030  # voces de la nube (Aura-2)
+TRANSLATE_PER_MIN = 0.075  # traducir sin Claude: el agente de Deepgram, por minuto de conexión (cloud/agent.py)
 SIGNUP_URL = "https://console.deepgram.com/signup"
+NO_CLAUDE_WARNING = ("⚠ Sin Claude, traducir gasta créditos: ~0,075 US$ por cada minuto con mensajes para traducir "
+                     "(la conexión se corta sola cuando el chat está quieto). Una partida tranquila gasta centavos por "
+                     "hora; un servidor muy activo, hasta ~4,50 US$ por hora. Con Claude conectado, la traducción deja "
+                     "de gastar.")
 FREE_CREDIT_USD = 200
 
 _active = False
@@ -53,7 +58,7 @@ def listen_cost(seconds: float, multi: bool = True, diarized: bool = False, keyt
     return seconds / 60 * per_minute
 
 
-def _add(seconds: float = 0.0, chars: int = 0, cost: float = 0.0) -> None:
+def _add(seconds: float = 0.0, chars: int = 0, cost: float = 0.0, translating: float = 0.0) -> None:
     from .state import load_state, update_state
 
     month = datetime.date.today().strftime("%Y-%m")
@@ -64,6 +69,8 @@ def _add(seconds: float = 0.0, chars: int = 0, cost: float = 0.0) -> None:
             entry["cost"] = entry.get("seconds", 0.0) / 60 * PRICE_PER_MIN + entry.get("diarized", 0.0) / 60 * DIARIZE_PER_MIN
         entry["seconds"] = round(entry.get("seconds", 0.0) + seconds, 1)
         entry["chars"] = entry.get("chars", 0) + chars
+        if translating:
+            entry["translating"] = round(entry.get("translating", 0.0) + translating, 1)
         entry["cost"] = round(entry["cost"] + cost, 5)
         update_state(pro_usage=usage)
 
@@ -79,6 +86,20 @@ def count_characters(chars: int) -> None:
     """Suma lo que dijeron las voces de la nube este mes."""
     if chars > 0:
         _add(chars=chars, cost=chars / 1000 * TTS_PER_1K_CHARS)
+
+
+def count_translation(seconds: float) -> None:
+    """Suma el tiempo que estuvo abierta la traducción sin Claude (se cobra por minuto)."""
+    if seconds > 0:
+        _add(cost=seconds / 60 * TRANSLATE_PER_MIN, translating=seconds)
+
+
+def month_translating() -> float:
+    """Minutos de traducción sin Claude este mes."""
+    from .state import load_state
+
+    entry = load_state().get("pro_usage", {}).get(datetime.date.today().strftime("%Y-%m"), {})
+    return entry.get("translating", 0.0) / 60
 
 
 def month_usage() -> tuple[float, float]:

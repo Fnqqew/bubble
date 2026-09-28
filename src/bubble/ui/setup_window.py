@@ -17,7 +17,8 @@ class SetupWindow:
     """Lo que falta, con su estado. Lo automático se instala solo al abrirse; lo que necesita permiso tiene botón."""
 
     def __init__(self, root: tk.Misc, post: Callable[[Callable[[], None]], None], steps: list[install.Step] | None = None,
-                 auto: bool = True) -> None:
+                 auto: bool = True, on_no_claude: Callable[[], None] | None = None) -> None:
+        """`on_no_claude()`: «¿No tenés Claude?» (cómo seguir: Bubble Pro con créditos o conectar Claude)."""
         self.root = root
         self.post = post  # hacer algo en el hilo de la ventana
         self.steps = steps if steps is not None else install.steps()
@@ -45,6 +46,11 @@ class SetupWindow:
                 button.pack(side="right")
                 self.buttons[step.key] = (button, texts)
             self.rows[step.key] = (icon, detail)
+            if step.key == "sesion" and on_no_claude is not None:
+                link = ttk.Label(body, text="¿No tenés Claude o suscripción? Mirá cómo seguir →",
+                                 font="SunValleyCaptionFont", foreground=colors["accent"], cursor="hand2")
+                link.pack(anchor="w", padx=(28, 0), pady=(2, 0))
+                link.bind("<Button-1>", lambda _event: on_no_claude())
         self.bar = ttk.Progressbar(body, mode="determinate", maximum=1.0, length=460)
         self.bar.pack(fill="x", pady=(18, 4))
         self.status = widgets.muted(body, "", pady=(0, 10))

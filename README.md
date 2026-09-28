@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 3.4" src="https://img.shields.io/badge/versión-3.4-4a90e2?style=flat-square">
+  <img alt="Versión 3.5" src="https://img.shields.io/badge/versión-3.5-4a90e2?style=flat-square">
   <img alt="Basic gratis" src="https://img.shields.io/badge/Basic-gratis-5b6270?style=flat-square">
   <img alt="Bubble Pro" src="https://img.shields.io/badge/✦%20Bubble-Pro-f2c14e?style=flat-square&labelColor=2b2f36">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
@@ -111,6 +111,11 @@ reconoce tu PC, gratis. En la página **✦ Pro** ves cuánto usaste este mes.
 vuelve solo a Basic y te avisa. La traducción, en los dos planes, la hace tu suscripción de Claude.
 [Cómo se activa](docs/GUIA.md#bubble-pro).
 
+**¿Todavía no tenés Claude?** Probá Bubble igual: con Pro, la traducción también va por la nube, pagada con el
+crédito de regalo de Deepgram (200 US$ al crear la cuenta, sin tarjeta). Bubble te avisa lo que gasta —unos 0,075 US$
+por minuto con mensajes, y la conexión se corta sola cuando el chat está quieto— y, cuando conectes Claude, la
+traducción vuelve a tu suscripción y deja de gastar. Mientras tanto Pro queda activado: Basic necesita Claude.
+
 <br>
 
 ## Hecho para cualquier juego
@@ -148,7 +153,8 @@ Nunca toca el programa de Roblox: solo mira la pantalla, como una app de grabaci
   <img src="docs/instalacion.gif" alt="La instalación en 5 pasos: bajar Bubble, doble clic en Iniciar.bat, Bubble descarga lo que necesita, conectás tu cuenta de Claude y a jugar" width="100%">
 </p>
 
-Necesitás Windows 10 u 11 y tu suscripción de Claude (Pro o Max). Nada más: **bajá Bubble, doble clic en
+Necesitás Windows 10 u 11 y tu suscripción de Claude (Pro o Max) —o, si todavía no tenés, una cuenta gratis de
+Deepgram para Bubble Pro—. Nada más: **bajá Bubble, doble clic en
 `Iniciar.bat` y listo.** La primera vez prepara todo solo —Python si falta, el reconocimiento de voz y las voces— y
 lo que necesita tu permiso ([Claude Code](https://claude.com/claude-code), tu sesión y el micrófono virtual) te
 espera con su botón. **[La instalación paso a paso, con imágenes →](docs/INSTALACION.md)**

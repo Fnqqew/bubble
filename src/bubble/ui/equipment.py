@@ -70,5 +70,12 @@ class EquipmentCard:
             row.pack(fill="x", pady=2)
             ttk.Label(row, text=symbol, width=2, font="SunValleyBodyStrongFont", foreground=colors[color]).pack(
                 side="left", anchor="n")
-            ttk.Label(row, text=item.text, font="SunValleyCaptionFont", wraplength=420, justify="left").pack(
-                side="left", fill="x")
+            texts = ttk.Frame(row)
+            texts.pack(side="left", fill="x")
+            ttk.Label(texts, text=item.text, font="SunValleyCaptionFont", wraplength=420, justify="left").pack(
+                anchor="w")
+            if item.action == "claude":  # sin Claude: Bubble Pro con créditos o conectar Claude
+                link = ttk.Label(texts, text="Cómo seguir →", font="SunValleyCaptionFont", foreground=colors["accent"],
+                                 cursor="hand2")
+                link.pack(anchor="w", pady=(2, 0))
+                link.bind("<Button-1>", lambda _event: self.app.open_no_claude())

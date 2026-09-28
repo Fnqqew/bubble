@@ -102,6 +102,13 @@ def _debug_dir() -> Path:
 DESIGN_SCALE = 1.25  # la ventana se diseñó con Windows al 125 %: 600 × 820
 
 
+NO_CLAUDE_PROBLEMS = {"sin_claude", "sin_sesion", "gratis"}  # (= system.NO_CLAUDE)
+
+
+class NoClaudeError(RuntimeError):
+    """No hay Claude ni clave de Bubble Pro: no hay con qué traducir."""
+
+
 def window_geometry(pixels_per_inch: float, work: tuple[int, int, int, int], size: tuple[int, int] = (600, 820),
                     minimum: tuple[int, int] = (540, 620)) -> tuple[tuple[int, int, int, int], tuple[int, int]]:
     """(ancho, alto, x, y) y el tamaño mínimo de la ventana, según la escala de Windows y lo libre de la pantalla
@@ -150,6 +157,11 @@ class BubbleWindow:
         self._checking_system = False
         self._support = None  # la ventana de Soporte, si está abierta
         self.update_release = None  # la versión nueva, si hay (ver update.py)
+        # Sin Claude (no está, sin sesión o cuenta gratuita): Bubble Pro traduce con los créditos de Deepgram y Basic
+        # queda bloqueado hasta que conectes Claude (ver cloud/agent.py y no_claude_window.py).
+        self.claude_problem = ""
+        self.cloud_translation = False
+        self._no_claude_window = None
         self._update_window = None
         self._detecting = False  # buscando el chat en la ventana de Roblox
         self.inline_mode = config.roblox.display_mode != "panel"
@@ -272,7 +284,8 @@ class BubbleWindow:
         if getattr(self, "_setup_window", None) is not None and self._setup_window.window.winfo_exists():
             self._setup_window.window.lift()
             return
-        self._setup_window = SetupWindow(self.root, lambda action: self.events.put(("call", action)))
+        self._setup_window = SetupWindow(self.root, lambda action: self.events.put(("call", action)),
+                                         on_no_claude=lambda: self.open_no_claude())
 
     def open_uninstall(self) -> None:
         from .setup_window import UninstallWindow
@@ -294,6 +307,60 @@ class BubbleWindow:
         from .about_window import AboutWindow
 
         AboutWindow(self.root, self.open_support)
+
+    # ================= sin Claude (ver cloud/agent.py y no_claude_window.py) =================
+    def _ev_claude_access(self, payload) -> None:
+        """Al conectarse: si hay Claude o no, y si se traduce con los créditos de Bubble Pro."""
+        problem, has_key = payload
+        self.claude_problem = problem
+        cloud = problem in NO_CLAUDE_PROBLEMS and has_key
+        was = self.cloud_translation
+        self.cloud_translation = cloud
+        if cloud:
+            if not pro.active():
+                self.set_pro(True)
+            if not was:
+                self._append("Sin Claude: Bubble Pro traduce con los créditos de Deepgram (~0,075 US$ por minuto con "
+                             "mensajes; la conexión se corta sola cuando el chat está quieto). Conectá Claude para que "
+                             "la traducción no gaste.\n", "info")
+                self._set_status("✦ Traduciendo con Bubble Pro, sin Claude: gasta créditos de Deepgram. Conectá "
+                                 "Claude para que no gaste.")
+        self.pro_panel.apply_plan()
+        self.pro_panel.refresh()
+
+    def open_no_claude(self, reason: str = "") -> None:
+        """Cómo seguir sin Claude: Bubble Pro con créditos, o conectar Claude. Nunca en medio de una partida."""
+        from .no_claude_window import NoClaudeWindow
+
+        if self._no_claude_window is not None and self._no_claude_window.window.winfo_exists():
+            self._no_claude_window.window.lift()
+            return
+        if self._in_game():
+            self.root.after(30000, lambda: self.open_no_claude(reason))
+            return
+        self._no_claude_window = NoClaudeWindow(self, reason or self.claude_problem or "sin_sesion")
+
+    def use_cloud_translation(self) -> None:
+        """Se guardó la clave de Bubble Pro sin tener Claude: se activa Pro y se reconecta traduciendo con él."""
+        self.set_pro(True)
+        self._refresh()
+
+    def claude_connected(self) -> None:
+        """Conectaste Claude: se reconecta traduciendo con tu suscripción (sin gastar créditos); Basic se desbloquea."""
+        self._append("Claude conectado: la traducción vuelve a tu suscripción (no gasta créditos).\n", "info")
+        self._refresh()
+
+    def _cloud_fatal(self, error) -> None:
+        """(hilo de la conexión) Deepgram sin crédito o con la clave mala, traduciendo sin Claude."""
+        from ..cloud.errors import NoCredit
+
+        reason = "sin_credito" if isinstance(error, NoCredit) else "clave"
+
+        def show() -> None:
+            self._append(f"Bubble Pro: {error}. Sin Claude no se puede traducir.\n", "error")
+            self.open_no_claude(reason)
+
+        self.events.put(("call", show))
 
     # ================= actualizaciones (ver update.py y update_window.py) =================
     def check_update(self, force: bool = False) -> None:
@@ -383,6 +450,9 @@ class BubbleWindow:
         first = self.system_info is None
         if info is not None:
             self.system_info, self.system_plan = info, plan
+            missing = system.claude_problem(info.claude) in NO_CLAUDE_PROBLEMS
+            if self.link in ("conectado", "error") and missing != (self.claude_problem in NO_CLAUDE_PROBLEMS):
+                self._refresh()  # conectaste Claude (o se cerró la sesión): se vuelve a conectar como corresponde
             for change in system.adapt(plan):
                 log.info("Adaptado a tu equipo: %s", change)
             problems = [item for item in plan.advice if item.level == "problema"]
@@ -405,9 +475,19 @@ class BubbleWindow:
         from ..system import sessions_for
         from ..voice.checks import memory_gb
 
+        from .. import system
+        from ..cloud.keys import load_key
+
         # Con poca memoria, menos sesiones de Claude abiertas (cada una ~250 MB): Roblox necesita la suya.
         self.config.claude.pool_size = sessions_for(memory_gb(), self.config.claude.pool_size)
-        self.translator = await asyncio.to_thread(build_translator, self.config)
+        # ¿Hay Claude? Si no, con la clave de Bubble Pro se traduce con los créditos de Deepgram.
+        problem = await asyncio.to_thread(lambda: system.claude_problem(system.claude_status()))
+        key = await asyncio.to_thread(load_key) if problem in system.NO_CLAUDE else ""
+        self.events.put(("claude_access", (problem, bool(key))))
+        if problem in system.NO_CLAUDE and not key:
+            raise NoClaudeError("Falta Claude para traducir: activá Bubble Pro (con créditos gratis) o conectá Claude.")
+        self.translator = await asyncio.to_thread(build_translator, self.config, key,
+                                                  self._cloud_fatal if key else None)
         await self.translator.start()
         for provider in self.translator.router.providers:
             if hasattr(provider, "keep_warm_when"):
@@ -700,7 +780,10 @@ class BubbleWindow:
         link = getattr(self, "link", "conectando")
         busy = link in ("conectando", "desconectando")
         self.refresh_button.state(["disabled"] if busy else ["!disabled"])
-        if link == "error":
+        if link == "error" and self.claude_problem in NO_CLAUDE_PROBLEMS and not self.cloud_translation:
+            app_view.set_state(self, "bad", "Falta Claude para traducir: activá Bubble Pro o conectá Claude.",
+                               "Sin Claude")
+        elif link == "error":
             app_view.set_state(self, "bad", "No pude conectarme con Claude. Mirá «Actividad» o tocá Refrescar.",
                                "Sin conexión")
         elif link == "desconectando":
@@ -1216,6 +1299,8 @@ class BubbleWindow:
             self._set_status(f"No se pudo conectar: {error}")
             self._append(f"{error}\n", "error")
             self._refresh_header()
+            if isinstance(error, NoClaudeError):
+                self.open_no_claude()
             return
         self.link = "conectado"
         self.ready = True
@@ -1273,6 +1358,9 @@ class BubbleWindow:
         if not load_key():
             self.toast.show("Para Bubble Pro, guardá tu clave en la ventana (✦ Pro)", False, area)
             return
+        if self.cloud_translation and pro.active():
+            self.toast.show("✦  Basic necesita Claude: conectalo en Bubble", True, area)
+            return
         self.set_pro(not pro.active(), in_game=True)
         self.toast.show("✦  Bubble Pro activado" if pro.active() else "Bubble Basic", pro.active(), area)
 
@@ -1282,6 +1370,11 @@ class BubbleWindow:
         (que abre una ventanita y le podía sacar el foco a la barra para escribir)."""
         from ..cloud.keys import load_key
 
+        if not enabled and not reason and self.cloud_translation:
+            # Sin Claude, Pro es lo que traduce: Basic se desbloquea cuando conectes Claude.
+            self._set_status("Basic necesita Claude: conectalo (✦ Pro › «Conectar Claude») para poder usarlo.")
+            self.pro_panel.refresh()
+            return
         enabled = bool(enabled and load_key())
         self.config.pro.enabled = enabled
         save_setting("pro", "enabled", enabled)

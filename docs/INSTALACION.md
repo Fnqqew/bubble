@@ -15,6 +15,7 @@ No hace falta saber programar ni tener nada instalado de antemano: si te falta a
 
 - **Windows 10 (versión 2004 o más nueva) u 11**, de 64 bits. Si tu PC tiene menos de cinco años, seguro está bien.
 - **Una suscripción de Claude, Pro o Max.** Es lo que traduce. Bubble no te cobra nada ni te pide tarjetas.
+  ¿Todavía no tenés? Bubble Pro traduce igual con el crédito de regalo de Deepgram (ver el paso 4).
 - **Roblox**, el de roblox.com o el de la Microsoft Store: andan los dos.
 - **Unos 1,5 GB libres** e internet.
 - Si querés que te escuchen traducido: **auriculares con micrófono** (los de siempre sirven).
@@ -72,6 +73,15 @@ Esta parte necesita que estés vos, porque es tu cuenta:
    (la misma de claude.ai) y aceptá. Eso es todo: Bubble traduce con tu suscripción, sin claves ni pagos aparte.
 3. **Instalar micrófono virtual** (opcional, pero es lo que hace que los demás te escuchen traducido): Windows pide
    permiso de administrador y, en el instalador, tocás **Install Driver**. Si te pide reiniciar, reiniciá.
+
+**¿No tenés Claude, o tu cuenta es la gratuita?** Bubble te lo dice y te muestra dos caminos:
+
+- **Bubble Pro con créditos gratis:** creás una cuenta en Deepgram (200 US$ de regalo, sin tarjeta), copiás la clave y
+  la pegás en Bubble. Listo: traduce sin Claude. Ojo que así la traducción gasta crédito (unos 0,075 US$ por minuto
+  con mensajes; la conexión se corta sola cuando el chat está quieto), y Bubble te lo recuerda. Mientras no conectes
+  Claude, Pro queda activado y Basic se ve bloqueado.
+- **Conectar Claude:** si te suscribís (con Claude Pro alcanza), tocás **Iniciar sesión en Claude** y después **Listo,
+  revisar**. Bubble vuelve a traducir con tu suscripción, deja de gastar crédito y Basic se desbloquea.
 
 <br>
 

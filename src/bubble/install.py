@@ -176,11 +176,13 @@ def _install_runtime(progress: Progress) -> str:
 
 
 def _login_claude(progress: Progress) -> str:
-    """Abre Claude Code a la vista para que inicies sesión con tu cuenta de Claude."""
+    """Iniciar sesión en Claude Code con tu suscripción: se abre el navegador (en una ventanita a la vista). También
+    sirve después de suscribirte: Claude Code se entera del plan nuevo al volver a entrar."""
     from .claude_cli import find_claude_cli
 
-    subprocess.Popen([find_claude_cli()], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
-    return "Se abrió Claude Code: iniciá sesión con tu cuenta de Claude (Pro o Max) y volvé a abrir Bubble."
+    subprocess.Popen([find_claude_cli(), "auth", "login", "--claudeai"],
+                     creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+    return "Se abrió el inicio de sesión de Claude: entrá con tu cuenta (Pro o Max) en el navegador."
 
 
 def _install_cable(progress: Progress) -> str:
@@ -200,10 +202,12 @@ def steps() -> list[Step]:
              _download_speakers, after=["voz"]),
         Step("tts", "Voces sintéticas", "Tu voz traducida en inglés (femenina y masculina), ~120 MB.", _voice_ready,
              _download_voice, after=["voz"]),
+        # (Claude no es obligatorio: sin él, Bubble Pro traduce con créditos. Lo explica ui/no_claude_window.py)
         Step("claude", "Claude Code", "Traduce con tu suscripción de Claude. Se instala y después iniciás sesión.",
-             _claude_ready, _install_claude, action="Instalar Claude Code"),
-        Step("sesion", "Tu cuenta de Claude", "Claude Code con la sesión iniciada (plan Pro o Max).", _session_ready,
-             _login_claude, action="Iniciar sesión", after=["claude"]),
+             _claude_ready, _install_claude, required=False, action="Instalar Claude Code"),
+        Step("sesion", "Tu cuenta de Claude", "Claude Code con la sesión iniciada (plan Pro o Max). ¿No tenés? Bubble "
+             "Pro traduce mientras tanto con créditos gratis.", _session_ready,
+             _login_claude, required=False, action="Iniciar sesión", after=["claude"]),
         Step("cable", "Micrófono virtual", "Para que los demás escuchen tu voz traducida. Windows pide permiso de "
              "administrador.", _cable_ready, _install_cable, required=False, action="Instalar micrófono virtual",
              after=["voz"]),

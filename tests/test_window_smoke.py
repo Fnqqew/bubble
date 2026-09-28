@@ -159,3 +159,44 @@ def test_a_new_version_shows_the_link_and_waits_for_the_match_to_end(window, mon
     window._on_update(None, asked=True)
     assert not window.update_link.winfo_manager()
     assert "Estás al día" in str(window.status.cget("text"))
+
+
+def test_without_claude_pro_translates_and_basic_stays_locked(window, monkeypatch):
+    import bubble.cloud.keys
+    from bubble import pro
+    from bubble.ui import app_view
+
+    monkeypatch.setattr(bubble.cloud.keys, "load_key", lambda: "clave-de-prueba")
+    monkeypatch.setattr(window.voice_panel, "pro_changed", lambda: None)
+    window.page_var.set("pro")
+    app_view._show_page(window)  # (la página ✦ Pro se arma la primera vez que la abrís)
+    window._ev_claude_access(("gratis", True))  # cuenta gratuita de Claude, con clave de Bubble Pro
+    panel = window.pro_panel
+    assert window.cloud_translation and pro.active()  # Pro se activa solo: es lo que traduce
+    assert panel.enabled_var.get() and panel.no_claude.winfo_manager()
+    assert panel.comparison.dimmed  # lo de Basic, difuminado
+    panel.enabled_var.set(False)
+    panel._toggle()  # tocás el interruptor para pasar a Basic
+    assert pro.active() and panel.enabled_var.get()  # vuelve a Pro solo
+    assert "Basic necesita Claude" in str(window.status.cget("text"))
+    shown = []
+    monkeypatch.setattr(window.toast, "show", lambda text, gold, area=None: shown.append(text))
+    window._toggle_plan_in_game()  # Ctrl+P en el juego
+    assert pro.active() and "Basic necesita Claude" in shown[0]
+
+    window._ev_claude_access(("", False))  # conectaste Claude
+    assert not window.cloud_translation and not panel.comparison.dimmed and not panel.no_claude.winfo_manager()
+    window.set_pro(False)
+    assert not pro.active()  # ahora sí se puede volver a Basic
+
+
+def test_without_claude_or_a_key_it_shows_how_to_continue(window, monkeypatch):
+    from bubble.ui import main_window as mw
+
+    opened = []
+    monkeypatch.setattr(window, "open_no_claude", lambda reason="": opened.append(reason))
+    window.link = "conectando"
+    window._ev_claude_access(("sin_sesion", False))
+    window._ev_started(mw.NoClaudeError("Falta Claude para traducir"))
+    assert opened == [""] and window.link == "error"
+    assert "Falta Claude" in str(window.greeting.cget("text"))
