@@ -209,7 +209,17 @@ class WindowsOcr:
         else:
             self._engine = OcrEngine.try_create_from_user_profile_languages()
         if self._engine is None:
-            raise RuntimeError("El OCR de Windows no está disponible para ese idioma")
+            # El idioma de tu Windows no tiene lector de texto: se usa otro que esté instalado (el chat de Roblox en
+            # letras latinas se lee igual con cualquiera de ellos). Antes Bubble no podía leer el chat.
+            available = [language.language_tag for language in OcrEngine.available_recognizer_languages]
+            preferred = sorted(available, key=lambda tag: (not tag.startswith("en"), not tag.startswith("es"), tag))
+            for tag in preferred:
+                self._engine = OcrEngine.try_create_from_language(Language(tag))
+                if self._engine is not None:
+                    break
+        if self._engine is None:
+            raise RuntimeError("Windows no tiene ningún idioma para leer texto: agregá uno en Configuración › Hora e "
+                               "idioma › Idioma (con «Reconocimiento óptico de caracteres»).")
         self._max_dim = OcrEngine.max_image_dimension
         # Un motor de OCR no admite dos lecturas al mismo tiempo ("Another RecognizeAsync operation is
         # already running"): se hacen de a una. Para leer en paralelo, usar otra instancia.

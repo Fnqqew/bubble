@@ -143,6 +143,11 @@ def _unsure(result) -> bool:
 def pick_models(threads: int | None = None) -> tuple[str, str]:
     """(modelo para ir mostrando el texto mientras hablan, modelo para la versión final), según el procesador."""
     threads = threads or os.cpu_count() or 4
+    from .checks import memory_gb
+
+    ram = memory_gb()
+    if ram and ram < 6:
+        return "", "base"  # poca memoria: un solo modelo, liviano (Roblox necesita la suya)
     if threads >= 10:
         return "base", "small"
     if threads >= 6:

@@ -5,7 +5,8 @@
   paso. Si algo salió mal, lo corregís y lo guardás: Bubble aprende tus palabras y cómo querés sonar.
 - Chat a voz: escribís como en la barra del juego y escuchás cómo lo dice.
 - Lo que te dicen: una voz sintética dice una frase en inglés, como si fuera otro jugador, y ves el subtítulo.
-- Tu PC: cómo va a andar Bubble en esta computadora.
+- Tu equipo: lo que Bubble detectó de tu PC (memoria, micrófonos, tu cuenta de Claude, internet) y qué revisar.
+- Cuánto tarda en tu PC: cómo va a andar Bubble en esta computadora.
 - Entrenar tu voz (opcional): leés unas frases y contestás unas preguntas con tus palabras; aprende tu vocabulario,
   tus expresiones, cómo preguntás y cómo gritás (ver ui/training_window.py).
 - Lo que aprendió: cuánto sabe de tu voz, y un botón para borrarlo.
@@ -53,6 +54,7 @@ class TestsPanel:
         self._mine_target = ""
         self._chat_target = ""
         self._training = None  # la ventana del entrenamiento, si está abierta
+        self.equipment = None  # «Tu equipo» (se arma con la página)
 
     # ------------------------------------------------------------ armado
     def build_page(self, page) -> None:
@@ -112,7 +114,11 @@ class TestsPanel:
         self._button(row, "Probar", self._test_them, accent=True).pack(side="left")
         self.them_info = widgets.muted(box, "")
 
-        box = widgets.card(page, "Tu PC", "Cómo va a andar Bubble en esta computadora (se mide de verdad).")
+        from .equipment import EquipmentCard
+
+        self.equipment = EquipmentCard(self.app, page)
+
+        box = widgets.card(page, "Cuánto tarda en tu PC", "Mide de verdad cuánto tarda cada paso de tu voz traducida.")
         row = ttk.Frame(box)
         row.pack(fill="x")
         self._button(row, "Medir", self._test_pc, accent=True).pack(side="left")

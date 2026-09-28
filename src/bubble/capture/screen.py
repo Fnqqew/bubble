@@ -142,13 +142,85 @@ def gpu_screen() -> GpuScreen | None:
 
 
 def capture_backend() -> str:
+    if _window["active"]:
+        return "ventana"
     return "gpu" if gpu_screen() is not None else "cpu"
 
 
-def grab(rect: Rect) -> Image.Image:
+# ---------------------------------------------------------------- leer solo la ventana de Roblox
+# Con esto las traducciones pueden salir en tus capturas y grabaciones (ver window_capture.py). Se activa solo si en
+# esta PC la foto de la ventana sale igual a la pantalla; si después falla (Roblox en pantalla completa exclusiva…),
+# se vuelve a esconder las traducciones de las capturas y a leer la pantalla como antes.
+PROBE_EVERY_S = 5.0
+FAILS_TO_GIVE_UP = 8
+_window = {"wanted": False, "active": False, "capture": None, "probed_at": 0.0, "fails": 0,
+           "on_change": None}
+
+
+def set_window_capture(wanted: bool, on_change=None) -> None:
+    """`on_change(activo)`: avisa cuando se empieza o se deja de leer la ventana sola (las traducciones pasan a
+    verse, o a no verse, en las capturas)."""
+    _window["wanted"] = wanted
+    if on_change is not None:
+        _window["on_change"] = on_change
+    if not wanted and _window["active"]:
+        _set_window_active(False)
+
+
+def window_mode() -> bool:
+    """¿Se está leyendo la ventana de Roblox sola? (las traducciones salen en capturas y grabaciones)"""
+    return bool(_window["active"])
+
+
+def _set_window_active(active: bool) -> None:
+    _window["active"], _window["fails"] = active, 0
+    log.info("Lectura de la ventana de Roblox sola: %s", "sí" if active else "no")
+    callback = _window["on_change"]
+    if callback is not None:
+        try:
+            callback(active)
+        except Exception:  # noqa: BLE001
+            log.debug("Falló el aviso del modo ventana", exc_info=True)
+
+
+def _window_capture():
+    if _window["capture"] is None:
+        from .window_capture import WindowCapture
+
+        _window["capture"] = WindowCapture()
+    return _window["capture"]
+
+
+def _grab_screen(rect: Rect) -> Image.Image:
     gpu = gpu_screen()
     if gpu is not None:
         image = gpu.grab(rect)
         if image is not None:
             return image
     return _grab_gdi(rect)
+
+
+def grab(rect: Rect) -> Image.Image:
+    if _window["active"]:
+        image = _window_capture().grab(rect)
+        if image is not None:
+            _window["fails"] = 0
+            return image
+        _window["fails"] += 1
+        if _window["fails"] < FAILS_TO_GIVE_UP:
+            return Image.new("RGB", (rect.width, rect.height))  # (un momento: Roblox minimizado, cambiando)
+        _set_window_active(False)  # no anda en esta PC (o ya no): las traducciones se esconden otra vez
+        _window["probed_at"] = time.monotonic()
+    screen = _grab_screen(rect)
+    if _window["wanted"] and time.monotonic() - _window["probed_at"] > PROBE_EVERY_S:
+        _window["probed_at"] = time.monotonic()
+        try:
+            from .window_capture import similar
+
+            image = _window_capture().grab(rect)
+            if image is not None and similar(image, screen):
+                _set_window_active(True)
+                return image
+        except Exception:  # noqa: BLE001 - se sigue leyendo la pantalla
+            log.debug("No se pudo probar la lectura de la ventana", exc_info=True)
+    return screen

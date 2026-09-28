@@ -8,37 +8,9 @@ from tkinter import ttk
 from typing import Callable
 
 from .. import install, uninstall
-from . import motion, theme, widgets
+from . import motion, widgets
 
 ICONS = {"pending": "○", "working": "◐", "done": "✓", "error": "!", "manual": "→"}
-
-
-def _window(root: tk.Misc, title: str, width: int = 520) -> tuple[tk.Toplevel, ttk.Frame]:
-    window = tk.Toplevel(root)
-    window.withdraw()
-    window.title(title)
-    window.resizable(False, False)
-    window.configure(background=widgets.palette()["bg"])
-    if isinstance(root, tk.Tk) and root.winfo_viewable():
-        window.transient(root)
-    body = ttk.Frame(window, padding=(26, 22, 26, 18))
-    body.pack(fill="both", expand=True)
-    body.configure(width=width)
-    return window, body
-
-
-def _center(window: tk.Toplevel, root: tk.Misc) -> None:
-    window.update_idletasks()
-    width, height = window.winfo_reqwidth(), window.winfo_reqheight()
-    if root.winfo_viewable():
-        x = root.winfo_rootx() + (root.winfo_width() - width) // 2
-        y = root.winfo_rooty() + (root.winfo_height() - height) // 3
-    else:
-        x, y = (window.winfo_screenwidth() - width) // 2, (window.winfo_screenheight() - height) // 3
-    window.geometry(f"+{max(0, x)}+{max(0, y)}")
-    theme.title_bar(window)
-    window.deiconify()
-    motion.appear(window, rise=0, seconds=0.2)
 
 
 class SetupWindow:
@@ -49,12 +21,13 @@ class SetupWindow:
         self.root = root
         self.post = post  # hacer algo en el hilo de la ventana
         self.steps = steps if steps is not None else install.steps()
-        self.window, body = _window(root, "Preparar Bubble")
+        self.window, body = widgets.dialog(root, "Preparar Bubble")
         colors = widgets.palette()
         ttk.Label(body, text="Preparar Bubble", font="SunValleySubtitleFont").pack(anchor="w")
         widgets.muted(body, "Bubble instala solo lo que le falta. La primera vez tarda unos minutos (se descarga): podés "
                             "seguir usando la PC.", pady=(2, 12))
         self.rows: dict[str, tuple[ttk.Label, ttk.Label]] = {}
+        self.buttons: dict[str, tuple[ttk.Button, ttk.Frame]] = {}  # lo que necesita tu permiso (se va al estar listo)
         for step in self.steps:
             row = ttk.Frame(body)
             row.pack(fill="x", pady=(6, 0))
@@ -68,7 +41,9 @@ class SetupWindow:
                                wraplength=250 if step.action else 380, justify="left")
             detail.pack(anchor="w")
             if step.action:
-                ttk.Button(row, text=step.action, command=lambda s=step: self._manual(s)).pack(side="right")
+                button = ttk.Button(row, text=step.action, command=lambda s=step: self._manual(s))
+                button.pack(side="right")
+                self.buttons[step.key] = (button, texts)
             self.rows[step.key] = (icon, detail)
         self.bar = ttk.Progressbar(body, mode="determinate", maximum=1.0, length=460)
         self.bar.pack(fill="x", pady=(18, 4))
@@ -78,7 +53,7 @@ class SetupWindow:
         self.close_button = ttk.Button(buttons, text="Seguir después", command=self.close)
         self.close_button.pack(side="right")
         self._busy = False
-        _center(self.window, root)
+        widgets.present(self.window, root)
         self.window.protocol("WM_DELETE_WINDOW", self.close)
         self._check_all()
         if auto:
@@ -92,6 +67,12 @@ class SetupWindow:
         icon.configure(text=ICONS[state], foreground=color)
         if text is not None:
             detail.configure(text=text)
+        if key in self.buttons:  # ya está: sin el botón de instalarlo (confundía)
+            button, texts = self.buttons[key]
+            if state == "done":
+                button.pack_forget()
+            elif not button.winfo_manager():
+                button.pack(side="right", before=texts)
 
     def _check_all(self) -> None:
         def work() -> None:
@@ -177,7 +158,8 @@ class SetupWindow:
                 message = step.run(self._progress)
                 self.post(lambda: self._set(step.key, "manual", message))
             except Exception as exc:  # noqa: BLE001
-                self.post(lambda: self._set(step.key, "error", f"No se pudo: {exc}"))
+                error = f"No se pudo: {exc}"  # (`exc` deja de existir al salir del except: la lambda corre después)
+                self.post(lambda: self._set(step.key, "error", error))
 
         threading.Thread(target=work, name="bubble-instalar-manual", daemon=True).start()
 
@@ -191,8 +173,7 @@ class UninstallWindow:
     def __init__(self, root: tk.Misc, on_done: Callable[[], None]) -> None:
         self.root = root
         self.on_done = on_done
-        self.window, body = _window(root, "Desinstalar Bubble")
-        colors = widgets.palette()
+        self.window, body = widgets.dialog(root, "Desinstalar Bubble")
         ttk.Label(body, text="Desinstalar Bubble", font="SunValleySubtitleFont").pack(anchor="w")
         widgets.muted(body, "Elegí qué borrar. Antes, Windows vuelve a usar tu micrófono y tu parlante de verdad.",
                       pady=(2, 12))
@@ -214,7 +195,7 @@ class UninstallWindow:
                                                                                       self.window.destroy))
         self.cancel.pack(side="right", padx=(0, 8))
         self._confirming = False
-        _center(self.window, root)
+        widgets.present(self.window, root)
 
     def _confirm(self) -> None:
         chosen = {key for key, var in self.vars.items() if var.get()}

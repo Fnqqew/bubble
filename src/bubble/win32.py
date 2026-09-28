@@ -20,7 +20,11 @@ user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 ULONG_PTR = ctypes.c_size_t
-ROBLOX_PROCESS = "robloxplayerbeta.exe"
+ROBLOX_PROCESS = "robloxplayerbeta.exe"  # el de roblox.com (también con Bloxstrap y parecidos)
+# El de la Microsoft Store se llama "Windows10Universal.exe" (en una carpeta de Roblox) y su ventana va dentro de un
+# marco de Windows ("ApplicationFrameHost.exe"). Antes Bubble no lo reconocía.
+STORE_PROCESS = "windows10universal.exe"
+FRAME_HOST = "applicationframehost.exe"
 
 # ---------- firmas (necesarias en 64 bits para no truncar handles) ----------
 user32.GetForegroundWindow.restype = wintypes.HWND
@@ -80,7 +84,7 @@ def set_app_id(app_id: str) -> None:
 
 
 # ---------- ventana de Roblox ----------
-def _process_name(pid: int) -> str:
+def _process_path(pid: int) -> str:
     handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     if not handle:
         return ""
@@ -88,10 +92,49 @@ def _process_name(pid: int) -> str:
         size = wintypes.DWORD(512)
         buffer = ctypes.create_unicode_buffer(size.value)
         if kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
-            return os.path.basename(buffer.value)
+            return buffer.value
         return ""
     finally:
         kernel32.CloseHandle(handle)
+
+
+def _process_name(pid: int) -> str:
+    return os.path.basename(_process_path(pid))
+
+
+def is_roblox_process(pid: int) -> bool:
+    """¿Ese proceso es Roblox? (el de roblox.com o el de la Microsoft Store)"""
+    path = _process_path(pid).lower()
+    name = os.path.basename(path)
+    return name == ROBLOX_PROCESS or (name == STORE_PROCESS and "roblox" in path)
+
+
+def _roblox_in_frame(hwnd: int) -> int:
+    """Si la ventana es un marco de la Microsoft Store con Roblox adentro, el proceso de Roblox (si no, 0)."""
+    found: list[int] = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def child(inner, _lparam):
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(inner, ctypes.byref(pid))
+        if is_roblox_process(pid.value):
+            found.append(pid.value)
+            return False
+        return True
+
+    user32.EnumChildWindows(hwnd, child, 0)
+    return found[0] if found else 0
+
+
+def roblox_window_pid(hwnd: int) -> int:
+    """El proceso de Roblox de esa ventana (0 si no es de Roblox)."""
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    if is_roblox_process(pid.value):
+        return pid.value
+    if _process_name(pid.value).lower() == FRAME_HOST:
+        return _roblox_in_frame(hwnd)
+    return 0
 
 
 def client_rect(hwnd: int) -> Rect:
@@ -114,10 +157,9 @@ def roblox_pid() -> int:
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     def callback(hwnd, _lparam):
         if user32.IsWindowVisible(hwnd) or user32.IsIconic(hwnd):
-            pid = wintypes.DWORD()
-            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            if _process_name(pid.value).lower() == ROBLOX_PROCESS:
-                found.append(pid.value)
+            pid = roblox_window_pid(hwnd)
+            if pid:
+                found.append(pid)
                 return False  # alcanza con una
         return True
 
@@ -143,7 +185,8 @@ def roblox_process_ids() -> list[int]:
         entry = _PROCESSENTRY32W(ctypes.sizeof(_PROCESSENTRY32W))
         ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
         while ok:
-            if entry.szExeFile.lower() == ROBLOX_PROCESS:
+            name = entry.szExeFile.lower()
+            if name == ROBLOX_PROCESS or (name == STORE_PROCESS and is_roblox_process(int(entry.th32ProcessID))):
                 found.append(int(entry.th32ProcessID))
             ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
         return found
@@ -163,12 +206,9 @@ def find_roblox_window() -> int | None:
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     def callback(hwnd, _lparam):
-        if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd):
-            pid = wintypes.DWORD()
-            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            if _process_name(pid.value).lower() == ROBLOX_PROCESS:
-                rect = client_rect(hwnd)
-                found.append((rect.width * rect.height, hwnd))
+        if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd) and roblox_window_pid(hwnd):
+            rect = client_rect(hwnd)
+            found.append((rect.width * rect.height, hwnd))
         return True
 
     user32.EnumWindows(callback, 0)
@@ -176,11 +216,7 @@ def find_roblox_window() -> int | None:
 
 
 def is_roblox_window(hwnd: int | None) -> bool:
-    if not hwnd:
-        return False
-    pid = wintypes.DWORD()
-    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    return _process_name(pid.value).lower() == ROBLOX_PROCESS
+    return bool(hwnd) and bool(roblox_window_pid(hwnd))
 
 
 def foreground_process() -> str:

@@ -101,6 +101,38 @@ def segmented(parent, variable: tk.StringVar, options: dict[str, str], command: 
     return box
 
 
+def dialog(root: tk.Misc, title: str, width: int = 520) -> tuple[tk.Toplevel, ttk.Frame]:
+    """Una ventana secundaria del tema (escondida hasta `present`) y su cuerpo con márgenes."""
+    window = tk.Toplevel(root)
+    window.withdraw()
+    window.title(title)
+    window.resizable(False, False)
+    window.configure(background=palette()["bg"])
+    if isinstance(root, tk.Tk) and root.winfo_viewable():
+        window.transient(root)
+    body = ttk.Frame(window, padding=(26, 22, 26, 18))
+    body.pack(fill="both", expand=True)
+    body.configure(width=width)
+    return window, body
+
+
+def present(window: tk.Toplevel, root: tk.Misc) -> None:
+    """Muestra la ventana centrada sobre Bubble (o en la pantalla), apareciendo suave."""
+    from . import motion, theme
+
+    window.update_idletasks()
+    width, height = window.winfo_reqwidth(), window.winfo_reqheight()
+    if root.winfo_viewable():
+        x = root.winfo_rootx() + (root.winfo_width() - width) // 2
+        y = root.winfo_rooty() + (root.winfo_height() - height) // 3
+    else:
+        x, y = (window.winfo_screenwidth() - width) // 2, (window.winfo_screenheight() - height) // 3
+    window.geometry(f"+{max(0, x)}+{max(0, y)}")
+    theme.title_bar(window)
+    window.deiconify()
+    motion.appear(window, rise=0, seconds=0.2)
+
+
 DIM = 0.7  # qué tan difuminado queda un texto bloqueado (0 = igual, 1 = invisible)
 CONTROLS = (ttk.Button, ttk.Checkbutton, ttk.Radiobutton, ttk.Entry, ttk.Combobox, ttk.Scale, ttk.Spinbox)
 

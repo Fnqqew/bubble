@@ -136,7 +136,9 @@ class AppearanceConfig:
     subtitle_size: float = 1.0
     subtitle_position: str = "abajo"  # "abajo" | "arriba"
     subtitle_original: bool = True  # mostrar chiquito lo que dijeron en su idioma
-    in_screenshots: bool = True  # las traducciones salen en tus capturas (Impr Pant, Win + Shift + S)
+    # Las traducciones salen en tus capturas y grabaciones (OBS, Xbox Game Bar, la grabadora de Roblox…): Bubble lee la
+    # ventana de Roblox sola (si esta PC lo permite; si no, solo en las capturas con Impr Pant y Win + Shift + S).
+    in_screenshots: bool = True
 
 
 @dataclass

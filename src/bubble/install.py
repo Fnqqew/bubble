@@ -78,6 +78,20 @@ def _claude_ready() -> bool:
         return False
 
 
+def _runtime_ready() -> bool:
+    """Los componentes de Visual C++ de Windows (sin ellos, la parte de voz no carga: "DLL load failed")."""
+    import ctypes.util
+
+    return all(ctypes.util.find_library(name) for name in ("msvcp140", "vcruntime140", "vcruntime140_1"))
+
+
+def _session_ready() -> bool:
+    from .system import claude_status
+
+    status = claude_status()
+    return status.installed and status.logged_in is not False  # (si no se puede saber, no se insiste)
+
+
 def _cable_ready() -> bool:
     try:
         from .voice import audio as audio_io
@@ -146,6 +160,29 @@ def _install_claude(progress: Progress) -> str:
     return "Se abrió el instalador de Claude Code: cuando termine, iniciá sesión y volvé a abrir Bubble."
 
 
+def _install_runtime(progress: Progress) -> str:
+    """El instalador oficial de Microsoft (Windows pide permiso de administrador)."""
+    import ctypes
+    import shutil
+
+    if shutil.which("winget"):
+        args = "install -e --id Microsoft.VCRedist.2015+.x64 --accept-package-agreements --accept-source-agreements"
+        if ctypes.windll.shell32.ShellExecuteW(None, "runas", "winget", args, None, 1) > 32:
+            return "Se está instalando (Windows pidió permiso). Cuando termine, volvé a abrir Bubble."
+    import webbrowser
+
+    webbrowser.open("https://aka.ms/vs/17/release/vc_redist.x64.exe")
+    return "Se descargó el instalador de Microsoft: abrilo, instalalo y volvé a abrir Bubble."
+
+
+def _login_claude(progress: Progress) -> str:
+    """Abre Claude Code a la vista para que inicies sesión con tu cuenta de Claude."""
+    from .claude_cli import find_claude_cli
+
+    subprocess.Popen([find_claude_cli()], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+    return "Se abrió Claude Code: iniciá sesión con tu cuenta de Claude (Pro o Max) y volvé a abrir Bubble."
+
+
 def _install_cable(progress: Progress) -> str:
     from .voice.bridge import install_cable
 
@@ -154,6 +191,8 @@ def _install_cable(progress: Progress) -> str:
 
 def steps() -> list[Step]:
     return [
+        Step("windows", "Componentes de Windows", "Visual C++ de Microsoft: los necesita la parte de voz.",
+             _runtime_ready, _install_runtime, action="Instalar componentes"),
         Step("voz", "Parte de voz", "Paquetes para entender y decir voces (~300 MB).", _has_modules, _pip_install),
         Step("whisper", "Reconocimiento de voz", "Entiende voces en tu PC (Basic), hasta ~500 MB.", _whisper_ready,
              _download_whisper, after=["voz"]),
@@ -163,6 +202,8 @@ def steps() -> list[Step]:
              _download_voice, after=["voz"]),
         Step("claude", "Claude Code", "Traduce con tu suscripción de Claude. Se instala y después iniciás sesión.",
              _claude_ready, _install_claude, action="Instalar Claude Code"),
+        Step("sesion", "Tu cuenta de Claude", "Claude Code con la sesión iniciada (plan Pro o Max).", _session_ready,
+             _login_claude, action="Iniciar sesión", after=["claude"]),
         Step("cable", "Micrófono virtual", "Para que los demás escuchen tu voz traducida. Windows pide permiso de "
              "administrador.", _cable_ready, _install_cable, required=False, action="Instalar micrófono virtual",
              after=["voz"]),

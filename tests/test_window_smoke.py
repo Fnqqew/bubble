@@ -123,3 +123,23 @@ def test_the_tone_chosen_in_the_bar_is_kept(window):
     assert window.config.user.tone == 4
     assert load_state()["settings"]["user"]["tone"] == 4  # queda para la próxima (antes volvía a casual)
     assert window.tone.get() == window.tone.cget("values")[3]  # y Ajustes lo muestra
+
+
+def test_your_pc_check_shows_problems_and_fills_the_card(window):
+    from bubble import system
+    from bubble.ui import app_view
+
+    window.page_var.set("pruebas")
+    app_view._show_page(window)  # (se arma la primera vez que la abrís)
+    card = window.tests_panel.equipment
+    assert "Revisando" in str(card.state.cget("text"))
+    info = system.System(windows="Windows 11", build=26200, threads=8, ram_gb=16, microphones=["Mic"],
+                         ocr_languages=["en-US"], roblox="roblox.com",
+                         claude=system.Claude(installed=True, logged_in=False))
+    window._checking_system = True
+    window._on_system(info, system.recommend(info))
+    assert window.system_info is info and not window._checking_system
+    assert "sesión iniciada" in str(window.status.cget("text"))  # el problema, a la vista
+    assert card.table.winfo_children() and card.advice.winfo_children()
+    assert str(card.state.cget("text")) == ""
+

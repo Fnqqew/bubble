@@ -99,6 +99,40 @@ def _debug_dir() -> Path:
     return path
 
 
+DESIGN_SCALE = 1.25  # la ventana se diseñó con Windows al 125 %: 600 × 820
+
+
+def window_geometry(pixels_per_inch: float, work: tuple[int, int, int, int], size: tuple[int, int] = (600, 820),
+                    minimum: tuple[int, int] = (540, 620)) -> tuple[tuple[int, int, int, int], tuple[int, int]]:
+    """(ancho, alto, x, y) y el tamaño mínimo de la ventana, según la escala de Windows y lo libre de la pantalla
+    (`work`: izquierda, arriba, derecha, abajo, sin la barra de tareas)."""
+    factor = max(0.8, pixels_per_inch / 96) / DESIGN_SCALE
+    left, top, right, bottom = work
+    free_w, free_h = right - left, bottom - top
+    width = min(int(size[0] * factor), free_w - 40)
+    height = min(int(size[1] * factor), free_h - int(60 * factor))
+    x = left + (free_w - width) // 2
+    y = top + max(0, (free_h - height) // 2 - int(20 * factor))
+    return (width, height, x, y), (min(int(minimum[0] * factor), width), min(int(minimum[1] * factor), height))
+
+
+def fit_window(root: tk.Tk, size: tuple[int, int] = (600, 820), minimum: tuple[int, int] = (540, 620)) -> None:
+    """Tamaño según la escala de Windows (100 %, 125 %, 150 %…) y lo que entra en tu pantalla, centrada. Antes era
+    siempre 600 × 820 píxeles: con escala al 150 % quedaba chica y cortada, y en pantallas bajas (1366 × 768) se salía
+    por abajo."""
+    import ctypes
+    from ctypes import wintypes
+
+    work = wintypes.RECT()
+    ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0)  # SPI_GETWORKAREA
+    area = (work.left, work.top, work.right, work.bottom)
+    if area[2] <= area[0] or area[3] <= area[1]:
+        area = (0, 0, root.winfo_screenwidth(), root.winfo_screenheight())
+    (width, height, x, y), smallest = window_geometry(root.winfo_fpixels("1i"), area, size, minimum)
+    root.minsize(*smallest)
+    root.geometry(f"{width}x{height}+{x}+{y}")
+
+
 class BubbleWindow:
     def __init__(self, config: Config, root: tk.Tk | None = None) -> None:
         self.config = config
@@ -111,6 +145,10 @@ class BubbleWindow:
         self.watcher: ChatWatcher | None = None
         self.bubble_watcher: BubbleWatcher | None = None
         self.hardware = None  # procesador y placa de video (se detectan al arrancar)
+        self.system_info = None  # tu equipo (ver system.py): se revisa al abrir
+        self.system_plan = None
+        self._checking_system = False
+        self._support = None  # la ventana de Soporte, si está abierta
         self._detecting = False  # buscando el chat en la ventana de Roblox
         self.inline_mode = config.roblox.display_mode != "panel"
         # Barra para escribir: traducciones ya hechas (vista previa) y cuál se manda apenas esté lista.
@@ -133,8 +171,7 @@ class BubbleWindow:
         self.root = root or tk.Tk()
         self.root.withdraw()
         self.root.title("Bubble")
-        self.root.geometry("600x820")
-        self.root.minsize(540, 620)
+        fit_window(self.root)
         if ICON_PATH.exists():
             self.root.iconbitmap(default=str(ICON_PATH))
         apply_theme(self.root, config.appearance.theme)
@@ -205,6 +242,8 @@ class BubbleWindow:
         self.root.after(1200, lambda: prepare_gold_soon(self.root))
         # ¿Falta algo para que ande todo? Se revisa en segundo plano y, si falta, se instala solo.
         self.root.after(1500, self._check_install)
+        # Tu equipo (memoria, micrófonos, cuenta de Claude, internet…): Bubble se adapta y avisa si algo falta.
+        self.root.after(3000, self.check_system)
 
     # ================= instalar y desinstalar (ver install.py, uninstall.py, setup_window.py) =================
     def _check_install(self) -> None:
@@ -235,6 +274,59 @@ class BubbleWindow:
 
         UninstallWindow(self.root, self._on_close)
 
+    # ================= soporte, acerca de y tu equipo =================
+    def open_support(self) -> None:
+        """«Soporte»: un mensaje (título, qué pasó y cómo, imágenes) que le llega al creador (ver support.py)."""
+        from ..capture.window_capture import WindowCapture
+        from .support_window import SupportWindow
+
+        if self._support is not None and self._support.window.winfo_exists():
+            self._support.window.lift()
+            return
+        self._support = SupportWindow(self.root, grab_roblox=lambda: WindowCapture().whole())
+
+    def open_about(self) -> None:
+        from .about_window import AboutWindow
+
+        AboutWindow(self.root, self.open_support)
+
+    def check_system(self, internet: bool | None = None) -> None:
+        """Revisa tu equipo en segundo plano, se adapta y avisa si algo impide que Bubble ande (ver system.py).
+        `internet`: medirlo ya (None: una vez por día)."""
+        from .. import system
+
+        if self._checking_system:
+            return
+        self._checking_system = True
+
+        def work() -> None:
+            try:
+                info, plan = system.check(internet)
+            except Exception:  # noqa: BLE001 - revisar nunca impide usar Bubble
+                log.warning("No se pudo revisar el equipo", exc_info=True)
+                info = plan = None
+            self.events.put(("call", lambda: self._on_system(info, plan)))
+
+        threading.Thread(target=work, name="bubble-tu-equipo", daemon=True).start()
+
+    def _on_system(self, info, plan) -> None:
+        from .. import system
+
+        self._checking_system = False
+        first = self.system_info is None
+        if info is not None:
+            self.system_info, self.system_plan = info, plan
+            for change in system.adapt(plan):
+                log.info("Adaptado a tu equipo: %s", change)
+            problems = [item for item in plan.advice if item.level == "problema"]
+            if problems and first:
+                for problem in problems:
+                    self._append(f"Tu equipo: {problem.text}\n", "error")
+                self._set_status(f"⚠ {problems[0].text} (más en Pruebas › Tu equipo)")
+        card = getattr(self.tests_panel, "equipment", None)
+        if card is not None:
+            card.show(info, plan)
+
     # ================= interfaz (ver app_view.py) =================
     def _region_text(self) -> str:
         if not self.saved_region:
@@ -243,6 +335,11 @@ class BubbleWindow:
 
     # ================= arranque y cierre =================
     async def _startup(self) -> None:
+        from ..system import sessions_for
+        from ..voice.checks import memory_gb
+
+        # Con poca memoria, menos sesiones de Claude abiertas (cada una ~250 MB): Roblox necesita la suya.
+        self.config.claude.pool_size = sessions_for(memory_gb(), self.config.claude.pool_size)
         self.translator = await asyncio.to_thread(build_translator, self.config)
         await self.translator.start()
         for provider in self.translator.router.providers:
@@ -430,15 +527,44 @@ class BubbleWindow:
                              by_roblox=True)
 
     def _start_screenshots(self) -> None:
-        """Que las traducciones salgan en tus capturas de pantalla (ver screenshots.py)."""
+        """Que las traducciones salgan en tus capturas y grabaciones: se lee la ventana de Roblox sola (si esta PC lo
+        permite, ver capture/window_capture.py) y, si no, se muestran en las capturas con las teclas de Windows (ver
+        screenshots.py)."""
+        from .. import layered
+        from ..capture import screen
         from ..screenshots import ScreenshotKeys
 
         if self.screenshots:
             self.screenshots.stop()
             self.screenshots = None
-        if self.config.appearance.in_screenshots:
+        wanted = self.config.appearance.in_screenshots
+
+        def changed(active: bool) -> None:
+            layered.set_capturable(active)  # (lo primero: ya no se lee la pantalla con ellas)
+            self.events.put(("call", self._refresh_capture_label))
+
+        screen.set_window_capture(wanted, changed)
+        if wanted:
             self.screenshots = ScreenshotKeys(win32.roblox_is_foreground)
             self.screenshots.start()
+        self._refresh_capture_label()
+
+    def _refresh_capture_label(self) -> None:
+        from ..capture import screen
+
+        label = getattr(self, "capture_label", None)
+        if label is None:
+            return
+        if not self.config.appearance.in_screenshots:
+            text = "Las traducciones no salen en capturas ni grabaciones."
+        elif screen.window_mode():
+            text = ("✓ Salen en tus capturas y en las grabaciones de pantalla: Win + Shift + S, Impr Pant, la "
+                    "Herramienta Recortes (Grabar), OBS con «Captura de pantalla», Discord. Lo que graba solo el juego "
+                    "(el grabador de Roblox, Xbox Game Bar) no puede ver nada de lo que está encima.")
+        else:
+            text = ("Salen en tus capturas (Impr Pant, Win + Shift + S). En las grabaciones de pantalla, apenas Bubble "
+                    "pueda leer la ventana de Roblox por separado: lo prueba solo cuando jugás.")
+        label.configure(text=text)
 
     def _on_close(self) -> None:
         self._set_status("Cerrando...")

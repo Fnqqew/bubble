@@ -101,9 +101,16 @@ def build(app: BubbleWindow) -> None:
 
     footer = ttk.Frame(shell)
     footer.pack(fill="x", side="bottom", pady=(8, 0))
+    links = ttk.Frame(footer)
+    links.pack(side="right", anchor="n")
+    for text, command in (("Soporte", app.open_support), ("Acerca de", app.open_about)):
+        link = ttk.Label(links, text=text, font="SunValleyCaptionFont", foreground=widgets.palette()["accent"],
+                         cursor="hand2")
+        link.pack(side="left", padx=(12, 0))
+        link.bind("<Button-1>", lambda _event, action=command: action())
     app.status = ttk.Label(footer, text="", font="SunValleyCaptionFont", foreground=widgets.palette()["muted"],
-                           anchor="w", wraplength=540, justify="left")
-    app.status.pack(fill="x")
+                           anchor="w", wraplength=420, justify="left")
+    app.status.pack(side="left", fill="x", expand=True)
     app.voice_panel._update_locks(animate=False)  # (Ajustes se arma después de Voz)
     _show_page(app)
 
@@ -235,9 +242,9 @@ def _settings(app: BubbleWindow, page) -> None:
     app.look_preview.pack(anchor="w", pady=(12, 0))
     _render_preview(app)
     app.shots_var = tk.BooleanVar(value=look.in_screenshots)
-    ttk.Checkbutton(box, text="Que salgan en tus capturas de pantalla", variable=app.shots_var,
+    ttk.Checkbutton(box, text="Que salgan en tus capturas y grabaciones", variable=app.shots_var,
                     style="Switch.TCheckbutton", command=lambda: _change_screenshots(app)).pack(anchor="w", pady=(12, 0))
-    widgets.muted(box, "Con Impr Pant, Win + Shift + S o Win + Impr Pant, para mandar ejemplos.")
+    app.capture_label = widgets.muted(box, "")  # (ver main_window._refresh_capture_label)
 
     box = app.subs_box = widgets.card(page, "Subtítulos de voz")  # (se difumina sin subtítulos: ver voice_panel)
     app.sub_size_var = tk.StringVar(value=_closest(look.subtitle_size, SUB_SIZES))
@@ -285,12 +292,15 @@ def _settings(app: BubbleWindow, page) -> None:
     ttk.Button(row, text="Revisar instalación", command=app.open_setup).pack(side="left")
     ttk.Button(row, text="Desinstalar Bubble…", command=app.open_uninstall).pack(side="right")
 
-    box = widgets.card(page, "Ayuda")
+    box = widgets.card(page, "Ayuda", "¿Algo no anda o se te ocurre una mejora? Escribilo en Soporte (con capturas, "
+                                      "si querés): le llega directo al creador.")
     row = ttk.Frame(box)
     row.pack(fill="x")
     ttk.Button(row, text="Ver el tutorial", command=app.open_tutorial).pack(side="left")
-    ttk.Label(row, text=f"Traduce: Claude {app.config.claude.model}", font="SunValleyCaptionFont",
-              foreground=widgets.palette()["faint"]).pack(side="right")
+    ttk.Button(row, text="Soporte…", command=app.open_support).pack(side="left", padx=(8, 0))
+    ttk.Button(row, text="Acerca de", command=app.open_about).pack(side="left", padx=(8, 0))
+    ttk.Label(box, text=f"Traduce: Claude {app.config.claude.model}", font="SunValleyCaptionFont",
+              foreground=widgets.palette()["faint"]).pack(anchor="w", pady=(10, 0))
 
 
 def later(app: BubbleWindow, name: str, action, delay_ms: int = 250) -> None:

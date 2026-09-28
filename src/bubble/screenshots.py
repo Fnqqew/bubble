@@ -190,6 +190,8 @@ class ScreenshotKeys(threading.Thread):
     def _show(self, visible: bool) -> None:
         if visible == self.showing:
             return
+        if screen.window_mode():
+            return  # se lee la ventana de Roblox sola: las traducciones ya salen en todas las capturas
         log.info("Traducciones %s en las capturas", "visibles" if visible else "ocultas otra vez")
         self._snipping = False
         if visible:

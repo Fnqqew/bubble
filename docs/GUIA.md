@@ -1,4 +1,4 @@
-# Guía de Bubble 3.0
+# Guía de Bubble
 
 Todo lo que no entra en la portada: instalación paso a paso, cómo se usa cada parte, la configuración y cómo está
 hecho por dentro.
@@ -15,20 +15,27 @@ hecho por dentro.
 - [Configuración](#configuración)
 - [Cómo está hecho](#cómo-está-hecho)
 - [Probarlo sin Roblox](#probarlo-sin-roblox)
+- [Soporte y Acerca de](#soporte-y-acerca-de)
 - [Si algo no anda](#si-algo-no-anda)
 
 ---
 
 ## Instalación
 
+> ¿Es tu primera vez? Mirá la [instalación en 5 pasos, con imágenes](INSTALACION.md).
+
 **Doble clic en `Iniciar.bat`.** La primera vez prepara todo solo:
 
-1. **Python 3.12**: si no está, te ofrece instalarlo (con winget) o te lleva a python.org.
+1. **Python** (3.12 o más nuevo, de 64 bits): prueba el que tengas y, si no sirve, te ofrece instalarlo (con winget)
+   o te lleva a python.org.
 2. **El entorno de Bubble** (`.venv`) y sus paquetes, con la parte de voz.
 3. Al abrirse, la ventana **Preparar Bubble** instala lo que falte, con una barra de progreso: el reconocimiento de
    voz (hasta ~500 MB), el de voces (~30 MB) y las voces en inglés (~120 MB). Podés seguir usando la PC.
-4. Lo que necesita tu permiso tiene su botón: **Claude Code** (se abre su instalador oficial y después iniciás sesión
-   con tu suscripción) y el **micrófono virtual** (Windows pide permiso de administrador).
+4. Lo que necesita tu permiso tiene su botón: los **componentes de Windows** (Visual C++, si faltan), **Claude
+   Code** (su instalador oficial), **tu cuenta de Claude** (abre Claude Code para iniciar sesión) y el **micrófono
+   virtual** (Windows pide permiso de administrador).
+
+Anda con Roblox de roblox.com (también con Bloxstrap) y con el de la Microsoft Store.
 
 Cada vez que abrís Bubble se revisa en un segundo, en segundo plano, que no falte nada; si falta algo, vuelve a abrir
 **Preparar Bubble**. También está en **Ajustes → Revisar instalación**. Después, el acceso directo **Bubble** del
@@ -60,8 +67,7 @@ La primera vez aparece un tutorial corto. Se puede saltar, y se reabre desde **A
    juego no lo encuentra: **Ajustes → Buscar el chat**, o **Marcarlo a mano** (arrastrás un rectángulo sobre los
    mensajes).
 5. **Ajustes → Probar lectura** muestra en **Actividad** lo que leyó y qué mensajes reconoció, y guarda imágenes en
-   `%LOCALAPPDATA%\Bubble\debug` (entre ellas una vista con las traducciones encima: las traducciones no salen en
-   las capturas de pantalla, a propósito, así Bubble no se lee a sí mismo).
+   `%LOCALAPPDATA%\Bubble\debug` (entre ellas una vista con las traducciones encima).
 
 ## La ventana
 
@@ -109,11 +115,18 @@ Al abrir aparece un cartelito con el logo y, en un par de segundos, la ventana c
 - Si la traducción es más larga que el original, la burbuja crece en vez de cortar el texto.
 - Se apagan con el interruptor **Burbujas**, en Inicio.
 
-**En tus capturas:** las traducciones salen cuando sacás una captura con **Impr Pant**, **Win + Shift + S** o
-**Win + Impr Pant** (para mandar ejemplos). El resto del tiempo son invisibles para las capturas: así Bubble lee el
-chat original que queda debajo. Mientras sacás la captura deja de leer un momento. La Xbox Game Bar
-(Win + Alt + Impr Pant) y las grabaciones o transmisiones (OBS, Discord) no las muestran. Se apaga en
-**Ajustes → Traducciones en el juego**.
+**En tus capturas y grabaciones.** Las traducciones, los subtítulos y los avisos salen en tus capturas y en tus
+grabaciones de pantalla: **Win + Shift + S**, **Impr Pant**, la **Herramienta Recortes** (también graba video), **OBS**
+con *Captura de pantalla* y **Discord** cuando compartís pantalla. Así podés mostrar cómo anda Bubble o guardar un
+momento del juego.
+
+Para eso, Bubble lee el chat directo de la ventana de Roblox (no de la pantalla), así nunca se lee a sí mismo. Lo
+prueba solo cuando empezás a jugar: si en tu PC Windows no puede darle la imagen de Roblox, vuelve a leer la pantalla
+y las traducciones salen solo en las capturas con Impr Pant y Win + Shift + S (como antes). **Ajustes → Traducciones
+en el juego** te dice cuál de los dos está usando, y ahí mismo se apaga.
+
+Lo que graba solo el juego —el **grabador de Roblox** (Esc → Grabar) y la **Xbox Game Bar**— guarda la imagen de
+Roblox y nada más: ahí no sale nada de lo que esté encima (tampoco de otros programas).
 
 ## Escribir en otro idioma
 
@@ -311,8 +324,13 @@ La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus 
   tocás **Guardar**: aprende tus palabras y cómo querés sonar.
 - **Chat a voz:** como Ctrl+Enter: escribís y escuchás cómo lo dice.
 - **Lo que te dicen:** una voz sintética dice una frase en inglés, como otro jugador, y ves el subtítulo.
-- **Tu PC:** tu procesador, memoria y placa de video, cuánto tarda de verdad en esta PC entender una frase y armar la
-  voz, y cuánto va a tardar tu voz traducida. Te dice si anda excelente, bien, normal o lenta, y qué ajustar.
+- **Tu equipo:** lo que Bubble detectó al abrirse —Windows, procesador, memoria, placa de video, pantalla y escala,
+  tu micrófono y el virtual, Roblox, tu cuenta de Claude, los idiomas para leer texto y tu internet— y cómo se
+  adaptó. Si algo impide que ande del todo, te lo dice con palabras claras y qué hacer. **Medir internet** mide de
+  nuevo (se hace solo una vez por día: se conecta con Claude y con la nube de Pro, y baja 3 MB de prueba de
+  Cloudflare).
+- **Cuánto tarda en tu PC:** cuánto tarda de verdad en esta PC entender una frase y armar la voz, y cuánto va a
+  tardar tu voz traducida. Te dice si anda excelente, bien, normal o lenta, y qué ajustar.
 - **Entrenar tu voz (opcional):** unos 5 minutos, en una ventana aparte, en dos partes:
   1. **Leé en voz alta** 28 frases como las de una partida: voseo, jerga de juego ("pvp", "tradear", "farmear",
      "lag"), nombres de juegos, preguntas, exclamaciones y dos gritos. Después de cada una te dice qué entendió; las
@@ -571,6 +589,21 @@ píldoras fuera de lugar, mensajes sin tapar y basura. Tarda un minuto por escen
 - `python -m bubble.tools.bench_latency --models opus sonnet` mide la latencia por modelo.
 - `python -m bubble --console` traduce por consola (`Nombre: mensaje`, o `> lo que escribís`).
 
+## Soporte y Acerca de
+
+**Soporte** (el link de abajo de todo, o **Ajustes → Ayuda → Soporte…**) es para contar un problema o una idea sin
+salir de Bubble: un **título** que diga qué pasa, **qué pasó y cómo** (los pasos), y si querés **imágenes** —de un
+archivo, una captura que copiaste con Win + Shift + S (**Pegar captura**) o una foto de la ventana de Roblox en ese
+momento (**Captura de Roblox**)—. Podés sumar los datos de tu PC (sin nada personal) y el registro de errores, que
+ayudan a entender el problema mucho más rápido, y tu mail si querés que te respondan.
+
+Se manda con [FormSubmit](https://formsubmit.co), un servicio de formularios que lo reenvía por mail al creador de
+Bubble. Las imágenes se achican antes de mandarse (hasta 10 MB entre todas). Si no hay internet o el servicio no
+responde, Bubble deja el mensaje y las imágenes en una carpeta del escritorio (**Bubble - soporte**) y te abre el
+mail con el texto listo para mandarlo a mano.
+
+**Acerca de** muestra la versión, quién lo hizo, con qué está hecho y a dónde van tus datos.
+
 ## Si algo no anda
 
 Bubble anota lo que va haciendo en `%APPDATA%\Bubble\bubble.log` (cuándo se sacó una captura, si escucha solo a
@@ -588,3 +621,8 @@ falla, esos dos archivos dicen por qué.
   elegir **CABLE Output** como micrófono.
 - **Bubble se cerró de golpe:** los errores quedan en `%APPDATA%\Bubble\errores.log`. Si se cerró mientras
   preparaba la voz, la próxima vez abre con la voz en pausa.
+- **No lee el chat y dice que falta un idioma para leer texto:** Bubble usa el lector de texto de Windows con
+  cualquier idioma que tengas; si no hay ninguno, agregá **Inglés** en Configuración → Hora e idioma → Idioma y
+  región.
+- **Nada de esto:** escribí en **Soporte** (ver [Soporte y Acerca de](#soporte-y-acerca-de)), con una captura si
+  podés.
