@@ -11,7 +11,7 @@ import threading
 import time
 import tkinter as tk
 from tkinter import ttk
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from .. import win32
 from ..config import save_setting
@@ -25,8 +25,6 @@ if TYPE_CHECKING:
     from .main_window import BubbleWindow
 
 MODES = {"boton": "Con un botón", "directo": "Directo, sin botón"}
-ACCURACY = {"rapido": "Rápido", "preciso": "Preciso"}
-PRECISE_MODEL = "large-v3-turbo"  # entiende mucho mejor el español que "small"; ~0,9 s una frase de 3 s (medido)
 GENDERS = {"femenina": "Femenina", "masculina": "Masculina"}
 SAMPLES = {
     "en": "Hi! This is how I'm going to sound.", "pt": "Oi! É assim que eu vou soar.",
@@ -45,8 +43,6 @@ class VoicePanel:
         self.app = app
         self.config = app.config.voice
         self.models = None  # (whisper final, whisper rápido o None, voces conocidas)
-        self.mine = None  # el modelo preciso para TU voz (se carga aparte, sin demorar lo demás)
-        self._mine_loading = False
         self.voices = None
         self.out = None  # la voz sintética (ver voice/pipelines.py)
         self.bridge = None  # tu micrófono pasando al virtual (voice/bridge.py)
@@ -63,7 +59,6 @@ class VoicePanel:
         self.gender_var = tk.StringVar(value=self.config.gender if self.config.gender in GENDERS else "femenina")
         self.speed_var = tk.DoubleVar(value=self.config.speed)
         self.pass_var = tk.BooleanVar(value=self.config.pass_my_voice)
-        self.accuracy_var = tk.StringVar(value="preciso" if self._wants_precise() else "rapido")
         self._soundpad = False  # el micrófono de Windows es el virtual (ver voice/devices.py)
         # El micrófono virtual va a ser el de Windows apenas arranque el puente: mientras tanto no se "arregla" Windows
         # (antes la revisión de dispositivos lo sacaba y un segundo después se volvía a poner: Roblox notaba el cambio).
@@ -92,10 +87,6 @@ class VoicePanel:
         self.lang_box.set(_choice(self.app.config.user.outgoing_language))
         self.lang_box.bind("<<ComboboxSelected>>", lambda _e: self.app._set_outgoing(_code(self.lang_box.get())))
         self.lang_box.pack(side="right")
-        row = widgets.label_row(box, "Entenderte", pady=(8, 2))
-        widgets.segmented(row, self.accuracy_var, ACCURACY, self._change_accuracy).pack(side="right")
-        self.accuracy_info = widgets.muted(box, "")
-        self.refresh_accuracy()
         row = widgets.label_row(box, "Cómo", pady=(8, 2))
         widgets.segmented(row, self.mode_var, MODES, self._change_mode).pack(side="right")
         row = widgets.label_row(box, "Botón para hablar")
@@ -214,6 +205,7 @@ class VoicePanel:
         threading.Thread(target=self._start_soundpad, name="bubble-soundpad", daemon=True).start()
         if self.app.translator is not None:
             self.app.translator.examples_for = self.profile.examples  # cómo querés sonar (página Pruebas)
+            self.app.translator.vocabulary_for = self.profile.vocabulary  # tus palabras, para Claude
         if not (self.config.subtitles or self.config.speak):
             return
         if load_state().get("voice_loading"):
@@ -272,7 +264,6 @@ class VoicePanel:
                 self.models = models
                 self._set_status("")
                 self.app.events.put(("voice_ready", then))
-                self._load_mine()
             except ImportError:
                 self._set_status(NO_VOICE_PACK)
             except Exception as exc:  # noqa: BLE001
@@ -628,124 +619,10 @@ class VoicePanel:
         self.app.tracker.mark_sent(result.translation)
         return result.translation, result.target_lang or target
 
-    # ------------------------------------------------------------ entenderte: rápido o preciso
-    def _wants_precise(self) -> bool:
-        choice = self.config.my_accuracy
-        if choice in ACCURACY:
-            return choice == "preciso"
-        chosen = self.profile.data.get("models", {}).get("elegido") if hasattr(self, "profile") else None
-        if chosen:  # el que mejor te entendió en el entrenamiento
-            return chosen == PRECISE_MODEL
-        from ..voice.checks import cpu_threads, memory_gb
-
-        return cpu_threads() >= 8 and memory_gb() >= 8
-
     def my_asr(self):
-        """Con qué se entiende TU voz: el preciso si está elegido y listo; si no (o mientras carga), el de siempre."""
-        if self.mine is not None and self._wants_precise():
-            return self.mine
+        """Con qué se entiende TU voz: el mismo modelo de siempre ("small" en esta PC). Los grandes (large-v3-turbo) con
+        este método repetían las palabras cortas ("Hola Hola Hola") y tardaban 2 s: se probó y se sacó (ver asr.py)."""
         return self.models[0]
-
-    def _load_mine(self) -> None:
-        """Carga el modelo preciso (la primera vez lo descarga, ~1,6 GB) sin frenar nada: mientras, se usa el rápido."""
-        if not self._wants_precise() or self.mine is not None or self._mine_loading:
-            return
-        self._mine_loading = True
-
-        def work() -> None:
-            try:
-                from ..voice.asr import FastWhisper
-                from ..voice.models import models_dir
-
-                folder = models_dir() / "whisper" / "models--mobiuslabsgmbh--faster-whisper-large-v3-turbo"
-                if not folder.exists():
-                    self._set_status("Descargando el reconocimiento preciso para tu voz (una vez, ~1,6 GB). Mientras, "
-                                     "uso el rápido.")
-                self.mine = FastWhisper(PRECISE_MODEL, 4)
-                self._set_status("")
-                self.app.events.put(("call", self._use_mine))
-            except Exception as exc:  # noqa: BLE001 - se sigue con el rápido
-                log.warning("No se pudo cargar el modelo preciso", exc_info=True)
-                self._set_status(f"No se pudo preparar el reconocimiento preciso ({exc}): uso el rápido.")
-            finally:
-                self._mine_loading = False
-
-        threading.Thread(target=work, name="bubble-voz-precisa", daemon=True).start()
-
-    def _use_mine(self) -> None:
-        """Tu voz pasa a entenderse con el modelo elegido (sin reiniciar nada)."""
-        if self.models is None:
-            return
-        asr = self.my_asr()
-        speaker = self.speaker
-        if speaker is not None and hasattr(speaker, "transcriber"):
-            speaker.transcriber = asr
-        elif speaker is not None and hasattr(speaker, "listener"):
-            speaker.listener.final_asr = speaker.listener.partial_asr = asr
-        self.refresh_accuracy()
-
-    def compare_my_voice(self, done: Callable[[str], None]) -> None:
-        """Con tus grabaciones del entrenamiento: cuánto te entiende cada modelo (el rápido y el preciso) y cuánto
-        tarda. Si no elegiste a mano, queda el que mejor te entiende. `done(mensaje)` se llama al terminar."""
-
-        def work() -> None:
-            try:
-                from ..voice.asr import FastWhisper
-                from ..voice.training import compare_models, pick, saved_clips
-
-                language = self.app.config.user.language
-                clips = saved_clips(language)
-                if len(clips) < 6:
-                    done("")
-                    return
-                precise = self.mine or FastWhisper(PRECISE_MODEL, 4)
-                fast = self.models[0]
-                scores = compare_models({fast.name: fast, PRECISE_MODEL: precise}, clips, language,
-                                        hint=self.profile.hint)
-                chosen = pick(scores, PRECISE_MODEL)
-                self.profile.set_models(scores, chosen)
-                if chosen == PRECISE_MODEL:
-                    self.mine = precise
-                self.app.events.put(("call", self._use_mine))
-                by_name = {score.name: score for score in scores}
-                message = (f"Con tu voz: el preciso entendió el {by_name[PRECISE_MODEL].accuracy:.0%} de tus palabras y "
-                           f"el rápido el {by_name[fast.name].accuracy:.0%}. ")
-                if self.config.my_accuracy in ACCURACY:
-                    message += "Lo dejé como lo elegiste en Voz → Entenderte."
-                else:
-                    message += "Quedó el " + ("preciso." if chosen == PRECISE_MODEL else "rápido (te entiende igual).")
-                done(message)
-            except Exception as exc:  # noqa: BLE001 - es una ayuda
-                log.warning("No se pudo comparar los modelos", exc_info=True)
-                done(f"No pude comparar los modelos: {exc}")
-
-        self._prepare(lambda: threading.Thread(target=work, name="bubble-comparar-voz", daemon=True).start())
-
-    def _change_accuracy(self) -> None:
-        self.config.my_accuracy = self.accuracy_var.get()
-        save_setting("voice", "my_accuracy", self.config.my_accuracy)
-        if self._wants_precise():
-            if self.models is not None:
-                self._load_mine()
-        self._use_mine()
-        self.refresh_accuracy()
-
-    def refresh_accuracy(self) -> None:
-        """Qué hace cada opción y, si entrenaste, cuánto te entendió cada una."""
-        if not hasattr(self, "accuracy_info"):
-            return
-        measured = self.profile.data.get("models", {}).get("puntajes", {})
-        if measured.get(PRECISE_MODEL) and len(measured) >= 2:
-            parts = [f"{'preciso' if name == PRECISE_MODEL else 'rápido'} entendió el {score['accuracy']:.0%} de "
-                     f"tus palabras ({score['seconds']:.1f} s)".replace(".", ",", 1)
-                     for name, score in sorted(measured.items(), key=lambda item: item[0] != PRECISE_MODEL)]
-            text = "Con tu voz (entrenamiento): " + " y ".join(parts) + "."
-        else:
-            text = ("Preciso entiende mucho mejor tu español (un modelo más grande), ~0,5 s más por frase; la primera "
-                    "vez descarga ~1,6 GB. Rápido es el de siempre. Con «Entrenar tu voz» (Pruebas) se elige solo "
-                    "el que mejor te entiende.")
-        self.accuracy_info.configure(text=text)
-        self.accuracy_var.set("preciso" if self._wants_precise() else "rapido")
 
     def _open_voice_lane(self) -> None:
         """El carril rápido de Claude para la voz (se abre una vez y queda caliente)."""
@@ -753,6 +630,7 @@ class VoicePanel:
         if translator is None:
             return
         translator.examples_for = self.profile.examples
+        translator.vocabulary_for = self.profile.vocabulary
 
         async def open_lane() -> None:
             translator.start_voice()

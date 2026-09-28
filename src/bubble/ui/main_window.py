@@ -562,6 +562,8 @@ class BubbleWindow:
         async def apply() -> None:
             if self.bubble_watcher:
                 self.bubble_watcher.start() if enabled else self.bubble_watcher.stop()
+            if enabled and self.translator is not None:
+                self.translator.start_voice()  # el carril rápido (si ya estaba abierto, no hace nada)
 
         self.runner.submit(apply())
         self._set_status("Traduciendo las burbujas." if enabled else "Pausé la traducción de las burbujas.")
@@ -923,11 +925,12 @@ class BubbleWindow:
 
     def _translate_bubble(self, entry: Entry) -> None:
         async def translate() -> None:
-            await asyncio.sleep(0.6)  # casi siempre el mismo mensaje llega también por el chat
+            # Ya, sin esperar: antes se esperaban 0,6 s por si el mismo mensaje llegaba por el chat. Ahora, si el chat
+            # lo pide también, los dos comparten el mismo pedido (ver Translator._inflight): no se gasta dos veces.
             if self.inline_chat.find_text(entry.original) is not None:
                 entry.status = "linked"
                 return
-            result = await self.translator.translate_incoming(entry.original, "")
+            result = await self.translator.translate_incoming(entry.original, "", fast=True)
             self.events.put(("bubble_result", (entry, result)))
 
         self.runner.submit(translate())

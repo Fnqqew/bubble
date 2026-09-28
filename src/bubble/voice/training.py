@@ -161,7 +161,8 @@ def feedback(result: Result) -> str:
 
 # ---------------------------------------------------------------- tu voz grabada: para elegir con qué entenderte
 def clips_dir(language: str) -> Path:
-    """Tus grabaciones del entrenamiento (solo en tu PC): con ellas se elige el modelo que mejor te entiende."""
+    """Tus grabaciones del entrenamiento (solo en tu PC): con ellas se mide cómo te entiende Bubble con tu voz real
+    (ver tools/my_voice.py)."""
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".cache")
     return Path(base) / "Bubble" / "tu_voz" / language.split("-")[0].lower()
 
@@ -190,44 +191,6 @@ def saved_clips(language: str) -> list[tuple[np.ndarray, str]]:
     return clips
 
 
-@dataclass
-class ModelScore:
-    name: str
-    accuracy: float  # palabras bien entendidas (0 a 1)
-    seconds: float  # lo que tarda por frase (mediana)
-
-
-def compare_models(models: dict, clips: list[tuple[np.ndarray, str]], language: str, hint="") -> list[ModelScore]:
-    """Cada modelo con tus grabaciones: cuántas palabras entiende bien y cuánto tarda."""
-    import time
-
-    scores = []
-    for name, model in models.items():
-        if clips:
-            model.transcribe(clips[0][0], language=language, hint=hint)  # la primera vez es más lenta: no cuenta
-        errors, took = [], []
-        for audio, text in clips:
-            started = time.perf_counter()
-            heard = model.transcribe(audio, language=language, hint=hint)
-            took.append(time.perf_counter() - started)
-            errors.append(word_error_rate(text, heard.text if heard else ""))
-        scores.append(ModelScore(name, 1 - statistics.mean(errors), statistics.median(took)))
-    return scores
-
-
-def pick(scores: list[ModelScore], precise: str, max_extra_s: float = 1.5) -> str:
-    """El que conviene para tu voz: el preciso si te entiende claramente mejor (3 puntos o más) sin tardar demasiado;
-    si no, el rápido."""
-    by_name = {score.name: score for score in scores}
-    best = by_name.get(precise)
-    fast = next((score for score in scores if score.name != precise), None)
-    if best is None or fast is None:
-        return (best or fast).name if (best or fast) else ""
-    if best.accuracy - fast.accuracy >= 0.03 and best.seconds - fast.seconds <= max_extra_s:
-        return best.name
-    return fast.name
-
-
 def calibrate(results: list[Result], usual: tuple[float, float, float] | None) -> dict[str, float]:
     """Tus umbrales: cuánto sube tu voz al preguntar y cuánto más fuerte suena tu grito o tu exclamación.
 
@@ -246,7 +209,9 @@ def calibrate(results: list[Result], usual: tuple[float, float, float] | None) -
     if len(statements) >= 3 and len(questions) >= 2:
         low, high = statistics.median(statements), statistics.median(questions)
         if high - low >= 1.0:  # tus preguntas se distinguen: el umbral pasa a ser el tuyo
-            found["question_rise"] = round(low + (high - low) / 2, 2)
+            # Pero una pregunta tiene que SUBIR: si tus afirmaciones bajan mucho, la mitad quedaba negativa (-1,2) y todo
+            # parecía pregunta.
+            found["question_rise"] = round(min(4.0, max(0.5, low + (high - low) / 2)), 2)
     if usual:
         _pitch, level, _effort = usual
         for kind, key, floor in (("shout", "shout_db", 4.0), ("exclaim", "exclaim_db", 2.5)):

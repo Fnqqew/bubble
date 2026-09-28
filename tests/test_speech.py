@@ -110,7 +110,7 @@ def test_training_learns_the_words_whisper_missed(tmp_path):
     assert feedback(check(Item("dale vamos"), "Dale, vamos.", None)).startswith("✓ Te entendí perfecto")
     profile = VoiceProfile(tmp_path / "perfil.json")
     profile.learn_words(result.missed, "es")
-    assert "tradear" in profile.hint("es-AR")
+    assert "tradear" in profile.vocabulary("es-AR")
 
 
 def test_training_makes_the_question_and_shout_thresholds_yours(tmp_path):
@@ -123,7 +123,7 @@ def test_training_makes_the_question_and_shout_thresholds_yours(tmp_path):
     results = [said("normal", -1.0), said("normal", -0.8), said("normal", -1.2), said("question", 1.4),
                said("question", 1.6), said("shout", 0.0, level=-18.0)]
     found = calibrate(results, (150.0, -30.0, -15.0))
-    assert 0.0 < found["question_rise"] < 1.0 and found["shout_db"] >= 4.0
+    assert 0.5 <= found["question_rise"] < 1.0 and found["shout_db"] >= 4.0
     profile = VoiceProfile(tmp_path / "perfil.json")
     for _ in range(5):
         profile.learn_melody(Melody(0.0, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0))
@@ -133,9 +133,8 @@ def test_training_makes_the_question_and_shout_thresholds_yours(tmp_path):
     assert profile.intonation(question) == "question"  # con el tuyo, sí
 
 
-def test_your_recordings_pick_the_model_that_understands_you_best(tmp_path, monkeypatch):
-    from bubble.voice.asr import Heard
-    from bubble.voice.training import ModelScore, compare_models, pick, save_clip, saved_clips
+def test_your_recordings_are_kept_on_your_pc(tmp_path, monkeypatch):
+    from bubble.voice.training import save_clip, saved_clips
 
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     save_clip(np.zeros(RATE, np.float32) + 0.1, "che vamos a la torre", "es-AR", 1)
@@ -144,19 +143,43 @@ def test_your_recordings_pick_the_model_that_understands_you_best(tmp_path, monk
     assert [text for _audio, text in clips] == ["che vamos a la torre", "dale esperame"]
     assert abs(float(clips[0][0].max()) - 0.1) < 1e-3
 
-    class Fake:
-        def __init__(self, text):
-            self.text = text
 
-        def transcribe(self, audio, language=None, hint=""):
-            return Heard(self.text, "es", 1.0, 0.0, -0.1, 1.0, 0.0)
+def test_whisper_echoes_and_copies_are_undone():
+    from bubble.voice.asr import collapse_echo, copied_from
 
-    scores = compare_models({"small": Fake("che vamos a la"), "large-v3-turbo": Fake("che vamos a la torre")},
-                            clips[:1], "es")
-    assert pick(scores, "large-v3-turbo") == "large-v3-turbo"
-    # si el grande no entiende claramente mejor, o tarda demasiado, queda el rápido
-    assert pick([ModelScore("small", 0.90, 0.4), ModelScore("large-v3-turbo", 0.91, 0.9)], "large-v3-turbo") == "small"
-    assert pick([ModelScore("small", 0.70, 0.4), ModelScore("large-v3-turbo", 0.95, 2.5)], "large-v3-turbo") == "small"
-    profile = VoiceProfile(tmp_path / "perfil.json")
-    profile.set_models(scores, "large-v3-turbo")
-    assert VoiceProfile(tmp_path / "perfil.json").data["models"]["elegido"] == "large-v3-turbo"
+    assert collapse_echo("Hola Hola Hola") == "Hola"
+    assert collapse_echo("Dale. Dale. Dale.") == "Dale."
+    assert collapse_echo("comandas, comandas, comandas") == "comandas"
+    assert collapse_echo("Como andas? Como andas?") == "Como andas?"
+    assert collapse_echo("no no no wait for me") == "no no no wait for me"  # hay más: no se toca
+    example = "¿Vamos a la torre? ¡Dale, esperame! ¿Alguien viene conmigo a farmear?"
+    assert copied_from("¿Alguien viene conmigo a farmear?", example)
+    assert not copied_from("Hola, ¿cómo andás?", example)
+    assert not copied_from("vamos a la torre con los pibes que hay un boss nuevo", example)
+
+
+def test_only_clean_things_are_learned_and_old_junk_is_removed(tmp_path):
+    import json
+
+    from bubble.voice.profile import looks_clean
+
+    assert looks_clean("dale, esperame en la torre") and looks_clean("che, vamos con aro y maico")
+    for junk in ("Hola Hola Hola", "comandas, comandas, comandas", "Como andas? Como andas?",
+                 "yonna kiona giona giona giona kiona giona?"):
+        assert not looks_clean(junk), junk
+    path = tmp_path / "perfil.json"
+    path.write_text(json.dumps({  # así quedaba un perfil con la versión anterior
+        "phrases": {"es": ["Hola, ¿cómo te va?", "Hola Hola Hola", "comandas, comandas, comandas"]},
+        "saved": {"en|hola hola hola": "Hey hey, hey", "en|dale esperame": "wait for me",
+                  "en|yonna kiona giona giona giona kiona giona?": "Yonna, kiona"},
+        "words": {"es": ["que", "ese", "tradear", "lauti", "nos"]},
+        "calibration": {"question_rise": -1.19},
+    }), encoding="utf-8")
+    profile = VoiceProfile(path)
+    assert profile.data["phrases"]["es"] == ["Hola, ¿cómo te va?"]
+    assert profile.data["saved"] == {"en|dale esperame": "wait for me"}
+    assert profile.vocabulary("es") == ("tradear", "lauti")  # las comunes no hacen falta
+    assert profile.data["calibration"]["question_rise"] == 0.5  # una pregunta tiene que subir
+    assert profile.hint("es") and "lauti" not in profile.hint("es")  # a Whisper, solo el ejemplo fijo
+    profile.remember("Hola Hola Hola", "en", "Hey hey hey")
+    assert profile.saved("hola hola hola", "en") is None

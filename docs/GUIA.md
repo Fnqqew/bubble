@@ -89,6 +89,9 @@ Al abrir aparece un cartelito con el logo y, en un par de segundos, la ventana c
 **Las burbujas** sobre la cabeza de los jugadores:
 
 - Se detectan varias veces por segundo y la traducción las sigue con la cámara.
+- La traducción aparece ~1,6 s después de que aparece la burbuja (leerla tarda ~0,05 s; el resto es Claude). Va por
+  el carril rápido, sin esperar detrás del chat; y si el mismo mensaje también está en el chat, se traduce una sola
+  vez para los dos. Antes tardaba ~2,2 s o más (esperaba 0,6 s por si llegaba por el chat y después hacía fila).
 - Las burbujas apiladas del mismo jugador se separan.
 - Si una burbuja pasa por detrás del chat, su traducción queda tapada igual que el original.
 - Si la traducción es más larga que el original, la burbuja crece en vez de cortar el texto.
@@ -160,13 +163,6 @@ escucha todo lo que suena en la PC.
 
 **Te escuchan en** (en la página **Voz**) es el idioma de tu voz: el mismo que el de la barra para escribir.
 
-**Entenderte: Rápido o Preciso** (en la página **Voz**). Con **Preciso**, tu voz la entiende un modelo mucho más
-grande (Whisper `large-v3-turbo`), que entiende bastante mejor el español hablado: ~0,9 s una frase de 3 s en vez de
-~0,4 s (medido), y la primera vez descarga ~1,6 GB (mientras, usa el rápido). **Rápido** es el de siempre. Las
-voces del juego se siguen entendiendo con el rápido. En automático queda Preciso si tu PC da (8 hilos y 8 GB de
-memoria o más); y si hiciste el entrenamiento, **el que mejor te entendió a vos**: el entrenamiento guarda tus
-grabaciones (solo en tu PC, en `%LOCALAPPDATA%\Bubble\tu_voz`) y compara los dos modelos con tu voz real.
-
 **Tus pausas.** Apenas hacés una pausa, Bubble lee lo que dijiste. Si suena terminado, lo traduce ya (sin esperar
 más silencio ni volver a leerlo); si quedó a medias ("fui a buscar la espada y…", "porque…"), espera a que sigas.
 Así no te corta a mitad de frase y, cuando terminás, sale enseguida.
@@ -178,8 +174,13 @@ sintética lo acompaña: más rápida y fuerte si gritaste, más suave si hablas
 
 **Aprende tu forma de hablar.** Cuanto más lo usás, mejor te entiende y más rápido traduce:
 
-- Whisper recibe ejemplos de cómo hablás (voseo, jerga de juego, con ¿? y ¡!) y tus últimas frases: entiende mejor
-  tus palabras (medido: ~20 % menos palabras mal entendidas con voces rioplatenses, y el doble de ¿? y ¡!).
+- Whisper recibe un ejemplo fijo y corto de cómo se habla (voseo, jerga de juego, con ¿? y ¡!): entiende mejor y
+  pone los signos. Nada más: con listas de palabras o frases aprendidas, en frases cortas ("hola") inventaba o
+  repetía ("Hola Hola Hola"). Si alguna vez copia el ejemplo en vez de escucharte, se da cuenta y vuelve a leer.
+- Tus palabras y nombres (de tus amigos, tu jerga, lo que Whisper no te entendía) se los pasa a **Claude**: así
+  entiende qué quisiste decir aunque Whisper haya escuchado otra cosa parecida.
+- Solo aprende lo seguro: nada con palabras repetidas ni cosas que no son palabras. Lo que se había aprendido mal
+  antes se limpia solo.
 - Lo que ya dijiste queda guardado: si volvés a decir lo mismo ("dale, esperame"), sale al instante.
 - En **Pruebas** corregís lo que entendió o cómo lo tradujo: Claude usa esas traducciones de modelo para sonar como
   vos querés.
@@ -231,14 +232,21 @@ El chat de voz de Roblox pide verificación de edad. Usar voz sintética puede i
 casos: usala con cuidado, para comunicarte.
 
 **Cómo es tan rápido.** Whisper se entrenó con ventanas de 30 s y, de la forma normal, procesa siempre 30 s aunque la
-frase dure 2. Bubble le pasa solo la frase: tarda 10 a 40 veces menos. Mientras alguien habla usa un modelo rápido
-(`base`) y para el texto final uno más preciso (`small`); en inglés alcanza con el rápido. En procesadores chicos
-se usan modelos más livianos solos.
+frase dure 2. Bubble le pasa la frase completada con silencio hasta 3 s: tarda muchas veces menos. Mientras alguien
+habla usa un modelo rápido (`base`) y para el texto final uno más preciso (`small`); en inglés alcanza con el rápido.
+En procesadores chicos se usan modelos más livianos solos.
 
-La voz tiene **su propio carril con Claude**: una sesión aparte (no espera detrás de las traducciones del chat), que
-responde sin "pensar" antes (pensando tardaba de 2 a 4 s; sin pensar, ~1,5 s). Si alguna vez tarda de más, se le
-pregunta también al carril del chat y gana el primero. Medido con frases rioplatenses, desde que terminás de hablar
-hasta que suena tu voz traducida:
+Con menos de 3 s ("hola", "dale" solos), el modelo no sabía dónde terminaba la frase: repetía ("Dale Dale") o
+inventaba. Completándola a 3 s, en las mismas frases de prueba (voces de Windows en español) pasó de 39 % a 10 % de
+palabras mal entendidas en frases cortas, y de 11 % a 8 % en largas, sin tardar más. Los modelos grandes
+(`large-v3-turbo`) así recortados repiten las palabras cortas ("Hola Hola Hola") y tardan 2 s: se probaron y no se
+usan. Si igual quedara todo repetido ("Dale. Dale. Dale."), se deja una vez. Con tu micrófono, el ruido que Whisper
+convierte en texto (una tecla, un golpe → "y", "¡Vamos!") se reconoce y se descarta.
+
+La voz y las burbujas tienen **su propio carril con Claude**: una sesión aparte (no espera detrás de las traducciones
+del chat), que responde sin "pensar" antes (pensando tardaba de 2 a 4 s; sin pensar, ~1,5 s). Si alguna vez tarda de
+más, se le pregunta también al carril del chat y gana el primero. Medido con frases rioplatenses, desde que terminás
+de hablar hasta que suena tu voz traducida:
 
 | | Antes | Ahora |
 |---|---|---|
@@ -275,9 +283,9 @@ La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus 
 - **Entrenar tu voz (opcional):** unos 5 minutos, en una ventana aparte, en dos partes:
   1. **Leé en voz alta** 28 frases como las de una partida: voseo, jerga de juego ("pvp", "tradear", "farmear",
      "lag"), nombres de juegos, preguntas, exclamaciones y dos gritos. Después de cada una te dice qué entendió; las
-     palabras que no te entendió pasan a ser pistas para Whisper, y si salió bien pasa sola a la siguiente. Medido
-     con voces rioplatenses sintéticas, en frases nuevas (no las del entrenamiento): después de entrenar entiende mal
-     de 6 a 16 puntos menos de palabras.
+     palabras que no te entendió pasan a tu vocabulario (Claude las usa para entenderte), y si salió bien pasa sola a
+     la siguiente. Tus grabaciones quedan en tu PC (`%LOCALAPPDATA%\Bubble\tu_voz`), para poder medir cómo te
+     entiende con tu voz real.
   2. **Con tus palabras:** te pregunta cómo saludás, qué decís cuando ganás o perdés, cómo pedís ayuda o proponés un
      intercambio, los nombres de tus amigos y juegos, y las expresiones que más usás. Contestás como hablás, corregís
      lo que entendió si hace falta y tocás **Guardar**: queda como tu vocabulario.
@@ -285,10 +293,6 @@ La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus 
   Además aprende tu voz de siempre, **cuánto sube tu voz cuando preguntás** y **cómo suena tu grito**: cada uno
   pregunta y grita distinto, y desde ahí los umbrales son los tuyos. Cortás cuando quieras (**Terminar por ahora**)
   y la próxima vez seguís desde la misma frase. Está en español y en inglés (según tu idioma).
-
-  Y elige **con qué entenderte**: con tus frases grabadas compara el reconocimiento rápido y el preciso (cuántas de
-  tus palabras entiende cada uno y cuánto tarda) y deja el que mejor te entiende; el resultado se ve en **Voz →
-  Entenderte**. Se puede repetir con **Elegir el que mejor me entiende**.
 - **Lo que aprendió:** cuántas frases y palabras tuyas conoce, cuántas traducciones aprobaste, cuántas salen al
   instante, los tiempos promedio de tu voz y lo que sacó del entrenamiento. **Borrar lo aprendido** empieza de cero.
 

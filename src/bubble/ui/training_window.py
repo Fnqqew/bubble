@@ -166,7 +166,7 @@ class TrainingWindow:
                 if len(audio):
                     heard = self.voice.my_asr().transcribe(audio, language=self.language, hint=self.profile.hint,
                                                            retry_beam=3)
-                    if not free:  # tu voz real: para elegir después el modelo que mejor te entiende
+                    if not free:  # tu voz real (solo en tu PC): para medir cómo te entiende y mejorarlo
                         from ..voice.training import save_clip
 
                         save_clip(audio, item.text, self.language, index)
@@ -247,15 +247,6 @@ class TrainingWindow:
             learned.append("cómo gritás")
         message = ("Listo, terminaste el entrenamiento." if completed else
                    f"Guardé lo que hiciste: la próxima seguís desde la frase {self.index + 1}.")
-        if len(self.results) >= 6:
-            # Con tu voz grabada se elige el reconocimiento que mejor te entiende (en segundo plano).
-            message += " Ahora comparo cuál reconocimiento te entiende mejor…"
-
-            def compared(text: str) -> None:
-                if text:
-                    self.app.events.put(("call", lambda: (self.app._set_status(text), self.voice.refresh_accuracy())))
-
-            self.voice.compare_my_voice(compared)
         if learned:
             message += " Aprendí " + ", ".join(learned[:-1]) + (" y " if len(learned) > 1 else "") + learned[-1] + "."
         self.win.destroy()

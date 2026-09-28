@@ -36,7 +36,11 @@ def sentence_for(language: str) -> str:
 
 
 def words(text: str) -> list[str]:
-    return re.findall(r"\w+", text.casefold())
+    """Las palabras, sin mayúsculas ni tildes: "Sí" y "si" cuentan igual (para traducir no cambian nada)."""
+    import unicodedata
+
+    folded = unicodedata.normalize("NFKD", text.casefold())
+    return re.findall(r"\w+", "".join(c for c in folded if not unicodedata.combining(c)))
 
 
 def word_error_rate(reference: str, heard: str) -> float:

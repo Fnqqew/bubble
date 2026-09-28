@@ -52,6 +52,8 @@ class TranslationRequest:
     intonation: str = ""
     # Cómo querés sonar: pares (lo que dijiste, cómo quedó bien) que aprobaste en la página Pruebas.
     examples: tuple[tuple[str, str], ...] = ()
+    # Tus palabras y nombres (de tu perfil de voz): Whisper puede haberlos escuchado mal.
+    vocabulary: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

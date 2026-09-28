@@ -114,6 +114,7 @@ class VoiceSpeaker:
     END_SILENCE_S = 0.8  # silencio que termina la frase si no se pudo leer
     UNFINISHED_S = 1.5  # si lo último suena a frase sin terminar, se espera hasta acá
     NO_SPEECH_S = 6.0  # tocándolo: si no hablás en este tiempo, se cancela
+    MIN_SPEECH_S = 0.2  # menos voz que esto (una tecla, un golpe) no es una frase
 
     def __init__(
         self,
@@ -185,9 +186,8 @@ class VoiceSpeaker:
         return self.profile.hint(self.my_language) if self.profile is not None else ""
 
     def _transcribe(self, audio: np.ndarray) -> Heard | None:
-        # Si duda, el modelo chico prueba con varias hipótesis; el preciso casi no mejora así y tardaría el doble.
-        retry = 0 if "large" in getattr(self.transcriber, "name", "") else 3
-        return self.transcriber.transcribe(audio, language=self.my_language, hint=self._hint(), retry_beam=retry)
+        return self.transcriber.transcribe(audio, language=self.my_language, hint=self._hint(), retry_beam=3,
+                                           clean=True)
 
     def _ended(self, quiet: float, peek: Future | None) -> bool:
         """¿Ya terminaste de hablar? Depende de cómo sonó lo último que dijiste."""
@@ -218,13 +218,14 @@ class VoiceSpeaker:
             with self.mic_factory().recorder(samplerate=SAMPLE_RATE, channels=1, blocksize=BLOCK * 4) as recorder:
                 started = time.monotonic()
                 released_at: float | None = None  # cuándo lo soltaste, si fue un toque
-                spoke, quiet_since, speech_end = False, None, 0
+                spoke, quiet_since, speech_end, voiced = False, None, 0, 0
                 while self.running and time.monotonic() - started < self.MAX_SECONDS:
                     block = audio_io.to_mono(recorder.record(numframes=BLOCK))
                     blocks.append(block)
                     total += len(block)
                     now, held = time.monotonic(), self._held()
                     probs = vad.feed(block)
+                    voiced += int(np.sum(np.asarray(probs) >= 0.5)) if len(probs) else 0
                     if len(probs) and float(np.max(probs)) >= 0.5:
                         spoke, quiet_since, peek = True, None, None  # volvió a hablar: lo leído ya no es el final
                     elif len(probs) and spoke and quiet_since is None:
@@ -252,6 +253,8 @@ class VoiceSpeaker:
             return None, None
         if not blocks:
             return None, None
+        if voiced * 512 / SAMPLE_RATE < self.MIN_SPEECH_S:
+            return None, None  # fue un ruido (una tecla, un golpe), no una frase: no se traduce nada
         return np.concatenate(blocks), (peek if quiet_since is not None else None)
 
     def speak(self, recorded: np.ndarray, early: Future | None = None) -> Turn:
@@ -279,8 +282,6 @@ class VoiceSpeaker:
                 tune.kind() if tune else "")
             if self.profile is not None:
                 self.profile.learn_melody(tune)
-                if turn.sure:
-                    self.profile.learn_phrase(heard.text, self.my_language)
             self.on_event("entendi", heard.text)
             started = time.perf_counter()
             translated = self.translate(heard.text, turn.intonation)
@@ -342,7 +343,7 @@ class DirectVoice:
                             end_silence_s=0.7, quick_end_s=0.3, wait_for_tail=True, unfinished_end_s=1.5)
         self.listener = LiveListener(final_asr, self._caption, partial_asr=final_asr, source_factory=mic_factory,
                                      on_error=lambda msg: on_event("error", msg), settings=settings,
-                                     language=mine, hint=profile.hint if profile is not None else "",
+                                     language=mine, hint=profile.hint if profile is not None else "", clean=True,
                                      judge=profile.intonation if profile is not None else None)
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="bubble-directo-trad")
         self._asked: dict[int, tuple[str, Future]] = {}
@@ -383,8 +384,6 @@ class DirectVoice:
             asked = self._asked.pop(caption.id, None)
             if asked is None or not same_words(asked[0], caption.text):
                 asked = (caption.text, self._pool.submit(self.translate, caption.text, caption.intonation))
-            if self.profile is not None and caption.sure:
-                self.profile.learn_phrase(caption.text, self.listener.language or "")
             self.on_event("entendi", caption.text)
             self._queue.put(asked)
         elif caption.stable and caption.id not in self._asked:

@@ -374,6 +374,7 @@ class Track:
     visible: BubbleBox | None = None
     captured_at: float = 0.0  # time.monotonic() de la captura en que se vio por última vez
     read_at: float = -1e9  # último intento de lectura
+    born: float = 0.0  # cuándo apareció
 
     @property
     def clipped(self) -> bool:
@@ -403,13 +404,20 @@ class Track:
             return self.text_changed
         if self.ocr_signature is None:
             return True  # nunca se leyó
-        # Se leyó y no tenía texto (algo claro que parece burbuja): solo se reintenta si cambió o de a ratos.
-        return self._distance() > SIGNATURE_CHANGED or (now is not None and now - self.read_at > EMPTY_RETRY_S)
+        # Se leyó y no tenía texto (algo claro que parece burbuja): solo se reintenta si cambió o de a ratos. Recién
+        # aparecida se reintenta enseguida: la primera lectura suele caer en la animación de entrada (sin texto aún).
+        if now is None:
+            return self._distance() > SIGNATURE_CHANGED
+        retry = EMPTY_RETRY_YOUNG_S if now - self.born < YOUNG_S else EMPTY_RETRY_S
+        return self._distance() > SIGNATURE_CHANGED or now - self.read_at > retry
 
 
 SIGNATURE_OTHER = 0.12  # desde acá es otro texto seguro: la traducción vieja se oculta enseguida
 EMPTY_RETRY_S = 1.5
+EMPTY_RETRY_YOUNG_S = 0.25
+YOUNG_S = 2.0
 GRACE_S = 0.35  # una burbuja que no se detectó en una captura suelta sigue mostrando su traducción este tiempo
+IDLE_S = 0.15  # sin burbujas a la vista se busca un poco menos seguido (antes 0,3 s: una nueva se veía tarde)
 
 
 def _edge_offset(old: BubbleBox, box: BubbleBox) -> tuple[float, float]:
@@ -502,7 +510,7 @@ class BubbleTracker:
             track.box, track.visible, track.last_seen, track.captured_at = full, box, now, captured_at
         for b_index, box in enumerate(boxes):
             if b_index not in used_boxes:
-                self.tracks.append(Track(next(self._ids), box, now, visible=box, captured_at=captured_at))
+                self.tracks.append(Track(next(self._ids), box, now, visible=box, captured_at=captured_at, born=now))
         # Una burbuja que no se ve por un momento (otro objeto la tapó) no se olvida enseguida.
         self.tracks = [t for t in self.tracks if now - t.last_seen <= self.forget_s]
         return [t for t in self.tracks if t.last_seen == now]
@@ -611,4 +619,4 @@ class BubbleWatcher:
                 continue
             # Con burbujas a la vista se sigue rápido; sin ninguna, se busca con menos frecuencia (menos CPU).
             wait = self.pacer.sleep if self.pacer else self.interval_s
-            await asyncio.sleep(wait if self.tracker.tracks else max(wait, 0.3))
+            await asyncio.sleep(wait if self.tracker.tracks else max(wait, IDLE_S))

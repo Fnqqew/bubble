@@ -118,3 +118,28 @@ async def test_the_same_words_said_differently_are_not_mixed_up():
     await translator.translate_outgoing("vamos a la torre", "en", spoken=True, from_speech=True, intonation="question")
     await translator.translate_outgoing("vamos a la torre", "en", spoken=True, from_speech=True)
     assert [r.intonation for r in voice.requests] == ["question", ""]  # la segunda no sale de la memoria
+
+
+def test_claude_gets_your_words_to_undo_misheard_ones():
+    text = build_user_prompt(TranslationRequest("vamos con lauti y bauti", "en", "outgoing", spoken=True,
+                                                from_speech=True, vocabulary=("Lauti", "Bauti", "tradear")))
+    assert "misheard" in text and "Lauti, Bauti, tradear" in text
+    plain = build_user_prompt(TranslationRequest("hola", "en", "outgoing", vocabulary=("Lauti",)))
+    assert "Lauti" not in plain  # solo cuando viene de la voz
+
+
+async def test_the_same_message_in_chat_and_bubble_is_translated_once():
+    translator, main, voice = make(main_delay=0.2, detections={"hello there my friend": ("en", 0.9)})
+    translator.batcher.start()
+    chat = asyncio.create_task(translator.translate_incoming("hello there my friend", "Bob"))
+    bubble = asyncio.create_task(translator.translate_incoming("hello there my friend", "", fast=True))
+    from_chat, from_bubble = await asyncio.gather(chat, bubble)
+    assert from_chat.translation == from_bubble.translation == "hey (chat)"
+    assert len(main.requests) + len(voice.requests) == 1  # un solo pedido para los dos
+
+
+async def test_bubbles_skip_the_chat_batch_and_use_the_fast_lane():
+    translator, main, voice = make(detections={"where is the boss": ("en", 0.9)})
+    await _open_lane(translator)
+    await translator.translate_incoming("where is the boss", "", fast=True)
+    assert len(voice.requests) == 1 and main.requests == []

@@ -140,6 +140,7 @@ class LiveListener:
         native: str = "",
         hint="",
         judge=None,
+        clean: bool = False,
     ) -> None:
         """`hint`: ejemplo de cómo se habla, para Whisper (texto o función idioma → texto). `judge`: función que dice
         cómo lo dijo esa voz (tu perfil: con tu voz de siempre y tus umbrales); sin eso, se compara cada voz del juego
@@ -159,6 +160,7 @@ class LiveListener:
         self.native = native.split("-")[0].lower()
         self.hint = hint
         self.judge = judge
+        self.clean = clean  # tu micrófono (no el juego): el ruido que se vuelve texto se descarta más estricto
         self._usual: dict[int, Usual] = {}  # cómo habla cada voz del juego (para notar sus gritos)
         self._running = threading.Event()
         self._wake = threading.Condition()
@@ -383,7 +385,7 @@ class LiveListener:
         strength = 3.0 if len(audio) < 2 * SAMPLE_RATE else 1.0
         try:
             heard = self.partial_asr.transcribe(audio, language=utterance.language or self.language,
-                                                prior=self._prior(strength), hint=self.hint)
+                                                prior=self._prior(strength), hint=self.hint, clean=self.clean)
         finally:
             if tail:
                 utterance.tail_pending = False
@@ -422,7 +424,7 @@ class LiveListener:
                 heard = quick
         if heard is None:
             heard = self.final_asr.transcribe(audio, language=self.language, prior=self._prior(0.5), retry_beam=5,
-                                              hint=self.hint)
+                                              hint=self.hint, clean=self.clean)
         if self.speakers:
             # Si no alcanza el audio para reconocer la voz, queda la que se supo mientras hablaba (o "Voz").
             utterance.speaker = self.speakers.identify(audio, hint=utterance.speaker)

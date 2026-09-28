@@ -62,7 +62,7 @@ class FakeWhisper:
     def __init__(self, text="anyone wanna trade?", language="en"):
         self.text, self.language, self.calls = text, language, []
 
-    def transcribe(self, audio, language=None, beam_size=1, prior=None, retry_beam=0, hint=""):
+    def transcribe(self, audio, language=None, beam_size=1, prior=None, retry_beam=0, hint="", clean=False):
         from bubble.voice.asr import Heard
 
         self.calls.append(len(audio) / SAMPLE_RATE)

@@ -247,6 +247,25 @@ def run_bubbles(video: Path, translations: dict[str, str]) -> dict:
     base = RobloxConfig().bubble_interval_s
     pacer = Pacer(SHARES["alta"]["bubbles"], base * MIN_INTERVAL_FACTOR["alta"], 1.0)
     watcher = BubbleWatcher(WindowsOcr("en"), lambda: area, lambda: None, on_bubbles, interval_s=base, pacer=pacer)
+    # Cuánto tarda cada burbuja desde que se la ve por primera vez hasta que se lee su texto (y si se leyó a medias).
+    seen: dict[int, float] = {}
+    read: dict[int, float] = {}
+    texts: dict[int, list[str]] = {}
+    update, read_text = watcher.tracker.update, watcher._read_text
+
+    def timed_update(boxes, captured_at):
+        tracks = update(boxes, captured_at)
+        for track in tracks:
+            seen.setdefault(track.id, time.monotonic())
+        return tracks
+
+    async def timed_read(track, image):
+        await read_text(track, image)
+        if track.text and (not texts.get(track.id) or texts[track.id][-1] != track.text):
+            texts.setdefault(track.id, []).append(track.text)
+            read.setdefault(track.id, time.monotonic())
+
+    watcher.tracker.update, watcher._read_text = timed_update, timed_read
 
     async def animate() -> None:
         while True:
@@ -280,8 +299,16 @@ def run_bubbles(video: Path, translations: dict[str, str]) -> dict:
         task.cancel()
 
     loop.run_until_complete(run())
+    delays = sorted(read[i] - seen[i] for i in read if i in seen)
+
+    def percentile(p: float) -> float | None:
+        return round(delays[min(len(delays) - 1, int(p * len(delays)))], 2) if delays else None
+
     return {"burbujas_con_traduccion": f"{stats['covered']}/{stats['boxes']}",
-            "fuera_de_lugar": f"{stats['misplaced']}/{stats['pills']}", "lecturas": reads}
+            "fuera_de_lugar": f"{stats['misplaced']}/{stats['pills']}",
+            "hasta_leer_p50": percentile(0.5), "hasta_leer_p90": percentile(0.9),
+            "leidas_a_medias": sum(len(v) > 1 for v in texts.values()), "burbujas_leidas": len(texts),
+            "lecturas": reads}
 
 
 # ---------------------------------------------------------------- voz

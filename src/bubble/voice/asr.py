@@ -1,11 +1,18 @@
 """Voz a texto casi instantánea: Whisper mirando solo el audio que hay.
 
 Whisper se entrenó con ventanas de 30 s y, usado de la forma normal, procesa siempre 30 s aunque la frase dure 2
-(en un procesador de 6 núcleos: ~1,7 s con "base", ~5,4 s con "small"). Acá se le pasa solo la frase más 1 s de
-silencio: la parte pesada tarda 40 veces menos ("small" transcribe en ~0,5 s y "base" en ~0,15 s). Sin la ventana
-completa el modelo a veces no sabe dónde terminar y repite la frase: eso se corta (ver `cut_repetitions`).
+(en un procesador de 6 núcleos: ~1,7 s con "base", ~5,4 s con "small"). Acá se le pasa solo la frase más silencio
+hasta completar al menos 3 s: la parte pesada tarda muchas veces menos ("small" transcribe en ~0,5 s y "base" en
+~0,15 s). Sin la ventana completa el modelo a veces no sabe dónde terminar y repite la frase: eso se corta (ver
+`cut_repetitions`).
 
-Medido con el laboratorio de voz (tools/voice_lab.py): con "small" así se equivoca menos que "base" de la forma normal.
+Medido (27/9/2026, voces de Windows en español):
+- Con una palabra sola ("hola", "dale") y solo 1 s de silencio, el modelo no sabía dónde terminaba y repetía
+  ("Dale Dale") o inventaba; completando a 3 s se equivoca bastante menos, en el mismo tiempo.
+- Los modelos grandes (large-v3-turbo) así recortados repiten las palabras cortas ("Hola Hola Hola") y tardan 2 s: no
+  sirven con este método. "medium" entiende parecido a "small" y tarda más del doble.
+- Un ejemplo de cómo se habla (`hint`) ayuda, pero si el audio es poco claro Whisper puede copiar el ejemplo en vez
+  de escuchar: se detecta y se vuelve a leer sin ejemplo (ver `copied_from`).
 """
 
 from __future__ import annotations
@@ -24,6 +31,7 @@ from .stt import is_hallucination
 
 SAMPLE_RATE = 16000
 PAD_S = 1.0  # silencio al final: le avisa al modelo que la frase terminó
+MIN_WINDOW_S = 3.0  # y se completa hasta esto: con menos, las frases cortas salían mal (medido)
 TOKENS_PER_S = 8  # tope de largo del texto según lo que dura el audio (evita que siga inventando)
 # Las escrituras no latinas ocupan muchos más tokens por palabra (el hindi, hasta 4 por letra).
 DENSE_SCRIPTS = {"hi", "bn", "ta", "te", "mr", "gu", "th", "ar", "fa", "ur", "he", "el", "zh", "ja", "ko", "ru", "uk",
@@ -34,7 +42,7 @@ DENSE_TOKENS_PER_S = 30
 LIKELY = {"en", "es", "pt", "fr", "de", "it", "nl", "ru", "uk", "pl", "tr", "ar", "hi", "ur", "bn", "id", "ms", "vi",
           "th", "tl", "zh", "ja", "ko", "sv", "no", "da", "fi", "ro", "hu", "cs", "el", "he", "fa", "ta", "te"}
 UNLIKELY_WEIGHT = 0.05
-MAX_HINT_TOKENS = 160  # alcanza para tus palabras y tus frases; más largo demora (medido)
+MAX_HINT_TOKENS = 96  # un ejemplo corto: más largo no mejora, demora y se copia más fácil
 
 
 @dataclass
@@ -79,6 +87,40 @@ def cut_repetitions(text: str) -> str:
                 break
             index += 1
     return " ".join(words).strip(" ,")
+
+
+ECHO_MAX_S = 3.0
+
+
+def collapse_echo(text: str) -> str:
+    """Todo lo que "se entendió" es lo mismo varias veces ("Hola Hola Hola", "Dale. Dale. Dale.", "comandas,
+    comandas, comandas"): en un audio corto es el modelo repitiendo, no la persona. Queda una vez. Si además hay otras
+    palabras ("no no no wait for me"), no se toca."""
+    words = text.split()
+    plain = [re.sub(r"[^\w']", "", word.lower()) for word in words]
+    count = len(plain)
+    for size in range(1, count // 2 + 1):
+        if count % size == 0 and all(plain[i] == plain[i % size] for i in range(count)):
+            return " ".join(words[:size]).rstrip(" ,")
+    return text
+
+
+def _plain_words(text: str) -> list[str]:
+    import unicodedata
+
+    folded = unicodedata.normalize("NFKD", text.casefold())
+    return re.findall(r"[a-z0-9ñ']+", "".join(c for c in folded if not unicodedata.combining(c)))
+
+
+def copied_from(text: str, hint: str) -> bool:
+    """Whisper devolvió un pedazo del ejemplo en vez de lo que se dijo (pasa con audio poco claro): 3 o más palabras
+    seguidas que están tal cual en el ejemplo, y casi nada más."""
+    said, example = _plain_words(text), _plain_words(hint)
+    if len(said) < 3 or not example:
+        return False
+    grams = {tuple(example[i:i + 3]) for i in range(len(example) - 2)}
+    found = [tuple(said[i:i + 3]) in grams for i in range(len(said) - 2)]
+    return sum(found) >= max(1, 0.6 * len(found))
 
 
 def _pick_language(scores: list[tuple[str, float]], prior: dict[str, float]) -> tuple[str, float]:
@@ -129,7 +171,7 @@ class FastWhisper:
 
     def transcribe(self, audio: np.ndarray, language: str | None = None, beam_size: int = 1,
                    prior: dict[str, float] | None = None, retry_beam: int = 0,
-                   hint: str | Callable[[str], str] = "") -> Heard | None:
+                   hint: str | Callable[[str], str] = "", clean: bool = False) -> Heard | None:
         """`audio`: mono, float32, 16 kHz. `language`: si ya se sabe, no se detecta. `prior`: peso extra de algunos
         idiomas al detectarlo (los que se vienen escuchando). `hint`: texto de ejemplo en ese idioma (o una función
         idioma → texto): Whisper escribe parecido (tus palabras, el voseo, los ¿? y ¡!). None si no había voz."""
@@ -138,7 +180,8 @@ class FastWhisper:
         started = time.perf_counter()
         language = language.split("-")[0].lower() if language else None  # "es-AR" → "es"
         seconds = len(audio) / SAMPLE_RATE
-        padded = np.concatenate([np.asarray(audio, dtype=np.float32), np.zeros(int(PAD_S * SAMPLE_RATE), np.float32)])
+        pad = max(PAD_S, MIN_WINDOW_S - seconds)  # frases cortas: se completa hasta 3 s (si no, repetía o inventaba)
+        padded = np.concatenate([np.asarray(audio, dtype=np.float32), np.zeros(int(pad * SAMPLE_RATE), np.float32)])
         with self._lock:
             features = self._model.feature_extractor(padded)
             frames = features.shape[1] - features.shape[1] % 2  # el codificador pide una cantidad par
@@ -148,33 +191,41 @@ class FastWhisper:
             if not language:
                 language, probability = _pick_language(self._model.model.detect_language(encoded)[0], prior or {})
             tokenizer = self._tokenizer(language)
-            prompt = [tokenizer.sot, tokenizer.language, tokenizer.transcribe, tokenizer.no_timestamps]
+            base = [tokenizer.sot, tokenizer.language, tokenizer.transcribe, tokenizer.no_timestamps]
             example = hint(language) if callable(hint) else hint
+            prompt = base
             if example:
                 # "Lo que se dijo antes" (así lo usa Whisper): marca el estilo del texto, no se transcribe.
-                prompt = [tokenizer.sot_prev, *tokenizer.encode(" " + example.strip())[-MAX_HINT_TOKENS:], *prompt]
+                prompt = [tokenizer.sot_prev, *tokenizer.encode(" " + example.strip())[-MAX_HINT_TOKENS:], *base]
             limit = min(440, int((DENSE_TOKENS_PER_S if language in DENSE_SCRIPTS else TOKENS_PER_S) * seconds) + 12)
-            limit = min(448, limit + len(prompt))  # el tope cuenta también las pistas
 
-            def decode(beams: int):
+            def decode(beams: int, with_prompt: list[int]):
                 return self._model.model.generate(
-                    encoded, [prompt], beam_size=beams, max_length=limit, suppress_blank=True,
-                    repetition_penalty=1.1, return_scores=True, return_no_speech_prob=True,
+                    encoded, [with_prompt], beam_size=beams, max_length=min(448, limit + len(with_prompt)),
+                    suppress_blank=True, repetition_penalty=1.1, return_scores=True, return_no_speech_prob=True,
                 )[0]
 
-            result = decode(beam_size)
+            result = decode(beam_size, prompt)
             if retry_beam > beam_size and _unsure(result):
                 # Salió dudosa (voces rápidas, gritos, música del juego): se prueba con varias hipótesis, reusando lo
                 # ya calculado. La voz clara no paga ese costo (el doble de procesador y de demora, medido).
                 # En frases largas, menos hipótesis: con 5 el final de un monólogo tardaba 2 s (medido).
-                result = decode(retry_beam if seconds <= 5 else min(retry_beam, 3))
+                result = decode(retry_beam if seconds <= 5 else min(retry_beam, 3), prompt)
+            if example and copied_from(tokenizer.decode(result.sequences_ids[0]), example):
+                result = decode(max(beam_size, 1), base)  # copió el ejemplo en vez de escuchar: sin ejemplo
         tokens = result.sequences_ids[0]
         text = cut_repetitions(tokenizer.decode(tokens).strip())
+        if seconds < ECHO_MAX_S:
+            text = collapse_echo(text)
         logprob = float(result.scores[0]) if result.scores else 0.0
         heard = Heard(text, language, float(probability), float(result.no_speech_prob), logprob, seconds,
                       time.perf_counter() - started)
-        # Solo se descarta con evidencia fuerte de que no había voz: el detector de voz ya dijo que alguien hablaba, y
-        # con la música y los efectos del juego Whisper duda más (se tiraban frases enteras de verdad).
+        # Audio del juego: solo se descarta con evidencia fuerte de que no había voz (con la música y los efectos
+        # Whisper duda más y se tiraban frases enteras de verdad). Tu micrófono (`clean`) es audio limpio: ahí el ruido
+        # que Whisper convierte en texto ("y", "¡Vamos!") se reconoce claro (no_speech 0,6 a 0,8 y muy poca confianza;
+        # una palabra de verdad, como "sí" o "no", nunca pasa de 0,15, medido) y se descarta.
         if not text or is_hallucination(text) or (heard.no_speech > 0.8 and logprob < -1.0):
+            return None
+        if clean and ((heard.no_speech > 0.5 and logprob < -0.8) or logprob < -2.0):
             return None
         return heard

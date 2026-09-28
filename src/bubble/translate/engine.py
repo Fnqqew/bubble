@@ -48,8 +48,12 @@ class Translator:
         # El último idioma en el que hablaste o escribiste: se mantiene (antes, en "automático", se elegía de nuevo en
         # cada mensaje según el chat y cambiaba solo).
         self.last_target: str | None = None
+        # Pedidos en curso por texto: si el chat y la burbuja piden el mismo mensaje a la vez, se hace uno solo.
+        self._inflight: dict[tuple[str, str], asyncio.Future] = {}
         # Cómo querés sonar: devuelve pares (dijiste, quedó bien) aprobados en la página Pruebas para ese idioma.
         self.examples_for: Callable[[str], tuple[tuple[str, str], ...]] | None = None
+        # Tus palabras y nombres (perfil de voz), para que Claude entienda lo que Whisper escuchó mal.
+        self.vocabulary_for: Callable[[str], tuple[str, ...]] | None = None
         self.detector = detector or LanguageDetector()
         self.cache = TranslationCache(config.translation.cache_size, config.translation.cache_max_words)
         self.history: deque[ChatLine] = deque(maxlen=max(1, config.translation.context_lines))
@@ -61,8 +65,8 @@ class Translator:
     async def start(self) -> None:
         await asyncio.gather(asyncio.to_thread(self.detector.load), self.router.start())
         self.batcher.start()
-        if self.config.voice.speak or self.config.voice.subtitles:
-            self.start_voice()
+        if self.config.voice.speak or self.config.voice.subtitles or self.config.roblox.translate_bubbles:
+            self.start_voice()  # el carril rápido: la voz y las burbujas
 
     def start_voice(self) -> None:
         """Abre el carril de la voz en segundo plano (y lo deja caliente). Mientras abre, la voz usa el del chat."""
@@ -137,13 +141,15 @@ class Translator:
         on_pending: Callable[[], None] | None = None,
         from_speech: bool = False,
         intonation: str = "",
+        fast: bool = False,
     ) -> TranslationResult:
         """`on_pending` se llama (sin esperar) justo antes de pedirle la traducción a Claude:
         sirve para reservar el lugar del mensaje en pantalla, en el orden del chat. `from_speech`: lo dijeron por voz
-        (va por el carril rápido y Claude sabe que puede haber palabras mal entendidas)."""
+        (va por el carril rápido y Claude sabe que puede haber palabras mal entendidas). `fast`: sin esperar a juntarse
+        con otros mensajes y por el carril rápido si está abierto (las burbujas: se ven al lado del jugador)."""
         lang, region = self.my_locale
         return await self._translate(text, lang, region, "incoming", speaker, on_delta, on_pending=on_pending,
-                                     from_speech=from_speech, intonation=intonation)
+                                     from_speech=from_speech, intonation=intonation, fast=fast)
 
     async def translate_outgoing(
         self,
@@ -163,8 +169,10 @@ class Translator:
             region = self.outgoing_region(lang)
         tone = clamp_tone(tone if tone is not None else self.config.user.tone)
         examples = self.examples_for(lang) if self.examples_for else ()
+        vocabulary = self.vocabulary_for(self.my_locale[0]) if (from_speech and self.vocabulary_for) else ()
         return await self._translate(text, lang, region, "outgoing", MY_SPEAKER, on_delta, tone, spoken=spoken,
-                                     from_speech=from_speech, intonation=intonation, examples=examples)
+                                     from_speech=from_speech, intonation=intonation, examples=examples,
+                                     vocabulary=vocabulary)
 
     async def _translate(
         self,
@@ -180,6 +188,8 @@ class Translator:
         from_speech: bool = False,
         intonation: str = "",
         examples: tuple[tuple[str, str], ...] = (),
+        vocabulary: tuple[str, ...] = (),
+        fast: bool = False,
     ) -> TranslationResult:
         start = time.perf_counter()
         text = text.strip()
@@ -240,18 +250,43 @@ class Translator:
         if (cached := self.cache.get(text, cache_key)) is not None:
             self.history.append(ChatLine(speaker, text))
             return result(cached, "cache", source)
+        flight = (" ".join(text.casefold().split()), cache_key)
+        if (shared := self._inflight.get(flight)) is not None:
+            # Ya se está traduciendo (el mismo mensaje en el chat y en la burbuja): se espera ese mismo pedido.
+            if on_pending:
+                on_pending()
+            shared_result = await asyncio.shield(shared)
+            return replace(shared_result, total_s=time.perf_counter() - start)
+        pending = asyncio.get_running_loop().create_future()
+        self._inflight[flight] = pending
+        try:
+            finished = await self._ask(text, target, region, direction, speaker, source, mode, hints, tone, spoken,
+                                       from_speech, intonation, examples, vocabulary, cache_key, on_delta,
+                                       on_pending, fast, result)
+        except BaseException as exc:
+            finished = result(text, "error", source, error=str(exc) or type(exc).__name__)
+            pending.set_result(finished)
+            raise
+        finally:
+            self._inflight.pop(flight, None)
+        if not pending.done():
+            pending.set_result(finished)
+        return finished
 
+    async def _ask(self, text, target, region, direction, speaker, source, mode, hints, tone, spoken, from_speech,
+                   intonation, examples, vocabulary, cache_key, on_delta, on_pending, fast, result) -> TranslationResult:
+        """El pedido a Claude (ya se sabe que hace falta: no estaba en caché ni en curso)."""
         request = TranslationRequest(
             text, target, direction, speaker, tuple(self.history),
             target_region=region, mode=mode, slang_hints=_hint_tuples(hints), tone=tone, spoken=spoken,
-            from_speech=from_speech, intonation=intonation, examples=tuple(examples),
+            from_speech=from_speech, intonation=intonation, examples=tuple(examples), vocabulary=tuple(vocabulary),
         )
         # Se agrega al contexto ya (no al terminar) para que el siguiente mensaje del chat lo tenga en cuenta.
         self.history.append(ChatLine(speaker, text))
         if on_pending:
             on_pending()
         try:
-            routed = await self._route(request, on_delta)
+            routed = await self._route(request, on_delta, fast)
             if looks_wrong(text, routed.text, request.context):
                 # Traducción sospechosa (mezcló otros mensajes o inventó texto): reintento sin contexto.
                 retry = replace(request, context=())
@@ -269,12 +304,12 @@ class Translator:
         status = "adapted" if mode == "adapt" else "translated"
         return result(routed.text, status, source, routed.provider, ttft_s=routed.ttft_s)
 
-    async def _route(self, request: TranslationRequest, on_delta: DeltaCallback | None):
+    async def _route(self, request: TranslationRequest, on_delta: DeltaCallback | None, fast: bool = False):
         """Por dónde va cada pedido:
-        - la voz (lo que decís, lo que te dicen, lo que escribís para decir): carril rápido;
+        - la voz (lo que decís, lo que te dicen, lo que escribís para decir) y las burbujas: carril rápido;
         - lo que escribís para el chat: directo, sin esperar a que se junten mensajes;
         - los mensajes del chat: en lotes (llegan en ráfagas)."""
-        voice = request.spoken or request.from_speech
+        voice = request.spoken or request.from_speech or fast
         if voice and self._voice_ready():
             if on_delta is None:
                 return await self._hedged(request)

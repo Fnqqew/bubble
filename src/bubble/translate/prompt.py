@@ -187,6 +187,9 @@ def build_user_prompt(requests: TranslationRequest | Sequence[TranslationRequest
                          "translate it as an exclamation, keeping the emotion.")
         elif "soft" in marks:
             parts.append("They said it quietly and calmly: keep it calm, no exclamation marks.")
+    if first.from_speech and first.vocabulary:
+        parts.append("Words and names this player often says (the speech recognition may have misheard them as "
+                     f"similar-sounding words): {escape(', '.join(first.vocabulary))}.")
     if first.examples:
         pairs = "\n".join(f"{escape(said)} => {escape(wanted)}" for said, wanted in first.examples)
         parts.append(f"<how_i_sound>\n{pairs}\n</how_i_sound>\n"

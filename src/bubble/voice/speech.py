@@ -108,7 +108,7 @@ class Melody:
             if louder >= shout_db or (strained >= SHOUT_STRAIN and higher >= 1.2) or (
                     self.clipped > CLIPPED and louder >= 4):
                 marks.append("shout")
-            elif (louder >= exclaim_db and higher >= 1.1) or (higher >= 1.25 and self.spread >= 8):
+            elif louder >= exclaim_db and higher >= 1.1:  # más fuerte Y más agudo: con solo más agudo se equivocaba
                 marks.append("exclaim")
             elif louder <= SOFT_DB and higher <= 1.02:
                 marks.append("soft")

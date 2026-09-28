@@ -1,13 +1,17 @@
 """Lo que Bubble aprende de cómo hablás, para entenderte mejor y traducir más rápido cuanto más lo usás.
 
-- Tus frases (las que se entendieron con seguridad y las que confirmaste en la página Pruebas) y tus palabras (las que
-  Whisper no te entendía en el entrenamiento, tus nombres, tu jerga): se le pasan a Whisper como ejemplo, y así
-  escribe tus palabras, tus nombres y tu forma de hablar.
+- Tus palabras (tus nombres, tu jerga, las que Whisper no te entendía en el entrenamiento) y tus frases (solo las que
+  confirmaste vos): se le pasan a Claude, que con eso entiende qué quisiste decir aunque Whisper haya escuchado otra
+  cosa. A Whisper NO: con una lista de palabras o frases de ejemplo largas, en frases cortas ("hola") inventaba o
+  repetía ("Hola Hola Hola", "Podla"); medido. Whisper recibe solo un ejemplo fijo y corto (voice/speech.py).
 - Cuánto sube tu voz al preguntar y cómo suena tu grito (del entrenamiento): cada uno pregunta y grita distinto.
 - Cómo querés sonar: las traducciones que aprobaste o corregiste en Pruebas; Claude las usa de modelo.
 - Frases ya traducidas: si volvés a decir lo mismo ("dale, esperame"), sale al instante, sin preguntarle a Claude.
 - Tu voz de siempre (tono y volumen): para darse cuenta cuando exclamás o gritás.
 - Cuánto tarda cada paso, para mostrarlo en Pruebas.
+
+Solo se aprende lo seguro: nada con palabras repetidas ni cosas que no son palabras ("yonna kiona giona"). Lo que se
+había aprendido así antes se limpia solo al abrir (ver `_clean`).
 
 Se guarda en %LOCALAPPDATA%\\Bubble\\perfil_voz.json (solo en tu PC). Se borra desde la página Pruebas.
 """
@@ -25,14 +29,14 @@ from .speech import EXAMPLES, Melody
 
 log = logging.getLogger(__name__)
 MAX_PHRASES = 40
-PHRASES_IN_HINT = 6
 MAX_EXAMPLES = 8
 EXAMPLES_IN_PROMPT = 6
 MAX_SAVED = 400
 SAVE_UP_TO_WORDS = 8  # frases más largas dependen del contexto: no se reusan
 MIN_MELODIES = 5  # con menos frases no se sabe cómo hablás normalmente
 MAX_WORDS = 120
-WORDS_IN_HINT = 45  # medido: con 20 casi no ayudaba; con 45, 6 a 16 puntos menos de error; con 80, más lento
+WORDS_FOR_CLAUDE = 60
+QUESTION_RISE_RANGE = (0.5, 4.0)  # una pregunta tiene que SUBIR: antes podía quedar negativo y todo era pregunta
 _WORDS = re.compile(r"\w+", re.UNICODE)
 
 
@@ -48,6 +52,30 @@ def phrase_key(text: str) -> str:
     return words + ("?" if "?" in text else "") + ("!" if "!" in text else "")
 
 
+def looks_clean(text: str) -> bool:
+    """¿Se puede aprender? No si repite palabras seguidas ("Hola Hola Hola", "comandas, comandas") ni si casi nada son
+    palabras conocidas ("yonna kiona giona giona"): eso es Whisper inventando, no vos hablando."""
+    from ..translate.langdetect import is_gaming, known_anywhere
+
+    words = [w.casefold() for w in _WORDS.findall(text)]
+    if not words:
+        return False
+    if any(words[i] == words[i + 1] for i in range(len(words) - 1)):
+        return False
+    half = len(words) // 2
+    if half >= 2 and words[:half] == words[half:2 * half]:
+        return False  # "como andas como andas"
+    # La lista de palabras comunes es chica ("torre" no está): solo se rechaza si casi nada es conocido.
+    unknown = [w for w in words if not (known_anywhere(w) or is_gaming(w) or w.isdigit())]
+    return len(words) < 3 or len(unknown) < 0.8 * len(words)
+
+
+def _common(word: str) -> bool:
+    from ..translate.langdetect import known_anywhere
+
+    return known_anywhere(word)
+
+
 class VoiceProfile:
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or default_path()
@@ -59,25 +87,42 @@ class VoiceProfile:
                 self.data.update({key: value for key, value in loaded.items() if isinstance(value, dict)})
         except (OSError, ValueError):
             pass
+        if self._clean():
+            self.save()
+
+    def _clean(self) -> bool:
+        """Saca lo que se aprendió mal (versiones anteriores aprendían sin revisar). True si cambió algo."""
+        before = json.dumps(self.data, sort_keys=True, ensure_ascii=False)
+        self.data["phrases"] = {lang: [p for p in phrases if looks_clean(p)]
+                                for lang, phrases in self.data["phrases"].items()}
+        self.data["saved"] = {key: value for key, value in self.data["saved"].items()
+                              if looks_clean(key.split("|", 1)[-1]) and looks_clean(value)}
+        self.data["words"] = {lang: list(dict.fromkeys(w for w in words if len(w) > 2 and not _common(w)))
+                              for lang, words in self.data["words"].items()}
+        rise = self.data["calibration"].get("question_rise")
+        if rise is not None:
+            low, high = QUESTION_RISE_RANGE
+            self.data["calibration"]["question_rise"] = min(high, max(low, rise))
+        return json.dumps(self.data, sort_keys=True, ensure_ascii=False) != before
 
     @staticmethod
     def _empty() -> dict:
         return {"phrases": {}, "examples": {}, "saved": {}, "melody": {}, "times": {}, "words": {},
                 "calibration": {}, "training": {}}
 
-    # ------------------------------------------------------------ Whisper: tus palabras
+    # ------------------------------------------------------------ Whisper y Claude: tus palabras
     def hint(self, language: str) -> str:
-        """Ejemplo para Whisper en ese idioma: cómo se habla (con ¿? ¡!), tus palabras y tus últimas frases. Lo más
-        tuyo va al final: si no entra todo, se recorta el principio."""
-        language = language.split("-")[0].lower()
-        words = self.data["words"].get(language, [])[-WORDS_IN_HINT:]
-        mine = self.data["phrases"].get(language, [])[-PHRASES_IN_HINT:]
-        vocabulary = (", ".join(words) + ".") if words else ""
-        return " ".join(part for part in [EXAMPLES.get(language, ""), vocabulary, *mine] if part).strip()
+        """Ejemplo para Whisper en ese idioma: uno fijo y corto, de cómo se habla (voseo, jerga, ¿? ¡!). Nada de lo
+        aprendido: con eso Whisper inventaba en las frases cortas (medido)."""
+        return EXAMPLES.get(language.split("-")[0].lower(), "")
+
+    def vocabulary(self, language: str) -> tuple[str, ...]:
+        """Tus palabras y nombres, para Claude: así entiende qué quisiste decir si Whisper escuchó otra cosa."""
+        return tuple(self.data["words"].get(language.split("-")[0].lower(), [])[-WORDS_FOR_CLAUDE:])
 
     def learn_words(self, found: list[str], language: str) -> None:
-        """Palabras tuyas (las que Whisper no te entendía, nombres, jerga): pasan a ser pistas para Whisper."""
-        found = [word.strip() for word in found if word.strip()]
+        """Palabras tuyas (nombres, jerga, las que Whisper no te entendía). Las comunes ("que", "ese") no hacen falta."""
+        found = [word.strip() for word in found if len(word.strip()) > 2 and not _common(word.strip())]
         if not found:
             return
         language = language.split("-")[0].lower()
@@ -89,7 +134,7 @@ class VoiceProfile:
 
     def learn_phrase(self, text: str, language: str) -> None:
         text = text.strip()
-        if len(_WORDS.findall(text)) < 2:
+        if len(_WORDS.findall(text)) < 2 or not looks_clean(text):
             return
         language = language.split("-")[0].lower()
         with self._lock:
@@ -119,7 +164,7 @@ class VoiceProfile:
         return self.data["saved"].get(f"{target.split('-')[0].lower()}|{phrase_key(text)}")
 
     def remember(self, text: str, target: str, translation: str) -> None:
-        if not translation.strip() or len(_WORDS.findall(text)) > SAVE_UP_TO_WORDS:
+        if not translation.strip() or len(_WORDS.findall(text)) > SAVE_UP_TO_WORDS or not looks_clean(text):
             return
         with self._lock:
             self._keep(text, target.split("-")[0].lower(), translation.strip())
@@ -161,6 +206,7 @@ class VoiceProfile:
         with self._lock:
             self.data["calibration"].update({key: value for key, value in found.items()
                                              if key in ("question_rise", "shout_db", "exclaim_db")})
+            self._clean()
         self.save()
 
     def set_models(self, scores, chosen: str) -> None:
