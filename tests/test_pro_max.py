@@ -385,3 +385,68 @@ def test_new_subtitles_slide_in_and_the_toast_renders():
     assert appearing.size == settled.size
     assert np.asarray(appearing)[..., 3].sum() < np.asarray(settled)[..., 3].sum()  # la nueva todavía tenue
     assert render_toast("✦  Bubble Pro activado", True).size[1] > 30
+
+
+class _RealTimeSpeaker:
+    """Un parlante de mentira que se vacía en tiempo real, como el de Windows: cuenta las veces que se quedó sin
+    audio en el medio (eso es lo que se escucha entrecortado)."""
+
+    def __init__(self):
+        self.gaps = 0
+        self.blocksizes = []
+
+    def player(self, samplerate, channels, blocksize=None):
+        speaker = self
+
+        class Player:
+            def __enter__(self):
+                self.rate, self.capacity = samplerate, (blocksize or int(samplerate * 0.01)) / samplerate
+                speaker.blocksizes.append(blocksize)
+                self.queued, self.last, self.started = 0.0, time.perf_counter(), False
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def _drain(self):
+                now = time.perf_counter()
+                if self.started:
+                    self.queued -= now - self.last
+                    if self.queued < -0.02:
+                        speaker.gaps += 1
+                    self.queued = max(0.0, self.queued)
+                self.last = now
+
+            def play(self, data):
+                seconds = len(data) / self.rate
+                while seconds > 1e-9:
+                    self._drain()
+                    space = self.capacity - self.queued
+                    if space <= 0:
+                        time.sleep(0.001)
+                        continue
+                    take = min(space, seconds)
+                    self.queued += take
+                    seconds -= take
+                    self.started = True
+
+        return Player()
+
+
+def test_cloud_voice_does_not_stutter_when_the_network_hiccups():
+    from bubble.voice import audio as audio_io
+
+    rate = 24000
+
+    def network():
+        for index in range(30):  # 3 s de voz, de a 0,1 s
+            time.sleep(0.15 if index % 6 == 5 else 0.03)  # cada tanto la red se demora
+            yield np.zeros(rate // 10, np.float32)
+
+    class Output:
+        device = _RealTimeSpeaker()
+
+    played = audio_io.play_stream(Output(), network(), rate)
+    assert played == pytest.approx(3.0, abs=0.01)
+    assert Output.device.gaps == 0  # antes: se quedaba sin audio en cada demora (entrecortado)
+    assert Output.device.blocksizes == [int(rate * audio_io.STREAM_BUFFER_S)]

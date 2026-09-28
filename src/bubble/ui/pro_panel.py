@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import itertools
 import threading
 import time
 import tkinter as tk
@@ -28,7 +29,7 @@ COMPARISON = (
     ("Entender voces", "Whisper en tu PC", "Nova-3 en la nube: entiende a los que hablan rápido o se pisan"),
     ("Idiomas", "Uno por frase", "Más de 60, y mezclados en la misma frase (\"hagamos pvp\")"),
     ("Voces que hablan por vos", "Las de tu PC", "Naturales y con personalidad (hay acento argentino)"),
-    ("Tu voz traducida", "Suena cuando está lista", "Empieza a sonar en ~0,25 s"),
+    ("Tu voz traducida", "Suena cuando está lista", "Empieza a sonar en ~0,35 s"),
     ("Tu procesador", "Trabaja para la voz", "Queda libre para Roblox"),
     ("Costo", "Gratis", "Por uso: ~0,35 US$ por hora de voz (200 US$ gratis al empezar)"),
 )
@@ -286,7 +287,7 @@ class ProPanel:
                     if first is not None:
                         name = (voice_name(language, voice.voices.gender, self.config.personality) or "")
                         message = f"{name.split('-')[2].capitalize()} · empezó a sonar en {_money(waited)} s"
-                        audio_io.play_stream(audio_io.monitor_output(), [first, *pieces], rate)
+                        audio_io.play_stream(audio_io.monitor_output(), itertools.chain([first], pieces), rate)
             except Exception as exc:  # noqa: BLE001 - se muestra
                 message = f"No se pudo probar: {exc}"
             finally:

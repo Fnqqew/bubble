@@ -95,7 +95,7 @@ cómo gritás. [Más](docs/GUIA.md#pruebas).
 | **Entender voces** | Whisper, en tu PC | Nova-3 en la nube: entiende a los que hablan rápido o se pisan |
 | **Idiomas** | uno por frase | más de 60, y mezclados en la misma frase (*"hagamos pvp"*) |
 | **Voces que hablan por vos** | las de tu PC | naturales y con personalidad: alegre, canchera o tranquila (hay acento argentino) |
-| **Tu voz traducida** | suena cuando está lista | empieza a sonar en **~0,25 s** |
+| **Tu voz traducida** | suena cuando está lista | empieza a sonar en **~0,35 s**, sin cortes |
 | **Tu procesador** | trabaja para la voz | queda libre para Roblox |
 | **Se ve** | como siempre | dorado, adentro y afuera del juego |
 | **Costo** | gratis | por uso, con tu cuenta de Deepgram: **~0,35 US$ por hora de voz** (la cuenta nueva trae 200 US$) |
@@ -187,7 +187,7 @@ Y con Bubble Pro (medido con una cuenta real de Deepgram):
 
 | | |
 |---|---|
-| Voz de la nube | empieza a sonar en **0,22 a 0,25 s** (esperando la frase entera: 1 a 2,5 s) |
+| Voz de la nube | empieza a sonar en **0,31 a 0,40 s**, sin cortes (esperando la frase entera: 1 a 2,5 s) |
 | Una frase con el botón | entendida en **0,6 s** (inglés) · con *pvp*, *Blox Fruits* y *farmear* bien escritos |
 | Conexión en vivo | sigue abierta en los silencios largos · **14 s** sin hablar, sin cortes |
 | Costo de toda esa prueba | **0,006 US$** |

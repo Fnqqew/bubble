@@ -335,7 +335,7 @@ entiende y habla mejor. La traducción, en los dos, la hace tu suscripción de C
 | Entender voces | Whisper | Nova-3: mucho mejor con gente que habla rápido o se pisa (en una pelea real, tu PC erraba 2 de cada 3 palabras) |
 | Idiomas | ~100, uno por frase | más de 60; inglés, español, portugués, francés, alemán, italiano, ruso, hindi, japonés y neerlandés mezclados en la misma frase |
 | Voces que hablan por vos | Piper | Aura-2: naturales y con personalidad (ver abajo) |
-| Tu voz traducida | suena cuando está lista | empieza a sonar a los ~0,25 s (mientras la nube la sigue armando) |
+| Tu voz traducida | suena cuando está lista | empieza a sonar a los ~0,35 s (mientras la nube la sigue armando), sin cortes |
 | Palabras tuyas y de juego | Whisper con ejemplos | la nube las prioriza (*pvp*, *Blox Fruits*, *farmear* y lo que aprendió de vos) |
 | Tu procesador | trabaja para la voz | libre: Whisper ni se carga (queda de respaldo) |
 | Se ve | como siempre, con la insignia BASIC | dorado: ventana, insignia PRO, barra para escribir y traducciones en el juego |

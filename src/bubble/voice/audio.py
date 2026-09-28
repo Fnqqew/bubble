@@ -138,31 +138,70 @@ def play(output: Output, audio: np.ndarray, rate: int) -> None:
     output.device.play(np.concatenate([audio, tail]), samplerate=rate)
 
 
+STREAM_BUFFER_S = 0.25  # colchón del reproductor (el de Windows por defecto es ~10 ms: con eso la voz se cortaba)
+STREAM_START_S = 0.35  # se empieza a reproducir con esto listo
+
+
 def play_stream(output: Output, pieces, rate: int, on_piece: Callable[[float], None] | None = None) -> float:
-    """Reproduce pedazos a medida que llegan (bloquea hasta terminar). Se junta ~0,25 s antes de empezar, así una
-    demora de la red no corta la voz. `on_piece(segundos)`: antes de cada pedazo. Devuelve los segundos que sonó."""
+    """Reproduce pedazos a medida que llegan (bloquea hasta terminar). Devuelve los segundos que sonó.
+
+    Los pedazos se traen en otro hilo, así ir a buscar el próximo (la red) nunca frena la reproducción, y el
+    reproductor tiene un colchón de STREAM_BUFFER_S: una demora corta de la red no se nota. Antes el mismo hilo
+    reproducía y esperaba la red con ~10 ms de colchón, y la voz sonaba entrecortada. `on_piece(segundos)`: antes de
+    cada pedazo que se manda a sonar."""
+    import queue
+    import threading
+
     com_ready()
+    incoming: queue.Queue = queue.Queue()
+
+    def produce() -> None:
+        try:
+            for piece in pieces:
+                incoming.put(np.asarray(piece, dtype=np.float32).ravel())
+        except Exception:  # noqa: BLE001 - se corta la voz, no Bubble
+            import logging
+
+            logging.getLogger(__name__).debug("Se cortó la voz que llegaba", exc_info=True)
+        finally:
+            incoming.put(None)
+
+    threading.Thread(target=produce, name="bubble-voz-llega", daemon=True).start()
     played = 0.0
     buffer: list[np.ndarray] = []
-    buffered = 0
-    with output.device.player(samplerate=rate, channels=1) as player:
-        for piece in pieces:
-            buffer.append(np.asarray(piece, dtype=np.float32).ravel())
-            buffered += len(buffer[-1])
-            if played == 0.0 and buffered < rate * 0.25:
+    buffered, done = 0, False
+    while buffered < rate * STREAM_START_S:  # un poco listo antes de empezar
+        piece = incoming.get()
+        if piece is None:
+            done = True
+            break
+        buffer.append(piece)
+        buffered += len(piece)
+    with output.device.player(samplerate=rate, channels=1, blocksize=int(rate * STREAM_BUFFER_S)) as player:
+        while True:
+            if buffer:
+                chunk = np.clip(np.concatenate(buffer), -1, 1)
+                buffer = []
+                if on_piece:
+                    on_piece(len(chunk) / rate)
+                player.play(chunk)  # vuelve cuando queda ~STREAM_BUFFER_S por sonar
+                played += len(chunk) / rate
+            if done:
+                break
+            piece = incoming.get()
+            if piece is None:
+                done = True
                 continue
-            chunk = np.clip(np.concatenate(buffer), -1, 1)
-            buffer, buffered = [], 0
-            if on_piece:
-                on_piece(len(chunk) / rate)
-            player.play(chunk)
-            played += len(chunk) / rate
-        if buffer:
-            chunk = np.clip(np.concatenate(buffer), -1, 1)
-            if on_piece:
-                on_piece(len(chunk) / rate)
-            player.play(chunk)
-            played += len(chunk) / rate
+            buffer.append(piece)
+            while True:  # y todo lo que ya llegó, junto
+                try:
+                    extra = incoming.get_nowait()
+                except queue.Empty:
+                    break
+                if extra is None:
+                    done = True
+                    break
+                buffer.append(extra)
         player.play(np.zeros(int(rate * TAIL_S), dtype=np.float32))
     return played
 
