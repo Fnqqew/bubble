@@ -163,6 +163,8 @@ class ComposeBar:
         self.index = 0
         self.tone = 3
         self.busy = False  # traduciendo para enviar: no se edita
+        # Abierta (se puede leer desde cualquier hilo; `visible` pregunta a Tk y eso solo vale en el de la ventana).
+        self.showing = False
         self._after: str | None = None
         self._dots: str | None = None
         self._requested: tuple[str, str, int] | None = None
@@ -239,6 +241,7 @@ class ComposeBar:
             self._x = (self.win.winfo_screenwidth() - self.WIDTH) // 2
             self._bottom = self.win.winfo_screenheight() - 140
         self._fit()
+        self.showing = True
         self.win.deiconify()
         self.win.lift()
         if not self._styled:
@@ -279,6 +282,7 @@ class ComposeBar:
         text = self.entry.get().strip()
         self._draft, self._draft_at = ("", 0.0) if sent else (text, time.monotonic())
         self.busy = False
+        self.showing = False
         self.win.withdraw()
 
     # --- interno

@@ -89,9 +89,9 @@ Al abrir aparece un cartelito con el logo y, en un par de segundos, la ventana c
 **Las burbujas** sobre la cabeza de los jugadores:
 
 - Se detectan varias veces por segundo y la traducción las sigue con la cámara.
-- La traducción aparece ~1,6 s después de que aparece la burbuja (leerla tarda ~0,05 s; el resto es Claude). Va por
-  el carril rápido, sin esperar detrás del chat; y si el mismo mensaje también está en el chat, se traduce una sola
-  vez para los dos. Antes tardaba ~2,2 s o más (esperaba 0,6 s por si llegaba por el chat y después hacía fila).
+- La traducción aparece ~1 s después de que aparece la burbuja (leerla tarda ~0,05 s; el resto es Claude). Va por
+  el carril rápido (Haiku), sin esperar detrás del chat; y si el mismo mensaje también está en el chat, se traduce una
+  sola vez para los dos. Antes tardaba ~2,2 s o más (esperaba 0,6 s por si llegaba por el chat y hacía fila).
 - Las burbujas apiladas del mismo jugador se separan.
 - Si una burbuja pasa por detrás del chat, su traducción queda tapada igual que el original.
 - Si la traducción es más larga que el original, la burbuja crece en vez de cortar el texto.
@@ -107,7 +107,8 @@ chat original que queda debajo. Mientras sacás la captura deja de leer un momen
 
 En el juego apretá el atajo (**°** por defecto) y se abre una barra para escribir:
 
-- **Escribí como hablás vos.** Mientras escribís ves cómo va a quedar la traducción, en celeste, debajo.
+- **Escribí como hablás vos.** Mientras escribís ves cómo va a quedar la traducción, en celeste, debajo. Las
+  traducciones del chat, de las burbujas y los subtítulos siguen a la vista mientras escribís.
 - **Enter:** lo traduce y lo manda al chat de Roblox. Bubble solo hace tres cosas: abre el chat con su tecla,
   escribe el mensaje y aprieta Enter. No toca ninguna otra tecla. (Con teclados en español esa tecla también
   escribe «}» en la barra del chat: Bubble lo borra antes de escribir.)
@@ -157,7 +158,7 @@ escucha todo lo que suena en la PC.
 - **Con un botón** (por defecto el **botón lateral del mouse, adelante**):
   - **tocalo y hablá:** cuando terminás de hablar, se traduce y se dice solo (o tocalo otra vez para terminar);
   - o **mantenelo apretado** mientras hablás y soltalo.
-- **Directo, sin botón:** hablás normal. Cada frase que decís sale traducida en voz ~2,5 s después de que terminás.
+- **Directo, sin botón:** hablás normal. Cada frase que decís sale traducida en voz ~2 s después de que terminás.
   Ojo: traduce todo lo que diga tu micrófono.
 - **Escribiendo:** en la barra para escribir, **Ctrl+Enter** en vez de Enter.
 
@@ -244,17 +245,24 @@ usan. Si igual quedara todo repetido ("Dale. Dale. Dale."), se deja una vez. Con
 convierte en texto (una tecla, un golpe → "y", "¡Vamos!") se reconoce y se descarta.
 
 La voz y las burbujas tienen **su propio carril con Claude**: una sesión aparte (no espera detrás de las traducciones
-del chat), que responde sin "pensar" antes (pensando tardaba de 2 a 4 s; sin pensar, ~1,5 s). Si alguna vez tarda de
-más, se le pregunta también al carril del chat y gana el primero. Medido con frases rioplatenses, desde que terminás
+del chat), con **Haiku** y sin "pensar" antes de responder. Medido: tu voz se traduce en ~0,75 s (con Opus ~1,9 s) y
+los subtítulos en ~1 s (con Opus ~1,6 s), casi con la misma calidad; el chat escrito sigue con Opus, que traduce mejor
+la jerga. Si alguna vez tarda de más, se le pregunta también al carril del chat y gana el primero. Desde que terminás
 de hablar hasta que suena tu voz traducida:
 
-| | Antes | Ahora |
+| | Al principio | Ahora |
 |---|---|---|
 | Saber que terminaste | 0,8 s | 0,2 s (y lo leído ya sirve) |
-| Entender tu voz | 0,9 s | 0,4 s |
-| Traducir | 2,6 s (a veces 15 s o nada) | 1,6 s |
-| Armar la voz | 0,4 s | 0,2 s |
-| **Total** | **~4,7 s** | **~2,5 s** |
+| Entender tu voz | 0,9 s | 0,4 a 0,7 s |
+| Traducir | 2,6 s (a veces 15 s o nada) | 0,8 a 1,2 s |
+| Armar la voz | 0,4 s | 0,2 a 0,4 s |
+| **Total** | **~4,7 s** | **~2 s** |
+
+**Inglés rápido.** Con gente que habla muy rápido y se pisa (una pelea, por ejemplo), el reconocimiento que entra en
+tu PC se equivoca bastante: en una grabación real así, 66 % de palabras mal (medido). Se probaron cortes más cortos,
+más hipótesis y modelos más grandes: nada mejora sin volverse lento (el grande con la ventana completa baja a 50 %
+pero tarda 6 veces más de lo que dura el audio). La alternativa en estudio son los **Subtítulos en vivo de Windows**
+(Win + Ctrl + L), que están hechos para eso.
 
 **Probarlo sin Roblox.** El laboratorio de voz arma conversaciones con voces sintéticas (una persona, gente
 hablando rápido, un grupo que se pisa, siete idiomas, música y explosiones de fondo, un monólogo largo) y mide

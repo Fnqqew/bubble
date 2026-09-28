@@ -32,9 +32,9 @@ adapt_slang = false
 # Usa la suscripción de Claude con la que iniciaste sesión en Claude Code.
 # Alias: "opus", "sonnet", "haiku", o un ID completo como "claude-opus-5-5".
 model = "opus"
-# La voz (lo que decís y lo que te dicen) va por su propia sesión, sin pensar antes de responder (~1,6 s por
-# traducción). "" = el mismo modelo que `model`; también "sonnet" (tarda lo mismo, medido).
-voice_model = ""
+# La voz (lo que decís y lo que te dicen) y las burbujas van por su propia sesión, sin pensar antes de responder.
+# "haiku": tu voz se traduce en ~0,75 s (con Opus ~1,9 s), casi con la misma calidad (medido). "" = el mismo que `model`.
+voice_model = "haiku"
 # low = más rápido. medium/high = más razonamiento (más lento).
 effort = "low"
 # Sesiones de Claude abiertas como máximo (se abren solas si llegan pedidos juntos y se cierran al rato).

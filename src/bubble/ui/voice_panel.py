@@ -586,7 +586,7 @@ class VoicePanel:
     def _is_my_language(self, text: str, language: str) -> bool:
         """¿Ya está en tu idioma? Tu idioma no se traduce nunca. Whisper a veces confunde el español rioplatense con
         portugués o italiano: además de lo que dice Whisper, se miran las palabras."""
-        from ..translate.langdetect import foreign_words, lexical_share, without_gaming
+        from ..translate.langdetect import foreign_words, native_by_words, without_gaming
 
         mine = self.app.config.user.language.split("-")[0].lower()
         detector = getattr(self.app.translator, "detector", None)
@@ -595,7 +595,7 @@ class VoicePanel:
             return not (detection and detection.lang != mine and detection.is_confident(0.8))
         if detection and detection.lang == mine and detection.is_confident(0.5):
             return True
-        return lexical_share(text, mine) >= 0.6 and not foreign_words(text, mine)
+        return native_by_words(text, mine) and not foreign_words(text, mine)
 
     # ------------------------------------------------------------ tu voz: texto en tu idioma → (traducción, idioma)
     def _translate_mine(self, text: str, intonation: str = "") -> tuple[str, str] | None:
@@ -740,7 +740,7 @@ class VoicePanel:
         self.board.mine(original, translation, language)
 
     def _tick(self) -> None:
-        visible = win32.roblox_is_foreground()
+        visible = self.app._in_game()  # con la barra para escribir abierta, los subtítulos siguen
         area = self.app._game_area() if visible else None
         lines = self.board.visible() if self.board is not None else []
         self.subtitles.update(lines, area, visible)

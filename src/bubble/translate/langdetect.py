@@ -20,7 +20,7 @@ UNIVERSAL_TOKENS = {
 # nada del idioma del mensaje: antes un "pvp" o un "lag" hacía que un mensaje en español pareciera inglés (y se
 # traducía).
 GAMING_WORDS = set("""
-    pvp pve pvpear lag laggy lagueado lagueo lagea lageando noob noobs nub nubs newbie pro pros hacker hackers hack
+    pvp pve pvpear lag laggy lagueado lagueo lagea lageando noob noobs nub nubs newbie hacker hackers hack
     hacks hacking cheater cheaters cheat cheats bug bugs bugueado buguea bugeado glitch glitches op nerf nerfeo
     nerfearon
     buff buffs bufeo loot looteo lootear farm farmear farmeando farmar farming grind grindear grindeando spawn spawns
@@ -80,6 +80,12 @@ COMMON_WORDS: dict[str, set[str]] = {
         out get got go going come want wanna gonna gotta know think like just really very so too also now then
         some any all one two lol lmao bro dude guys man pls please thanks thx ty sorry hi hello hey bye game
         play playing trade im u ur r its lets let see look help need
+        wait same stop run follow here coming came give take gave took tell told say said ask where whats
+        whos wheres hows thats theres dont cant wont didnt doesnt isnt arent wasnt ive youre hes shes were theyre
+        yall yo sup nice cool good bad best worst better more most much many never always again still already
+        maybe sure fine yep nope nah idk ikr imo tbh brb omw rn wtf smh fr ngl btw pog lets go gonna because
+        cause if than then back over after before first last next new old big small little right left fast slow
+        friend friends team win won lose lost kill killed dead die died spawn buy sell free money give me carry
     """.split()),
 }
 # Palabras que delatan cada idioma: comunes en él pero que no existen en los otros de la lista.
@@ -108,19 +114,36 @@ def is_gaming(token: str) -> bool:
 
 def lexical_share(text: str, lang: str) -> float:
     """Fracción de las palabras del mensaje que son comunes en `lang` (0 si no hay lista para ese idioma). Las palabras
-    de juego ("pvp", "lag") no cuentan para ningún lado."""
+    de juego ("pvp", "lag") no cuentan para ningún lado, siempre que quede con qué decidir: con una sola palabra más
+    ("trade me": "me" también es español) sí cuentan, como palabras de otro idioma (antes se tomaba como español)."""
     words = COMMON_WORDS.get(lang)
-    tokens = [t for t in _WORD_TOKEN.findall(text) if not is_gaming(t) or _chat_forms(t) & (words or set())]
+    every = _WORD_TOKEN.findall(text)
+    tokens = [t for t in every if not is_gaming(t) or _chat_forms(t) & (words or set())]
+    if len(tokens) < 2 and len(tokens) < len(every) and not (tokens and _chat_forms(tokens[0]) & _DISTINCTIVE.get(
+            lang, set())):
+        tokens = every  # queda muy poco (y nada exclusivo de ese idioma): las de juego cuentan
     if not words or not tokens:
         return 0.0
     return sum(bool(_chat_forms(t) & words) for t in tokens) / len(tokens)
 
 
+def native_by_words(text: str, lang: str, share: float = 0.6) -> bool:
+    """¿Las palabras dicen que ya está en `lang`? Casi todas comunes en ese idioma Y (alguna exclusiva de él, o ninguna
+    exclusiva de otro). Sin esto "carry me pls" parecía español ("me" y "pls" también se usan en español)."""
+    if lexical_share(text, lang) < share:
+        return False
+    forms = [_chat_forms(token) for token in _WORD_TOKEN.findall(text)]
+    if any(form & _DISTINCTIVE.get(lang, set()) for form in forms):
+        return True
+    others = set().union(*(words for other, words in _DISTINCTIVE.items() if other != lang))
+    return not any(form & others for form in forms)
+
+
 def without_gaming(text: str) -> str:
     """El mensaje sin las palabras de juego, para detectar el idioma de lo demás ("hagamos pvp en el lobby" → "hagamos
-    en el"). Si no queda nada, el mensaje entero."""
+    en el"). Si queda menos de dos palabras, el mensaje entero (con una sola, el detector adivina)."""
     kept = [t for t in text.split() if not all(is_gaming(w) for w in _WORD_TOKEN.findall(t) or ["x"])]
-    return " ".join(kept) if _WORD_TOKEN.search(" ".join(kept)) else text
+    return " ".join(kept) if len(_WORD_TOKEN.findall(" ".join(kept))) >= 2 else text
 
 
 def words_in(text: str) -> list[str]:

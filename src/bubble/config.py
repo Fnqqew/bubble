@@ -51,9 +51,10 @@ class TranslationConfig:
 @dataclass
 class ClaudeConfig:
     model: str = "opus"
-    # La voz (lo que decís y lo que te dicen) va por su propia sesión, sin pensar antes de responder: ~1,6 s por
-    # traducción. "" = el mismo modelo que `model` (con Opus y Sonnet tarda lo mismo, medido, y Opus traduce mejor).
-    voice_model: str = ""
+    # La voz (lo que decís y lo que te dicen) y las burbujas van por su propia sesión, sin pensar antes de responder.
+    # Con Haiku tu voz se traduce en ~0,75 s (con Opus ~1,9 s) y los subtítulos en ~1 s (Opus ~1,6 s), con casi la
+    # misma calidad (medido). "" = el mismo modelo que `model`.
+    voice_model: str = "haiku"
     effort: str = "low"
     pool_size: int = 3
     session_max_turns: int = 15

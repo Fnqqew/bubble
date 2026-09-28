@@ -407,11 +407,17 @@ class BubbleWindow:
         return roblox.resolve_chat_region(self.saved_region)
 
     def _reading_region(self) -> Rect | None:
-        # Solo se lee con Roblox en primer plano: si no, en esa zona de la pantalla hay otra cosa.
-        return roblox.resolve_chat_region(self.saved_region, require_foreground=True)
+        # Solo se lee con Roblox en primer plano (o escribiendo en la barra, que flota sobre el juego): si no, en esa
+        # zona de la pantalla hay otra cosa.
+        return roblox.resolve_chat_region(self.saved_region, require_foreground=not self.compose.showing)
+
+    def _in_game(self) -> bool:
+        """Estás jugando: Roblox al frente, o la barra para escribir abierta encima. Antes, al abrir la barra se
+        escondían las traducciones del chat, de las burbujas y los subtítulos (Roblox dejaba de estar al frente)."""
+        return self.compose.showing or win32.roblox_is_foreground()
 
     def _overlay_visible(self) -> bool:
-        return win32.roblox_is_foreground() or self.compose.visible
+        return self._in_game()
 
     def _poll_roblox(self) -> None:
         from .widgets import palette
@@ -569,8 +575,8 @@ class BubbleWindow:
         self._set_status("Traduciendo las burbujas." if enabled else "Pausé la traducción de las burbujas.")
 
     def _game_area(self) -> Rect | None:
-        """Pantalla del juego (para buscar burbujas), solo con Roblox en primer plano."""
-        if not win32.roblox_is_foreground():
+        """Pantalla del juego (para buscar burbujas), solo con Roblox en primer plano (o la barra para escribir)."""
+        if not self._in_game():
             return None
         hwnd = win32.find_roblox_window()
         return win32.client_rect(hwnd) if hwnd else None
@@ -901,15 +907,15 @@ class BubbleWindow:
 
     def _ev_chat_frame(self, frame) -> None:
         if self.inline_mode:
-            self.inline_chat.render(frame, win32.roblox_is_foreground())
+            self.inline_chat.render(frame, self._in_game())
 
     def _ev_chat_shift(self, dy: int) -> None:
-        if self.inline_mode and win32.roblox_is_foreground():
+        if self.inline_mode and self._in_game():
             self.inline_chat.shift(dy)
 
     def _ev_bubbles(self, payload) -> None:
         area, items = payload
-        visible = win32.roblox_is_foreground()
+        visible = self._in_game()
         for item in items:
             entry, is_new = self.bubbles.entry_for(item.text)
             if is_new and self.ready:

@@ -15,7 +15,7 @@ from .batcher import Batcher
 from .base import ChatLine, DeltaCallback, Direction, Mode, TranslationRequest, TranslationResult, clamp_tone
 from .cache import TranslationCache
 from .langdetect import (LanguageDetector, foreign_words, is_filtered, is_universal, known_anywhere,
-                         lexical_share, without_gaming, words_in)
+                         native_by_words, without_gaming, words_in)
 from .languages import DEFAULT_REGION, split_locale
 from .router import Router
 from .slang import Slang, laugh_for, laugh_only, scan
@@ -233,7 +233,7 @@ class Translator:
             self._speaker_langs.setdefault(speaker, deque(maxlen=4)).append(source)
         # Ya está en el idioma del lector: lo dice el detector con seguridad, o casi todas sus palabras son
         # comunes en ese idioma (clave para mensajes cortos como "hola", "dale voy", "todo bien?").
-        looks_native = (source == target and (confident or hints)) or lexical_share(text, target) >= LEXICAL_SKIP
+        looks_native = (source == target and (confident or hints)) or native_by_words(text, target, LEXICAL_SKIP)
         if direction == "incoming" and not looks_native and not foreign and not confident:
             looks_native = self._short_from_my_side(text, speaker, target)
         if not foreign and looks_native:

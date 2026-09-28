@@ -143,3 +143,14 @@ async def test_bubbles_skip_the_chat_batch_and_use_the_fast_lane():
     await _open_lane(translator)
     await translator.translate_incoming("where is the boss", "", fast=True)
     assert len(voice.requests) == 1 and main.requests == []
+
+
+async def test_short_foreign_messages_with_game_words_are_translated():
+    from bubble.translate.langdetect import native_by_words
+
+    translator, main, _voice = make()
+    for text in ("trade me", "carry me pls", "vamo pro boss", "wait", "same"):
+        result = await translator.translate_incoming(text, "Player")
+        assert result.status == "translated", text
+    assert native_by_words("tengo lag", "es") and native_by_words("vamos a hacer pvp", "es")
+    assert not native_by_words("carry me pls", "es")  # "me" y "pls" también se usan en español, "carry" no
