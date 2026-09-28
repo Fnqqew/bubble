@@ -101,6 +101,73 @@ def segmented(parent, variable: tk.StringVar, options: dict[str, str], command: 
     return box
 
 
+DIM = 0.7  # qué tan difuminado queda un texto bloqueado (0 = igual, 1 = invisible)
+CONTROLS = (ttk.Button, ttk.Checkbutton, ttk.Radiobutton, ttk.Entry, ttk.Combobox, ttk.Scale, ttk.Spinbox)
+
+
+def mix(color_a: str, color_b: str, amount: float) -> str:
+    """Un color entre `color_a` (0) y `color_b` (1)."""
+    a = [int(color_a.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    b = [int(color_b.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(a, b))
+
+
+def _hex(widget: tk.Misc, color: str) -> str:
+    if color.startswith("#") and len(color) == 7:
+        return color
+    red, green, blue = widget.winfo_rgb(color or palette()["text"])
+    return f"#{red // 256:02x}{green // 256:02x}{blue // 256:02x}"
+
+
+def dim(container: tk.Misc, dimmed: bool, animate: bool = True) -> None:
+    """Bloquea (o desbloquea) todo lo de adentro: los textos se difuminan suave hacia el fondo y los controles no se
+    pueden tocar. Sirve para lo que no corresponde en este momento (lo de Pro en Basic, lo de tu voz si no está
+    prendida…): se ve que existe, pero no se puede usar ni probar por error."""
+    from . import motion
+
+    if getattr(container, "dimmed", False) == dimmed:
+        return
+    container.dimmed = dimmed
+    background = palette()["bg"]
+    labels, controls = [], []
+
+    def collect(widget: tk.Misc) -> None:
+        for child in widget.winfo_children():
+            if isinstance(child, ttk.Label):
+                labels.append(child)
+            elif isinstance(child, CONTROLS):
+                controls.append(child)
+            collect(child)
+
+    collect(container)
+    for control in controls:
+        if dimmed:
+            control.locked_before = control.instate(["disabled"])  # (si ya estaba bloqueado por otra cosa, sigue)
+            control.state(["disabled"])
+        elif not getattr(control, "locked_before", False):
+            control.state(["!disabled"])
+    moves = []
+    for label in labels:
+        current = _hex(label, str(label.cget("foreground")))
+        original = getattr(label, "dim_color", None)
+        if dimmed:
+            original = original or current
+            label.dim_color = original
+            moves.append((label, current, mix(original, background, DIM)))
+        elif original:
+            del label.dim_color
+            moves.append((label, current, original))
+
+    def step(progress: float) -> None:
+        for label, start, end in moves:
+            label.configure(foreground=mix(start, end, progress))
+
+    if animate and moves:
+        motion.animate(container, 0.22, step)
+    else:
+        step(1.0)
+
+
 WHEEL_PX = 64  # píxeles por "clic" de la ruedita
 GLIDE = 0.4  # en cada paso se recorre esta parte de lo que falta (se frena suave al llegar)
 

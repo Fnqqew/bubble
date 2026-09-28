@@ -54,18 +54,32 @@ def build(app: BubbleWindow) -> None:
     root.bind_class("TCombobox", "<MouseWheel>", lambda _event: None)
     root.bind_all("<<ComboboxSelected>>", lambda event: (event.widget.selection_clear(),
                                                          root.after_idle(root.focus_set)), add="+")
-    # Con Bubble Pro: una franja dorada arriba de todo (ver apply_pro_look).
-    app.pro_stripe = tk.Frame(root, height=3, background=pro.gold(), borderwidth=0, highlightthickness=0)
+    # Con Bubble Pro: una franja dorada arriba de todo (ver apply_pro_look). Está siempre (en Basic, del color del
+    # fondo): prenderla o apagarla es solo cambiarle el color. Antes se ponía y se sacaba, y eso redibujaba toda la
+    # ventana (~0,4 s trabada).
+    colors = widgets.palette()
+    app.pro_stripe = tk.Canvas(root, height=3, background=colors["bg"], borderwidth=0, highlightthickness=0)
+    app.pro_stripe.pack(fill="x", side="top")
     shell = app.shell = ttk.Frame(root, padding=(22, 18, 22, 10))
     shell.pack(fill="both", expand=True)
     _header(app, shell)
 
-    nav = ttk.Frame(shell)
-    nav.pack(fill="x", pady=(16, 14))
+    holder = ttk.Frame(shell)
+    holder.pack(fill="x", pady=(16, 14))
+    nav = ttk.Frame(holder)
+    nav.pack(fill="x")
     app.page_var = tk.StringVar(value="inicio")
+    app.nav_buttons = {}
     for key, name in PAGES.items():
-        ttk.Radiobutton(nav, text=name, value=key, variable=app.page_var, style="Toggle.TButton",
-                        command=lambda: _show_page(app)).pack(side="left", padx=(0, 6))
+        button = ttk.Radiobutton(nav, text=name, value=key, variable=app.page_var, style="Toggle.TButton",
+                                 command=lambda: _show_page(app))
+        button.pack(side="left", padx=(0, 6))
+        app.nav_buttons[key] = button
+    # Una rayita debajo de la pestaña elegida, que se desliza hasta la nueva al cambiar.
+    app.nav_line = tk.Canvas(holder, height=3, background=colors["bg"], borderwidth=0, highlightthickness=0)
+    app.nav_line.pack(fill="x", pady=(5, 0))
+    app.nav_mark = app.nav_line.create_rectangle(0, 0, 0, 3, width=0, fill=colors["accent"])
+    root.after(120, lambda: _slide_nav(app, animate=False))
 
     app.pages = {}
     stack = ttk.Frame(shell)
@@ -90,6 +104,7 @@ def build(app: BubbleWindow) -> None:
     app.status = ttk.Label(footer, text="", font="SunValleyCaptionFont", foreground=widgets.palette()["muted"],
                            anchor="w", wraplength=540, justify="left")
     app.status.pack(fill="x")
+    app.voice_panel._update_locks(animate=False)  # (Ajustes se arma después de Voz)
     _show_page(app)
 
 
@@ -134,6 +149,7 @@ def _show_page(app: BubbleWindow) -> None:
     if pending is not None:
         parent, builder = pending
         builder(parent)  # (se arma con los colores del plan de ahora: no hace falta recolorear)
+    _slide_nav(app)
     for key, page in app.pages.items():
         if key == app.page_var.get():
             page.pack(fill="both", expand=True)
@@ -223,7 +239,7 @@ def _settings(app: BubbleWindow, page) -> None:
                     style="Switch.TCheckbutton", command=lambda: _change_screenshots(app)).pack(anchor="w", pady=(12, 0))
     widgets.muted(box, "Con Impr Pant, Win + Shift + S o Win + Impr Pant, para mandar ejemplos.")
 
-    box = widgets.card(page, "Subtítulos de voz")
+    box = app.subs_box = widgets.card(page, "Subtítulos de voz")  # (se difumina sin subtítulos: ver voice_panel)
     app.sub_size_var = tk.StringVar(value=_closest(look.subtitle_size, SUB_SIZES))
     row = widgets.label_row(box, "Tamaño")
     widgets.segmented(row, app.sub_size_var, SUB_SIZES, lambda: _change_subtitles(app)).pack(side="right")
@@ -261,6 +277,13 @@ def _settings(app: BubbleWindow, page) -> None:
     row = widgets.label_row(box, "Modo", pady=(0, 2))
     _option_menu(row, app.perf_var, PERFORMANCE, lambda: _change_performance(app))
     app.perf_label = widgets.muted(box, "Detectando tu PC…")
+
+    box = widgets.card(page, "Instalación", "Bubble instala solo lo que le falta al abrirse. Desinstalar borra todo "
+                                            "lo que trajo (elegís qué).")
+    row = ttk.Frame(box)
+    row.pack(fill="x")
+    ttk.Button(row, text="Revisar instalación", command=app.open_setup).pack(side="left")
+    ttk.Button(row, text="Desinstalar Bubble…", command=app.open_uninstall).pack(side="right")
 
     box = widgets.card(page, "Ayuda")
     row = ttk.Frame(box)
@@ -368,37 +391,93 @@ def _fade(cover: tk.Toplevel, step: int = 0, steps: int = 12) -> None:
     cover.after(16, lambda: _fade(cover, step + 1, steps))
 
 
-def apply_pro_look(app: BubbleWindow) -> None:
-    """Bubble Pro se nota: "Bubble Pro" con una insignia dorada, una franja dorada arriba, el acento de la ventana
-    (botones, interruptores, íconos) dorado y lo mismo en las traducciones dentro del juego. Sin Pro, todo vuelve."""
-    recolor(app)
+def apply_pro_look(app: BubbleWindow, animate: bool = False) -> None:
+    """Bubble Pro se nota: "Bubble Pro" con una insignia dorada, una franja dorada arriba (que brilla al activarlo),
+    el acento de la ventana (botones, interruptores, íconos) dorado y lo mismo en las traducciones dentro del juego.
+    Sin Pro, todo vuelve. Tarda unos milisegundos (antes la ventana quedaba trabada ~0,6 s)."""
+    recolor(app, animate=animate)
     apply_overlay_style(app)
     if hasattr(app, "look_preview"):
         _render_preview(app)
+    for hook in getattr(app, "plan_hooks", ()):
+        hook(animate)  # lo que se bloquea o se desbloquea según el plan (página Pro, etc.)
 
 
-def _pro_header(app: BubbleWindow) -> None:
+def _slide_nav(app: BubbleWindow, animate: bool = True) -> None:
+    """Lleva la rayita de las pestañas hasta la elegida."""
+    from . import motion
+
+    button = app.nav_buttons.get(app.page_var.get())
+    if button is None:
+        return
+    if not button.winfo_ismapped() or button.winfo_width() <= 1:
+        # La ventana todavía no está en pantalla (se está abriendo): se ubica apenas aparezca.
+        if not getattr(app, "_nav_waiting", False):
+            app._nav_waiting = True
+
+            def retry() -> None:
+                app._nav_waiting = False
+                _slide_nav(app, animate=False)
+
+            app.nav_line.after(200, retry)
+        return
+    left, right = button.winfo_x() + 6, button.winfo_x() + button.winfo_width() - 6
+    start = app.nav_line.coords(app.nav_mark) or [left, 0, right, 3]
+    x0, x1 = start[0], start[2]
+    if not animate or x1 <= x0:
+        app.nav_line.coords(app.nav_mark, left, 0, right, 3)
+        return
+    motion.animate(app.nav_line, 0.22, lambda p: app.nav_line.coords(
+        app.nav_mark, x0 + (left - x0) * p, 0, x1 + (right - x1) * p, 3))
+
+
+def _stripe(app: BubbleWindow, on: bool, animate: bool) -> None:
+    """La franja de arriba: dorada con Pro (y un brillo que la recorre al activarlo), del color del fondo en Basic."""
+    from . import motion
+
+    stripe = app.pro_stripe
+    target = pro.gold() if on else widgets.palette()["bg"]
+    start = widgets._hex(stripe, str(stripe.cget("background")))
+    stripe.delete("shine")
+    if not animate or start == target:
+        stripe.configure(background=target)
+        return
+    motion.animate(stripe, 0.3, lambda p: stripe.configure(background=widgets.mix(start, target, p)))
+    if on:
+        width = max(1, stripe.winfo_width())
+        shine = stripe.create_rectangle(-140, 0, 0, 3, width=0, fill=widgets.mix(pro.gold(), "#ffffff", 0.6),
+                                        tags="shine")
+
+        def sweep(p: float) -> None:
+            x = -140 + (width + 140) * p
+            stripe.coords(shine, x, 0, x + 140, 3)
+
+        motion.animate(stripe, 0.7, sweep, lambda: stripe.delete("shine"))
+
+
+def _pro_header(app: BubbleWindow, animate: bool = False) -> None:
     """"Bubble Pro" con la insignia PRO dorada y la franja arriba; en Basic, "Bubble" con una insignia BASIC gris."""
     on = pro.active()
     colors = widgets.palette()
     app.title_label.configure(text="Bubble Pro" if on else "Bubble")
     if on:
         app.pro_badge.configure(text="PRO", background=pro.gold(), foreground=colors["bg"])
-        app.pro_stripe.configure(background=pro.gold())
-        app.pro_stripe.pack(fill="x", side="top", before=app.shell)
     else:
         app.pro_badge.configure(text="BASIC", background=colors["card"], foreground=colors["muted"])
-        app.pro_stripe.pack_forget()
-    app.pro_badge.pack(side="left", padx=(8, 0), pady=(4, 0))
+    if not app.pro_badge.winfo_manager():
+        app.pro_badge.pack(side="left", padx=(8, 0), pady=(4, 0))
+    _stripe(app, on, animate)
+    app.nav_line.configure(background=colors["bg"])
+    app.nav_line.itemconfigure(app.nav_mark, fill=colors["accent"])
 
 
-def recolor(app: BubbleWindow) -> None:
+def recolor(app: BubbleWindow, animate: bool = False) -> None:
     """Después de cambiar el tema (o de prender o apagar Bubble Pro): lo que no es del tema (textos grises, registro,
     fondos, el acento) toma los colores nuevos."""
     colors = widgets.palette()
     app.root.configure(background=colors["bg"])
     theme.tint_accent(app.root, pro.active())
-    _pro_header(app)
+    _pro_header(app, animate)
     olds = [*widgets.PALETTES.values(), *({"accent": gold} for gold in pro.GOLD.values())]
     for page in app.pages.values():
         if isinstance(page, widgets.Scrollable):
@@ -406,14 +485,22 @@ def recolor(app: BubbleWindow) -> None:
 
     def walk(widget):
         for child in widget.winfo_children():
-            if getattr(child, "gold", False):
-                child.configure(foreground=pro.gold())  # lo de Pro, dorado siempre (con el dorado del tema)
-            elif isinstance(child, ttk.Label):
-                current = str(child.cget("foreground"))
-                for old in olds:
-                    for key in ("muted", "faint", "accent", "good", "warn", "bad"):
-                        if current == old.get(key):
-                            child.configure(foreground=colors[key])
+            if isinstance(child, ttk.Label):
+                blocked = getattr(child, "dim_color", None)  # difuminado (bloqueado): se guarda su color de verdad
+                current = blocked or str(child.cget("foreground"))
+                new = current
+                if getattr(child, "gold", False):
+                    new = pro.gold()  # lo de Pro, dorado siempre (con el dorado del tema)
+                else:
+                    for old in olds:
+                        for key in ("muted", "faint", "accent", "good", "warn", "bad"):
+                            if current == old.get(key):
+                                new = colors[key]
+                if blocked:
+                    child.dim_color = new
+                    child.configure(foreground=widgets.mix(widgets._hex(child, new), colors["bg"], widgets.DIM))
+                elif new != current:
+                    child.configure(foreground=new)
             walk(child)
 
     walk(app.root)

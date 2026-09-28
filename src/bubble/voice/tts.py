@@ -117,6 +117,16 @@ class Voices:
             self._loaded[name] = self._loaded.pop(name)  # la más reciente, al final
         return self._loaded[name]
 
+    def download(self, language: str, gender: str | None = None) -> bool:
+        """Baja la voz (sin cargarla), para tenerla lista de antemano. False si no hay voz para ese idioma."""
+        name = self.voice_for(language, gender or self.gender)
+        if name is None:
+            return False
+        for path in self.catalog()[name]["files"]:
+            if path.endswith((".onnx", ".onnx.json")):
+                download(FILE_URL.format(path=path), self.folder / Path(path).name, f"voz {name}", self.progress)
+        return True
+
     def is_loaded(self, language: str, gender: str | None = None) -> bool:
         name = self.voice_for(language, gender or self.gender)
         return name is not None and name in self._loaded

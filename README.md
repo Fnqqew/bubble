@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 3.0" src="https://img.shields.io/badge/versión-3.0-4a90e2?style=flat-square">
+  <img alt="Versión 3.1" src="https://img.shields.io/badge/versión-3.1-4a90e2?style=flat-square">
   <img alt="Basic gratis" src="https://img.shields.io/badge/Basic-gratis-5b6270?style=flat-square">
   <img alt="Bubble Pro" src="https://img.shields.io/badge/✦%20Bubble-Pro-f2c14e?style=flat-square&labelColor=2b2f36">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
@@ -141,15 +141,14 @@ Nunca toca el programa de Roblox: solo mira la pantalla, como una app de grabaci
 
 ## Empezar
 
-Necesitás Windows 10 u 11, Python 3.12 y [Claude Code](https://claude.com/claude-code) con tu sesión iniciada.
+Necesitás Windows 10 u 11 y tu suscripción de Claude. **Doble clic en `Iniciar.bat` y listo:** la primera vez
+Bubble prepara todo solo —Python (si falta, te ofrece instalarlo), sus paquetes, el reconocimiento de voz y las voces—
+con una barra de progreso. Lo que necesita tu permiso ([Claude Code](https://claude.com/claude-code) y el micrófono
+virtual) aparece con su botón.
 
-```powershell
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[voz]"
-.\Iniciar.bat
-```
-
-Sin `[voz]` también anda: traduce el chat, las burbujas y lo que escribís.
+**Desinstalar** también es un clic: **Ajustes → Desinstalar Bubble…** (o `Desinstalar.bat`). Elegís qué borrar —tu
+configuración, los modelos descargados, el acceso directo, el micrófono virtual y la carpeta— y Windows vuelve a usar
+tu micrófono de siempre.
 
 Un tutorial corto te acompaña la primera vez. Para lo demás —configuración, cómo está hecho, cómo probarlo— está
 la [guía completa](docs/GUIA.md).

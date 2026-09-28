@@ -21,22 +21,31 @@ hecho por dentro.
 
 ## Instalación
 
-**Necesitás:**
+**Doble clic en `Iniciar.bat`.** La primera vez prepara todo solo:
 
-- Windows 10 u 11.
-- Python 3.12 o más nuevo.
-- Claude Code con sesión iniciada en tu suscripción de Claude. Sirve la extensión de VS Code, o
-  `irm https://claude.ai/install.ps1 | iex` y después `claude` una vez para iniciar sesión.
+1. **Python 3.12**: si no está, te ofrece instalarlo (con winget) o te lleva a python.org.
+2. **El entorno de Bubble** (`.venv`) y sus paquetes, con la parte de voz.
+3. Al abrirse, la ventana **Preparar Bubble** instala lo que falte, con una barra de progreso: el reconocimiento de
+   voz (hasta ~500 MB), el de voces (~30 MB) y las voces en inglés (~120 MB). Podés seguir usando la PC.
+4. Lo que necesita tu permiso tiene su botón: **Claude Code** (se abre su instalador oficial y después iniciás sesión
+   con tu suscripción) y el **micrófono virtual** (Windows pide permiso de administrador).
 
-```powershell
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[voz]"
-```
+Cada vez que abrís Bubble se revisa en un segundo, en segundo plano, que no falte nada; si falta algo, vuelve a abrir
+**Preparar Bubble**. También está en **Ajustes → Revisar instalación**. Después, el acceso directo **Bubble** del
+escritorio (se crea solo) lo abre directo.
 
-`[voz]` suma la voz (subtítulos y tu voz traducida). Sin eso, Bubble traduce el chat, las burbujas y lo que
-escribís; para correr los tests, `".[voz,dev]"`.
+A mano (desarrollo): `python -m venv .venv` y `.venv\Scripts\python.exe -m pip install -e ".[voz,dev]"`.
 
-Para abrirlo: `Iniciar.bat`, o el acceso directo **Bubble** que se crea solo en el escritorio.
+**Desinstalar:** **Ajustes → Desinstalar Bubble…** (o `Desinstalar.bat`, sin abrir Bubble). Elegís qué se borra:
+
+- tu configuración, tu clave de Pro, lo aprendido de tu voz, los entrenamientos y los registros;
+- los modelos y las voces descargados (te dice cuánto ocupan);
+- el acceso directo del escritorio;
+- el micrófono virtual (no viene marcado: otros programas pueden usarlo; se abre su desinstalador oficial);
+- la carpeta de Bubble (si es una carpeta de desarrollo, con git, no se borra nunca).
+
+Antes de borrar, Windows vuelve a usar tu micrófono y tu parlante de verdad. Pide confirmar dos veces, y lo que Bubble
+tiene abierto mientras corre se borra apenas se cierra.
 
 ## Primer uso
 

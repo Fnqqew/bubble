@@ -65,6 +65,7 @@ class ProPanel:
         self.key_var = tk.StringVar()
         self.built = False
         self._busy = False
+        self._locked: list[tuple[ttk.Frame, ttk.Label]] = []  # tarjetas de Pro y su cartelito
 
     def build_page(self, page) -> None:
         from ..cloud.speak import PERSONALITIES
@@ -101,7 +102,7 @@ class ProPanel:
             _gold(ttk.Label(grid, text=cloud, font="SunValleyCaptionFont", foreground=gold, wraplength=170,
                             justify="left")).grid(row=index, column=2, sticky="nw", padx=(10, 0), pady=(8, 0))
 
-        box = widgets.card(page, "Las voces de Pro", "Hablan por vos (tu voz traducida y Ctrl+Enter). En los idiomas "
+        box = self._pro_only(page, "Las voces de Pro", "Hablan por vos (tu voz traducida y Ctrl+Enter). En los idiomas "
                                                      "que la nube no tiene (portugués…), la voz de tu PC.")
         row = widgets.label_row(box, "Personalidad")
         widgets.segmented(row, self.personality_var, PERSONALITIES, self._change_personality).pack(side="right")
@@ -131,7 +132,7 @@ class ProPanel:
         self.key_state = ttk.Label(box, text="", foreground=colors["muted"])
         self.key_state.pack(anchor="w", pady=(6, 0))
 
-        box = widgets.card(page, "Gasto y ahorro")
+        box = self._pro_only(page, "Gasto y ahorro")
         self.usage = ttk.Label(box, text="", font="SunValleyBodyStrongFont")
         self.usage.pack(anchor="w")
         for line in SAVINGS:
@@ -140,7 +141,7 @@ class ProPanel:
                         command=self._toggle_diarize, style="Switch.TCheckbutton").pack(anchor="w", pady=(10, 0))
         widgets.muted(box, "Más preciso cuando varios hablan a la vez. Sin esto lo hace tu PC, gratis.")
 
-        box = widgets.card(page, "Comparar con mi voz", "Decí una frase: ves lo que entiende tu PC y lo que entiende la "
+        box = self._pro_only(page, "Comparar con mi voz", "Decí una frase: ves lo que entiende tu PC y lo que entiende la "
                                                        "nube, y cuánto tarda cada uno.")
         row = ttk.Frame(box)
         row.pack(fill="x")
@@ -150,7 +151,27 @@ class ProPanel:
         self.compare_state.pack(side="left", padx=12)
         self.compare_result = widgets.muted(box, "")
         self.built = True
+        self.app.plan_hooks.append(self.apply_plan)
+        self.apply_plan(False)
         self.refresh()
+
+    def _pro_only(self, page, title: str, subtitle: str = ""):
+        """Una tarjeta que solo se usa con Pro: en Basic queda difuminada y bloqueada (ver apply_plan)."""
+        box = widgets.card(page, title, subtitle)
+        note = ttk.Label(box.master, text="", font="SunValleyCaptionFont")
+        note.pack(anchor="w", before=box, pady=(0, 2))
+        self._locked.append((box, note))
+        return box
+
+    def apply_plan(self, animate: bool = True) -> None:
+        """En Basic, lo de Pro se ve pero difuminado y no se puede tocar ni probar (así nada anda a medias); en Pro,
+        se desbloquea con una animación."""
+        on = pro.active()
+        colors = widgets.palette()
+        for box, note in self._locked:
+            widgets.dim(box, not on, animate)
+            note.configure(text="✦  Incluido en tu plan Pro" if on else "🔒  Solo en Pro · activalo arriba",
+                           foreground=pro.gold() if on else colors["muted"])
 
     # ------------------------------------------------------------ estado
     def refresh(self) -> None:
@@ -164,8 +185,7 @@ class ProPanel:
             self.key_state.configure(text="✓ Tenés una clave guardada.")
         elif not has_key:
             self.key_state.configure(text="Todavía no hay una clave.")
-        for widget in (self.switch, self.compare_button, self.try_button):
-            widget.state(["!disabled"] if has_key else ["disabled"])
+        self.switch.state(["!disabled"] if has_key else ["disabled"])  # (lo demás de Pro: ver apply_plan)
         self.enabled_var.set(pro.active())
         self.plan_label.configure(text="Estás usando Pro" if pro.active() else
                                   ("Estás usando Basic" if has_key else "Primero guardá tu clave (abajo)"))

@@ -72,6 +72,7 @@ class VoicePanel:
         self.speed_var = tk.DoubleVar(value=self.config.speed)
         self.pass_var = tk.BooleanVar(value=self.config.pass_my_voice)
         self.earshot_var = tk.StringVar(value=self.earshot.radius)
+        self._cable_ok = True  # hasta revisar los dispositivos
         self._soundpad = False  # el micrófono de Windows es el virtual (ver voice/devices.py)
         # El micrófono virtual va a ser el de Windows apenas arranque el puente: mientras tanto no se "arregla" Windows
         # (antes la revisión de dispositivos lo sacaba y un segundo después se volvía a poner: Roblox notaba el cambio).
@@ -91,24 +92,31 @@ class VoicePanel:
                            "Lo que ya está en tu idioma no se subtitula.", self.subtitles_var, self._toggle_subtitles)
         from ..voice.hearing import RADIUS_NAMES
 
-        row = widgets.label_row(box, "Radio de escucha", pady=(12, 2))
+        self.earshot_box = ttk.Frame(box)  # (se difumina con los subtítulos apagados: ver _update_locks)
+        self.earshot_box.pack(fill="x")
+        row = widgets.label_row(self.earshot_box, "Radio de escucha", pady=(12, 2))
         widgets.segmented(row, self.earshot_var, RADIUS_NAMES, self._change_earshot).pack(side="right")
-        widgets.muted(box, "Los que están lejos se oyen más bajo: con «Cerca» se traducen solo los de al lado. Los "
-                           "ruidos (música, explosiones, risas, balbuceos) no se traducen nunca.")
+        widgets.muted(self.earshot_box, "Los que están lejos se oyen más bajo: con «Cerca» se traducen solo los de al "
+                                        "lado. Los ruidos (música, explosiones, risas, balbuceos) no se traducen "
+                                        "nunca.")
 
         box = widgets.card(page, "Tu voz para los demás")
         widgets.switch_row(box, "mic", "Traducir mi voz", "Hablás en tu idioma y te escuchan en el suyo.",
                            self.speak_var, self._toggle_speak)
         from .main_window import AUTO_CHOICE, LANG_CHOICES, _choice, _code
 
-        row = widgets.label_row(box, "Te escuchan en", pady=(12, 2))
+        self.speak_rows = ttk.Frame(box)  # (con tu voz apagada no corresponden: se difuminan)
+        self.speak_rows.pack(fill="x")
+        row = widgets.label_row(self.speak_rows, "Te escuchan en", pady=(12, 2))
         self.lang_box = ttk.Combobox(row, values=[AUTO_CHOICE, *LANG_CHOICES], state="readonly", width=30)
         self.lang_box.set(_choice(self.app.config.user.outgoing_language))
         self.lang_box.bind("<<ComboboxSelected>>", lambda _e: self.app._set_outgoing(_code(self.lang_box.get())))
         self.lang_box.pack(side="right")
-        row = widgets.label_row(box, "Cómo", pady=(8, 2))
+        row = widgets.label_row(self.speak_rows, "Cómo", pady=(8, 2))
         widgets.segmented(row, self.mode_var, MODES, self._change_mode).pack(side="right")
-        row = widgets.label_row(box, "Botón para hablar")
+        self.button_rows = ttk.Frame(box)  # (en modo directo no hay botón: se difumina)
+        self.button_rows.pack(fill="x")
+        row = widgets.label_row(self.button_rows, "Botón para hablar")
         ttk.Button(row, text="Cambiar", command=self._change_key).pack(side="right")
         self.ptt_label = ttk.Label(row, text=win32.describe_binding(self.config.push_to_talk),
                                    font="SunValleyBodyStrongFont")
@@ -146,8 +154,10 @@ class VoicePanel:
         self.cable_button = ttk.Button(row, text="Instalar (gratis)", command=self._install_cable)
         self.cable_label = ttk.Label(row, text="Revisando…", foreground=widgets.palette()["muted"])
         self.cable_label.pack(side="right")
-        ttk.Checkbutton(box, text="Pasar también mi voz real", variable=self.pass_var, command=self._toggle_pass,
-                        style="Switch.TCheckbutton").pack(anchor="w", pady=(10, 0))
+        self.pass_box = ttk.Frame(box)  # (sin micrófono virtual no hay adónde pasarla: se difumina)
+        self.pass_box.pack(fill="x")
+        ttk.Checkbutton(self.pass_box, text="Pasar también mi voz real", variable=self.pass_var,
+                        command=self._toggle_pass, style="Switch.TCheckbutton").pack(anchor="w", pady=(10, 0))
         self.cable_help = widgets.muted(box, "")
         self.windows_row = ttk.Frame(box)
         self.windows_warning = ttk.Label(self.windows_row, text="", foreground=widgets.palette()["warn"],
@@ -155,7 +165,23 @@ class VoicePanel:
         self.windows_warning.pack(side="left", fill="x", expand=True)
         ttk.Button(self.windows_row, text="Arreglar Windows", command=self.fix_windows).pack(side="right")
         self.status = widgets.muted(page, "", pady=(0, 8))
+        self._update_locks(animate=False)
         threading.Thread(target=self._scan_devices, name="bubble-dispositivos", daemon=True).start()
+
+    def _update_locks(self, animate: bool = True) -> None:
+        """Lo que no corresponde ahora se difumina y no se puede tocar (así nada se prueba a medias): el radio de
+        escucha sin subtítulos, el idioma y el modo sin tu voz, el botón en modo directo, pasar tu voz real sin
+        micrófono virtual, y la apariencia de los subtítulos (en Ajustes) sin subtítulos."""
+        if not hasattr(self, "earshot_box"):
+            return
+        speaking = self.speak_var.get()
+        widgets.dim(self.earshot_box, not self.subtitles_var.get(), animate)
+        widgets.dim(self.speak_rows, not speaking, animate)
+        widgets.dim(self.button_rows, not speaking or self.mode_var.get() == "directo", animate)
+        widgets.dim(self.pass_box, not self._cable_ok, animate)
+        subtitles_look = getattr(self.app, "subs_box", None)
+        if subtitles_look is not None:
+            widgets.dim(subtitles_look, not self.subtitles_var.get(), animate)
 
     def _change_earshot(self) -> None:
         self.config.earshot = self.earshot.radius = self.earshot_var.get()
@@ -191,6 +217,9 @@ class VoicePanel:
         """(hilo de la ventana) Micrófonos encontrados, si hay micrófono virtual y si Windows quedó usándolo."""
         self.mic_box.configure(values=["El predeterminado de Windows", *mics])
         colors = widgets.palette()
+        if cable != self._cable_ok:
+            self._cable_ok = cable
+            self._update_locks()
         self.cable_warning.configure(text="" if cable else "⚠ Falta el micrófono virtual: sin él, los demás no "
                                                               "escuchan tu voz traducida. Instalalo abajo (1 minuto).")
         if wrong:
@@ -452,11 +481,13 @@ class VoicePanel:
     def _toggle_subtitles(self) -> None:
         self.config.subtitles = self.subtitles_var.get()
         save_setting("voice", "subtitles", self.config.subtitles)
+        self._update_locks()
         self._toggled(self.config.subtitles)
 
     def _toggle_speak(self) -> None:
         self.config.speak = self.speak_var.get()
         save_setting("voice", "speak", self.config.speak)
+        self._update_locks()
         self._toggled(self.config.speak)
 
     def _toggle_hear(self) -> None:
@@ -474,6 +505,7 @@ class VoicePanel:
     def _change_mode(self) -> None:
         self.config.speak_mode = self.mode_var.get()
         save_setting("voice", "speak_mode", self.config.speak_mode)
+        self._update_locks()
         if self.speak_var.get():
             self._toggled(True)
 

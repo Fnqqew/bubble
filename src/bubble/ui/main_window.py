@@ -145,6 +145,8 @@ class BubbleWindow:
         self.voice_panel = VoicePanel(self)
         self.tests_panel = TestsPanel(self)
         self.pro_panel = ProPanel(self)
+        # Lo que se bloquea o se desbloquea al cambiar de plan (ver app_view.apply_pro_look).
+        self.plan_hooks: list = []
         app_view.build(self)
         app_view.apply_pro_look(self)
         self._refresh_hotkey_label()
@@ -196,6 +198,41 @@ class BubbleWindow:
         self.root.lift()
         self.root.focus_set()  # que ninguna lista arranque con el texto resaltado
         motion.appear(self.root, rise=0, seconds=0.22)
+        from .theme import prepare_gold_soon
+
+        # El dorado de Pro se prepara de a poquito, con la ventana ya abierta: cambiar de plan después es instantáneo.
+        self.root.after(1200, lambda: prepare_gold_soon(self.root))
+        # ¿Falta algo para que ande todo? Se revisa en segundo plano y, si falta, se instala solo.
+        self.root.after(1500, self._check_install)
+
+    # ================= instalar y desinstalar (ver install.py, uninstall.py, setup_window.py) =================
+    def _check_install(self) -> None:
+        from .. import install
+
+        def work() -> None:
+            try:
+                missing = install.missing(only_required=True)
+            except Exception:  # noqa: BLE001 - la revisión nunca impide usar Bubble
+                log.debug("No se pudo revisar la instalación", exc_info=True)
+                return
+            if missing:
+                self.events.put(("call", self.open_setup))
+
+        threading.Thread(target=work, name="bubble-revisar-instalacion", daemon=True).start()
+
+    def open_setup(self) -> None:
+        """«Preparar Bubble»: instala solo lo que falta (y muestra lo que ya está)."""
+        from .setup_window import SetupWindow
+
+        if getattr(self, "_setup_window", None) is not None and self._setup_window.window.winfo_exists():
+            self._setup_window.window.lift()
+            return
+        self._setup_window = SetupWindow(self.root, lambda action: self.events.put(("call", action)))
+
+    def open_uninstall(self) -> None:
+        from .setup_window import UninstallWindow
+
+        UninstallWindow(self.root, self._on_close)
 
     # ================= interfaz (ver app_view.py) =================
     def _region_text(self) -> str:
@@ -1050,14 +1087,9 @@ class BubbleWindow:
             pro.set_active(enabled)
             self.voice_panel.pro_changed()
             if in_game:
-                self.root.after(350, lambda: app_view.apply_pro_look(self))
+                self.root.after(350, lambda: app_view.apply_pro_look(self, animate=True))
             else:
-                # el cambio de colores, de una vez y suave (como el tema)
-                cover = app_view._freeze(self.root) if self.root.winfo_viewable() else None
-                app_view.apply_pro_look(self)
-                self.root.update_idletasks()
-                if cover is not None:
-                    app_view._fade(cover)
+                app_view.apply_pro_look(self, animate=True)
         self.pro_panel.refresh()
         if reason:
             self._set_status(f"Bubble Pro se apagó: {reason}. Sigo con el reconocimiento de tu PC.")

@@ -63,3 +63,53 @@ def test_pro_needs_a_saved_key(window):
 
     window.set_pro(True)  # sin clave guardada no se prende
     assert not pro.active() and not window.config.pro.enabled
+
+
+def test_what_does_not_apply_is_blurred_and_locked(window):
+    voice = window.voice_panel
+    voice.subtitles_var.set(False)
+    voice._toggle_subtitles()
+    voice.speak_var.set(True)
+    voice.mode_var.set("directo")
+    voice._toggle_speak()
+    window.root.update()
+    assert voice.earshot_box.dimmed and window.subs_box.dimmed  # sin subtítulos: radio y apariencia bloqueados
+    assert not voice.speak_rows.dimmed and voice.button_rows.dimmed  # modo directo: sin botón para hablar
+    from tkinter import ttk
+
+    def controls(widget):
+        for child in widget.winfo_children():
+            if isinstance(child, ttk.Radiobutton):
+                yield child
+            yield from controls(child)
+
+    buttons = list(controls(voice.earshot_box))
+    assert buttons and all(b.instate(["disabled"]) for b in buttons)
+    voice.subtitles_var.set(True)
+    voice._toggle_subtitles()
+    assert not voice.earshot_box.dimmed and all(not b.instate(["disabled"]) for b in buttons)
+
+
+def test_pro_options_are_locked_in_basic_and_switching_is_quick(window, monkeypatch):
+    import time
+
+    import bubble.cloud.keys
+    from bubble import pro
+    from bubble.ui import app_view
+
+    monkeypatch.setattr(bubble.cloud.keys, "load_key", lambda: "clave-de-prueba")
+    monkeypatch.setattr(window.voice_panel, "pro_changed", lambda: None)
+    window.page_var.set("pro")
+    app_view._show_page(window)
+    window.root.update()
+    cards = [box for box, _note in window.pro_panel._locked]
+    assert cards and all(box.dimmed for box in cards)  # Basic: lo de Pro, bloqueado
+    assert window.pro_panel.try_button.instate(["disabled"])
+    start = time.perf_counter()
+    window.set_pro(True)
+    window.root.update()
+    assert time.perf_counter() - start < 0.5  # antes ~0,6 s trabada (en esta PC ahora ~0,07 s)
+    assert pro.active() and not any(box.dimmed for box in cards)
+    assert not window.pro_panel.try_button.instate(["disabled"])
+    window.set_pro(False)
+    assert all(box.dimmed for box in cards)

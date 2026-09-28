@@ -226,5 +226,7 @@ def test_theme_images_turn_gold_and_come_back():
         theme.tint_accent(root, False)
         assert all(bytes(root.tk.call(n, "data", "-format", "png")) == before[n] for n in names)
     finally:
-        theme._originals.clear()
+        theme._pairs.clear()
+        theme._checked.clear()
+        theme._state.update(root=None, gold=False)
         root.destroy()

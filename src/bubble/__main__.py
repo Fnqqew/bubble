@@ -100,12 +100,39 @@ def _activity_log() -> None:
     logger.addHandler(handler)
 
 
+def _uninstall() -> None:
+    """Desinstalar sin abrir Bubble (Desinstalar.bat)."""
+    import tkinter as tk
+
+    from .ui import theme
+    from .ui.setup_window import UninstallWindow
+
+    from . import win32
+    from .ui.main_window import ICON_PATH
+
+    win32.enable_dpi_awareness()
+    root = tk.Tk()
+    root.withdraw()
+    if ICON_PATH.exists():
+        # (además del ícono: el tema oscuro solo se aplica entero si la ventana ya tiene su ícono; ver main_window)
+        root.iconbitmap(default=str(ICON_PATH))
+    theme.apply_theme(root)
+    window = UninstallWindow(root, root.destroy)
+    window.window.protocol("WM_DELETE_WINDOW", root.destroy)
+    window.cancel.configure(command=root.destroy)
+    root.mainloop()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="bubble", description="Traductor en tiempo real para Roblox")
     parser.add_argument("--console", action="store_true", help="modo consola en vez de ventana")
     parser.add_argument("--config", type=Path, help="ruta a config.toml")
     parser.add_argument("-v", "--verbose", action="store_true", help="logs detallados")
+    parser.add_argument("--desinstalar", action="store_true", help="desinstalar Bubble (elegís qué se borra)")
     args = parser.parse_args()
+    if args.desinstalar:
+        _uninstall()
+        return
     if not args.console:
         _error_log()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
