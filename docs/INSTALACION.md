@@ -126,6 +126,16 @@ La guía completa, con cada parte de Bubble explicada, está en [GUIA.md](GUIA.m
 
 <br>
 
+## Cuando salga una versión nueva
+
+No tenés que volver a hacer nada de esto. Bubble te avisa solo cuando hay una versión nueva, te cuenta qué trae y te
+pregunta si actualizar **ahora** o **más tarde**. Si decís que sí, se cierra, se pone al día y vuelve a abrir en menos
+de un minuto. Tu configuración, tu voz y lo descargado quedan como están.
+
+Nunca te pregunta en medio de una partida, y si querés buscar vos: **Ajustes → Buscar actualizaciones**.
+
+<br>
+
 ## Desinstalar
 
 **Ajustes → Desinstalar Bubble…** (o `Desinstalar.bat`). Elegís qué borrar: tu configuración, lo descargado, el

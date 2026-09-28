@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 3.3" src="https://img.shields.io/badge/versión-3.3-4a90e2?style=flat-square">
+  <img alt="Versión 3.4" src="https://img.shields.io/badge/versión-3.4-4a90e2?style=flat-square">
   <img alt="Basic gratis" src="https://img.shields.io/badge/Basic-gratis-5b6270?style=flat-square">
   <img alt="Bubble Pro" src="https://img.shields.io/badge/✦%20Bubble-Pro-f2c14e?style=flat-square&labelColor=2b2f36">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
@@ -152,6 +152,10 @@ Necesitás Windows 10 u 11 y tu suscripción de Claude (Pro o Max). Nada más: *
 `Iniciar.bat` y listo.** La primera vez prepara todo solo —Python si falta, el reconocimiento de voz y las voces— y
 lo que necesita tu permiso ([Claude Code](https://claude.com/claude-code), tu sesión y el micrófono virtual) te
 espera con su botón. **[La instalación paso a paso, con imágenes →](docs/INSTALACION.md)**
+
+**Se actualiza solo.** Cuando sale una versión nueva, Bubble te avisa, te cuenta qué trae y te pregunta si
+actualizar ahora o más tarde. Si decís que sí, se cierra, se pone al día y vuelve a abrir en menos de un minuto, sin
+tocar tu configuración ni lo que aprendió de tu voz. Y nunca te interrumpe en medio de una partida.
 
 **Desinstalar** también es un clic: **Ajustes → Desinstalar Bubble…** (o `Desinstalar.bat`). Elegís qué borrar —tu
 configuración, los modelos descargados, el acceso directo, el micrófono virtual y la carpeta— y Windows vuelve a usar

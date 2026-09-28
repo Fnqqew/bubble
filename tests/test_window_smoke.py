@@ -143,3 +143,19 @@ def test_your_pc_check_shows_problems_and_fills_the_card(window):
     assert card.table.winfo_children() and card.advice.winfo_children()
     assert str(card.state.cget("text")) == ""
 
+
+
+def test_a_new_version_shows_the_link_and_waits_for_the_match_to_end(window, monkeypatch):
+    from bubble import update
+
+    release = update.Release("9.9.0", "Algo nuevo")
+    offered = []
+    monkeypatch.setattr(update, "should_offer", lambda release: True)
+    monkeypatch.setattr(window, "_in_game", lambda: True)  # jugando: no se abre nada encima del juego
+    monkeypatch.setattr(window.root, "after", lambda ms, action: offered.append(ms))
+    window._on_update(release, asked=False)
+    assert window.update_link.winfo_manager() and "9.9.0" in str(window.update_link.cget("text"))
+    assert window._update_window is None and offered == [30000]  # pregunta de nuevo en un rato
+    window._on_update(None, asked=True)
+    assert not window.update_link.winfo_manager()
+    assert "Estás al día" in str(window.status.cget("text"))

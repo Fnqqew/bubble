@@ -1,6 +1,6 @@
 [project]
 name = "bubble"
-version = "3.3.0"
+version = "3.4.0"
 description = "Traductor en tiempo real para Roblox: el chat, las burbujas, lo que escribís y la voz, con la suscripción de Claude del jugador."
 requires-python = ">=3.12"
 dependencies = [

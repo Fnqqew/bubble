@@ -103,6 +103,9 @@ def build(app: BubbleWindow) -> None:
     footer.pack(fill="x", side="bottom", pady=(8, 0))
     links = ttk.Frame(footer)
     links.pack(side="right", anchor="n")
+    app.update_link = ttk.Label(links, text="", font="SunValleyBodyStrongFont", foreground=widgets.palette()["accent"],
+                                cursor="hand2")  # (se ve solo si hay una versión nueva: ver show_update_link)
+    app.update_link.bind("<Button-1>", lambda _event: app.open_update())
     for text, command in (("Soporte", app.open_support), ("Acerca de", app.open_about)):
         link = ttk.Label(links, text=text, font="SunValleyCaptionFont", foreground=widgets.palette()["accent"],
                          cursor="hand2")
@@ -114,6 +117,20 @@ def build(app: BubbleWindow) -> None:
     app.voice_panel._update_locks(animate=False)  # (Ajustes se arma después de Voz)
     _show_page(app)
 
+
+
+def show_update_link(app: BubbleWindow, release) -> None:
+    """El link «Actualizar a la X» abajo de todo, mientras haya una versión nueva."""
+    link = getattr(app, "update_link", None)
+    if link is None:
+        return
+    if release is None:
+        link.pack_forget()
+        return
+    link.configure(text=f"↑ Actualizar a la {release.version}")
+    if not link.winfo_manager():
+        siblings = [child for child in link.master.winfo_children() if child is not link and child.winfo_manager()]
+        link.pack(side="left", padx=(12, 0), before=siblings[0]) if siblings else link.pack(side="left")
 
 # ---------------------------------------------------------------- encabezado
 def _header(app: BubbleWindow, parent) -> None:
@@ -285,11 +302,13 @@ def _settings(app: BubbleWindow, page) -> None:
     _option_menu(row, app.perf_var, PERFORMANCE, lambda: _change_performance(app))
     app.perf_label = widgets.muted(box, "Detectando tu PC…")
 
-    box = widgets.card(page, "Instalación", "Bubble instala solo lo que le falta al abrirse. Desinstalar borra todo "
-                                            "lo que trajo (elegís qué).")
+    box = widgets.card(page, "Instalación", "Bubble instala solo lo que le falta al abrirse y te avisa cuando hay "
+                                            "una versión nueva. Desinstalar borra todo lo que trajo (elegís qué).")
     row = ttk.Frame(box)
     row.pack(fill="x")
     ttk.Button(row, text="Revisar instalación", command=app.open_setup).pack(side="left")
+    ttk.Button(row, text="Buscar actualizaciones", command=lambda: app.check_update(force=True)).pack(
+        side="left", padx=(8, 0))
     ttk.Button(row, text="Desinstalar Bubble…", command=app.open_uninstall).pack(side="right")
 
     box = widgets.card(page, "Ayuda", "¿Algo no anda o se te ocurre una mejora? Escribilo en Soporte (con capturas, "

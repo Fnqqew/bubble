@@ -149,6 +149,8 @@ class BubbleWindow:
         self.system_plan = None
         self._checking_system = False
         self._support = None  # la ventana de Soporte, si está abierta
+        self.update_release = None  # la versión nueva, si hay (ver update.py)
+        self._update_window = None
         self._detecting = False  # buscando el chat en la ventana de Roblox
         self.inline_mode = config.roblox.display_mode != "panel"
         # Barra para escribir: traducciones ya hechas (vista previa) y cuál se manda apenas esté lista.
@@ -244,6 +246,9 @@ class BubbleWindow:
         self.root.after(1500, self._check_install)
         # Tu equipo (memoria, micrófonos, cuenta de Claude, internet…): Bubble se adapta y avisa si algo falta.
         self.root.after(3000, self.check_system)
+        # ¿Se acaba de actualizar? ¿Hay una versión nueva? (ver update.py)
+        self.root.after(2500, self._update_result)
+        self.root.after(8000, self.check_update)
 
     # ================= instalar y desinstalar (ver install.py, uninstall.py, setup_window.py) =================
     def _check_install(self) -> None:
@@ -289,6 +294,68 @@ class BubbleWindow:
         from .about_window import AboutWindow
 
         AboutWindow(self.root, self.open_support)
+
+    # ================= actualizaciones (ver update.py y update_window.py) =================
+    def check_update(self, force: bool = False) -> None:
+        """¿Hay una versión nueva? Al abrir (como mucho cada 12 horas) o con «Buscar actualizaciones» (`force`)."""
+        from .. import update
+
+        if force:
+            self._set_status("Buscando actualizaciones…")
+
+        def work() -> None:
+            try:
+                release = update.check(force=force)
+            except Exception:  # noqa: BLE001 - sin poder revisar, se sigue como siempre
+                log.debug("No se pudo buscar actualizaciones", exc_info=True)
+                release = None
+            self.events.put(("call", lambda: self._on_update(release, force)))
+
+        threading.Thread(target=work, name="bubble-actualizaciones", daemon=True).start()
+
+    def _on_update(self, release, asked: bool) -> None:
+        from .. import __version__, update
+
+        self.update_release = release
+        app_view.show_update_link(self, release)
+        if release is None:
+            if asked:
+                self._set_status(f"✓ Estás al día: Bubble {__version__} es la última versión.")
+            return
+        if asked or update.should_offer(release):
+            self._offer_update(release)
+
+    def open_update(self) -> None:
+        if self.update_release is not None:
+            self._offer_update(self.update_release)
+
+    def _offer_update(self, release) -> None:
+        """Pregunta si actualizar, pero nunca en medio de una partida (la ventana le sacaría el foco al juego): espera
+        a que Roblox no esté al frente."""
+        from .update_window import UpdateWindow
+
+        if self._update_window is not None and self._update_window.window.winfo_exists():
+            self._update_window.window.lift()
+            return
+        if self._in_game():
+            self.root.after(30000, lambda: self._offer_update(release))
+            return
+        self._update_window = UpdateWindow(self.root, release, lambda action: self.events.put(("call", action)),
+                                           self._on_close)
+
+    def _update_result(self) -> None:
+        """Si Bubble se acaba de actualizar, cómo salió."""
+        from .. import update
+
+        result = update.finished()
+        if result is None:
+            return
+        if result.get("ok"):
+            self._append(f"Bubble se actualizó a la {result.get('version')}.\n", "info")
+            self._set_status(f"✓ ¡Listo! Bubble se actualizó a la {result.get('version')}.")
+        else:
+            self._append(f"No se pudo actualizar a la {result.get('version')}: {result.get('error')}\n", "error")
+            self._set_status("No se pudo actualizar: sigue la versión que tenías (el detalle, en Actividad).")
 
     def check_system(self, internet: bool | None = None) -> None:
         """Revisa tu equipo en segundo plano, se adapta y avisa si algo impide que Bubble ande (ver system.py).

@@ -43,6 +43,20 @@ escritorio (se crea solo) lo abre directo.
 
 A mano (desarrollo): `python -m venv .venv` y `.venv\Scripts\python.exe -m pip install -e ".[voz,dev]"`.
 
+**Actualizaciones.** Al abrir, Bubble se fija en GitHub si hay una versión nueva (como mucho dos veces por día). Si
+hay, te muestra qué trae y te pregunta: **Actualizar ahora** o **Más tarde**.
+
+- **Actualizar ahora:** baja la versión nueva, se cierra, reemplaza sus archivos y vuelve a abrir solo, con una
+  ventanita que muestra cómo va. Tu configuración, tu clave de Pro, lo que aprendió de tu voz y los modelos no se
+  tocan (viven en otra carpeta). Si la versión nueva necesita paquetes nuevos, los instala. Y si algo sale mal, deja
+  la versión que tenías y te lo cuenta en **Actividad**.
+- **Más tarde:** no vuelve a preguntar por esa versión hasta el día siguiente. Mientras tanto queda el link
+  **↑ Actualizar a la X** abajo de todo en la ventana.
+- **Nunca en medio de una partida:** si estás jugando, espera a que Roblox no esté al frente para preguntarte (la
+  ventana le sacaría el foco al juego).
+- Cuando quieras: **Ajustes → Buscar actualizaciones**.
+- Si tu copia es de desarrollo (con git), se actualiza con `git pull`, y solo si no tenés cambios propios sin guardar.
+
 **Desinstalar:** **Ajustes → Desinstalar Bubble…** (o `Desinstalar.bat`, sin abrir Bubble). Elegís qué se borra:
 
 - tu configuración, tu clave de Pro, lo aprendido de tu voz, los entrenamientos y los registros;
