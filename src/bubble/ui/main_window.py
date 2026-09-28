@@ -157,6 +157,7 @@ class BubbleWindow:
         self._compose_multi = False  # la última vez mandaste a "todos los del chat"
         self.compose.on_target = self._use_language  # cambiar el idioma con Tab cambia también el de tu voz
         self.compose.on_toggle_plan = self._toggle_plan_in_game  # Ctrl+P: Basic ↔ Pro sin salir del juego
+        self.compose.on_tone = self._remember_tone  # el tono elegido con ↑/↓ queda para la próxima
         from .. import layered
         from .toast import Toast
 
@@ -901,6 +902,14 @@ class BubbleWindow:
         outgoing = _code(self.out_lang.get())
         if outgoing != self.config.user.outgoing_language:
             self._set_outgoing(outgoing)
+
+    def _remember_tone(self, tone: int) -> None:
+        """Elegiste el tono en la barra (↑/↓): queda guardado, y Ajustes lo muestra."""
+        self.config.user.tone = tone
+        save_setting("user", "tone", tone)
+        if getattr(self, "tone", None) is not None:
+            self.tone.set(TONE_CHOICES[tone - 1])
+            self.tone_hint.configure(text=TONE_HINTS[tone])
 
     def _on_tone_change(self, _event=None) -> None:
         self.config.user.tone = TONE_CHOICES.index(self.tone.get()) + 1

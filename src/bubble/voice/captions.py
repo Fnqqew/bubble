@@ -44,8 +44,12 @@ Translate = Callable[[str, str, int, Callable[[str], None], Callable[[str | None
 class CaptionBoard:
     def __init__(self, my_language: str, translate: Translate, on_change: Callable[[], None] = lambda: None,
                  keep: int = KEEP, show_s: float = SHOW_S,
-                 on_translated: Callable[[Line], None] = lambda _line: None) -> None:
+                 on_translated: Callable[[Line], None] = lambda _line: None,
+                 is_native: Callable[[str, str], bool] | None = None) -> None:
         self.my_language = my_language.split("-")[0].lower()
+        # ¿Esto ya está en tu idioma? (mirando las palabras, no solo lo que dijo el reconocimiento). Se revisa ANTES de
+        # mostrar: antes se mostraba y recién se sacaba al querer traducirlo, y se veían frases en español.
+        self.is_native = is_native
         self.translate = translate
         self.on_change = on_change
         self.on_translated = on_translated  # una frase quedó traducida (para el registro de la ventana)
@@ -61,7 +65,9 @@ class CaptionBoard:
         language = caption.language.split("-")[0].lower()
         with self._lock:
             line = next((item for item in self.lines if item.id == caption.id), None)
-            if not caption.text or language == self.my_language:
+            native = language == self.my_language or (
+                self.is_native is not None and bool(caption.text) and self.is_native(caption.text, language))
+            if not caption.text or native:
                 # Nada que mostrar (no era voz) o ya está en tu idioma.
                 if line:
                     self.lines.remove(line)

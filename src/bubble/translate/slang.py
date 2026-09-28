@@ -66,6 +66,18 @@ LEXICON: tuple[Slang, ...] = tuple(
         ("skibidi / sigma / gyat / fanum tax", "brainrot memes with little literal meaning", True),
         ("bruh", "exasperation", False), ("copium", "denial, coping with a loss", True),
         ("pog / poggers", "awesome, hype", True),
+        ("2tf / asf / af (after a word)", "intensifier: extremely (funny 2tf = hilarious; hard asf = really hard)", True),
+        ("tf", "the f*** (what tf = what the hell); intensifier of surprise or anger", False),
+        ("stfu / gtfo", "shut up / get out (rude)", True), ("ts / pmo", "this sh*t / pisses me off", False),
+        ("icl / ion", "I can't lie / I don't", True), ("js", "just saying", False), ("hella", "very", True),
+        ("gng / twin", "friends, bro (address)", True), ("fym", "what do you mean?! (rude)", True),
+        ("wsg / wsp", "what's good / what's up", True), ("sm", "so much", False),
+        ("tuff", "cool, impressive", True), ("aura", "coolness points (lost/gained aura)", False),
+        ("crash out / crashout", "angry, reckless outburst", True), ("glaze / glazing", "overpraise someone", True),
+        ("opp", "enemy, rival", True), ("unc", "old person (teasing)", True), ("cooked", "doomed, done for", False),
+        ("yap / yapping", "talking too much", True), ("mog / mogging", "outshine someone", True),
+        ("chat", "addressing everyone watching or the server", False), ("goofy", "silly, clownish (insult)", False),
+        ("based", "admirably honest, not caring what others think", False),
     ])
     # ---------- Portugués (Brasil) ----------
     + _entries("pt", "BR", [

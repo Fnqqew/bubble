@@ -44,7 +44,31 @@ REGIONAL = {("es", "AR"): ("antonia", None), ("es", "UY"): ("antonia", None), ("
             ("en", "AU"): ("theia", "hyperion")}
 SPEED_LANGUAGES = {"en", "es"}  # Deepgram deja cambiar la velocidad solo en estos
 MAX_CHARS = 2000
+FADE_S = 0.07  # si la voz termina de golpe, se baja suave en este final
 CACHE_SIZE = 120  # frases dichas que se guardan (en memoria): repetir "gg" o "gracias" no se vuelve a pagar
+
+
+def speakable(text: str) -> str:
+    """Con signo al final: la voz de la nube corta el final de las palabras sueltas sin puntuación ("nice", "gg"),
+    y con signo las termina mejor (medido)."""
+    text = " ".join(text.split())
+    if text and text[-1] not in ".!?…。！？\"'»”)":
+        text += "!" if len(text.split()) <= 2 else "."
+    return text
+
+
+def soften_end(audio: np.ndarray) -> np.ndarray:
+    """Si la voz termina todavía sonando (la nube a veces corta la última sílaba), se baja suave en los últimos
+    FADE_S en vez del corte seco (que suena a palabra sin terminar)."""
+    tail = int(SAMPLE_RATE * FADE_S)
+    if len(audio) < tail * 2:
+        return audio
+    last = audio[-int(SAMPLE_RATE * 0.02):]
+    if float(np.sqrt(np.mean(last ** 2))) < 0.01:  # (−40 dB: ya terminaba en silencio)
+        return audio
+    audio = audio.copy()
+    audio[-tail:] *= np.cos(np.linspace(0, np.pi / 2, tail)) ** 2
+    return audio
 
 
 def voice_name(language: str, gender: str = "femenina", personality: str = "canchera") -> str | None:
@@ -122,6 +146,7 @@ class CloudVoices:
         if text.strip().lower() == "ok":
             self.prepare(language, gender)  # la "práctica" de las voces de tu PC: acá alcanza con conectarse
             return None
+        text = speakable(text)
         params, gain, key = self._request(name, language, speed, style, text)
         code = language.split("-")[0].lower()
         with self._cache_lock:
@@ -159,6 +184,7 @@ class CloudVoices:
         name = voice_name(language, gender or self.gender, self.personality)
         if name is None or not text.strip() or text.strip().lower() == "ok":
             return None
+        text = speakable(text)
         params, gain, key = self._request(name, language, speed, style, text)
         with self._cache_lock:
             cached = self._cache.get(key)
@@ -177,6 +203,12 @@ class CloudVoices:
     def _decode(self, pieces, key, gain: float, language: str, chars: int):
         parts, leftover = [], b""
         gain_now = 1.0 if gain == 1.0 else min(gain, 1.6)
+        hold = int(SAMPLE_RATE * FADE_S) * 2  # el final se retiene un momento: si termina de golpe, se suaviza
+        held = np.zeros(0, dtype=np.float32)
+
+        def out(audio: np.ndarray) -> np.ndarray:
+            return np.clip(audio * gain_now, -0.98, 0.98) if gain_now != 1.0 else audio
+
         for data in pieces:
             data = leftover + data
             cut = len(data) // 2 * 2
@@ -185,8 +217,12 @@ class CloudVoices:
                 continue
             samples = np.frombuffer(data[:cut], dtype="<i2").copy()
             parts.append(samples)
-            audio = samples.astype(np.float32) / 32768.0
-            yield np.clip(audio * gain_now, -0.98, 0.98) if gain_now != 1.0 else audio
+            held = np.concatenate([held, samples.astype(np.float32) / 32768.0])
+            if len(held) > hold:
+                ready, held = held[:-hold], held[-hold:]
+                yield out(ready)
+        if len(held):
+            yield out(soften_end(held))
         if parts:
             self._ready.add(language.split("-")[0].lower())
             with self._cache_lock:
@@ -211,7 +247,7 @@ class CloudVoices:
 
     @staticmethod
     def _speech(samples: np.ndarray, gain: float) -> Speech:
-        audio = samples.astype(np.float32) / 32768.0
+        audio = soften_end(samples.astype(np.float32) / 32768.0)
         if gain != 1.0:
             peak = float(np.max(np.abs(audio))) or 1.0
             audio = audio * min(gain, 0.98 / peak)  # gritando más fuerte, bajito más suave (sin saturar)

@@ -105,8 +105,8 @@ def parts(project: Path = PROJECT_DIR) -> list[Part]:
         Part("modelos", "Modelos y voces descargados", f"{human(size_of(models))} en tu disco.",
              [p for p in models if p.exists()]),
         Part("accesos", "Acceso directo", "El de tu escritorio.", [link] if link and link.exists() else []),
-        Part("cable", "Micrófono virtual (VB-Cable)", "Es de Windows y otros programas (Discord, OBS) pueden usarlo: "
-             "se abre su desinstalador.", [], selected=False, available=cable),
+        Part("cable", "Micrófono virtual (VB-Cable)", "El controlador que instaló Bubble: se saca de Windows como si "
+             "nunca hubiera estado (Windows pide permiso de administrador).", [], selected=cable, available=cable),
         Part("programa", "La carpeta de Bubble",
              str(project) if removable else "Es una carpeta de desarrollo (git): no se borra." if development
              else "Bubble no está en una carpeta propia: no se borra.",
@@ -127,7 +127,10 @@ def run(selected: set[str], project: Path = PROJECT_DIR, after_exit: bool = True
     except Exception:  # noqa: BLE001 - sin la parte de voz no hay nada que devolver
         log.debug("No se pudieron devolver los dispositivos", exc_info=True)
     later: list[Path] = []
-    for part in parts(project):
+    ordered = parts(project)
+    # El micrófono virtual primero: su desinstalador está en las descargas, que se borran después.
+    ordered.sort(key=lambda part: part.key != "cable")
+    for part in ordered:
         if part.key not in selected or not part.available:
             continue
         if part.key == "cable":
@@ -153,17 +156,44 @@ def run(selected: set[str], project: Path = PROJECT_DIR, after_exit: bool = True
     return done
 
 
-def _uninstall_cable() -> str:
-    import ctypes
+def _cable_setup() -> Path | None:
+    """El instalador oficial de VB-Cable (sirve también para desinstalarlo), copiado a una carpeta temporal: las
+    descargas de Bubble se borran enseguida. Si no está (se borró), se baja de nuevo."""
+    import zipfile
 
     folder = _local() / "descargas" / "vbcable"
-    setup = folder / "VBCABLE_Setup_x64.exe"
-    if not setup.exists():
-        return "Micrófono virtual: desinstalalo desde Configuración de Windows › Aplicaciones (VB-Audio Virtual Cable)."
-    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(setup), None, str(folder), 1)
+    if not (folder / "VBCABLE_Setup_x64.exe").exists():
+        try:
+            from .voice.bridge import _driver_url
+            from .voice.models import download
+
+            url = _driver_url()
+            archive = download(url, Path(tempfile.gettempdir()) / "bubble-vbcable" / Path(url).name)
+            folder = archive.parent
+            with zipfile.ZipFile(archive) as pack:
+                pack.extractall(folder)
+        except Exception:  # noqa: BLE001 - sin internet: se avisa cómo hacerlo a mano
+            log.debug("No se pudo bajar el instalador de VB-Cable", exc_info=True)
+            return None
+    copy = Path(tempfile.gettempdir()) / "bubble-vbcable-quitar"
+    shutil.rmtree(copy, ignore_errors=True)
+    shutil.copytree(folder, copy)
+    setup = copy / "VBCABLE_Setup_x64.exe"
+    return setup if setup.exists() else None
+
+
+def _uninstall_cable() -> str:
+    """Saca el controlador de VB-Cable con su instalador oficial, sin ventanas (-u -h). Windows pide permiso."""
+    import ctypes
+
+    setup = _cable_setup()
+    if setup is None:
+        return ("Micrófono virtual: desinstalalo desde Configuración de Windows › Aplicaciones "
+                "(VB-Audio Virtual Cable).")
+    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(setup), "-u -h", str(setup.parent), 0)
     if result <= 32:
-        return "Micrófono virtual: no se abrió el desinstalador (¿se canceló el permiso?)."
-    return "Micrófono virtual: en la ventana que se abrió, tocá «Remove Driver»."
+        return "Micrófono virtual: no se sacó (se canceló el permiso de administrador)."
+    return "Micrófono virtual: sacado de Windows (si Windows lo pide, reiniciá la PC)."
 
 
 def _delete_after_exit(paths: list[Path]) -> None:

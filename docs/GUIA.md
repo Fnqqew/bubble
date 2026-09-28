@@ -41,7 +41,8 @@ A mano (desarrollo): `python -m venv .venv` y `.venv\Scripts\python.exe -m pip i
 - tu configuración, tu clave de Pro, lo aprendido de tu voz, los entrenamientos y los registros;
 - los modelos y las voces descargados (te dice cuánto ocupan);
 - el acceso directo del escritorio;
-- el micrófono virtual (no viene marcado: otros programas pueden usarlo; se abre su desinstalador oficial);
+- el micrófono virtual (VB-Cable): se saca de Windows con su desinstalador oficial, sin ventanas, como si nunca
+  hubiera estado (Windows pide permiso de administrador una vez);
 - la carpeta de Bubble (si es una carpeta de desarrollo, con git, no se borra nunca).
 
 Antes de borrar, Windows vuelve a usar tu micrófono y tu parlante de verdad. Pide confirmar dos veces, y lo que Bubble
@@ -182,6 +183,9 @@ escucha todo lo que suena en la PC.
   Escucha solo mientras estás en Roblox (el juego al frente, o la barra para escribir abierta): fuera del juego (en
   Discord, en el navegador) no traduce nada.
 - **Escribiendo:** en la barra para escribir, **Ctrl+Enter** en vez de Enter.
+
+En frases largas, la primera oración traducida empieza a sonar mientras Claude traduce el resto. Claude también
+conoce los nombres de los jugadores del chat: si el reconocimiento escuchó mal un nombre, lo corrige.
 
 **Te escuchan en** (en la página **Voz**) es el idioma de tu voz: el mismo que el de la barra para escribir.
 
@@ -339,6 +343,11 @@ entiende y habla mejor. La traducción, en los dos, la hace tu suscripción de C
 | Palabras tuyas y de juego | Whisper con ejemplos | la nube las prioriza (*pvp*, *Blox Fruits*, *farmear* y lo que aprendió de vos) |
 | Tu procesador | trabaja para la voz | libre: Whisper ni se carga (queda de respaldo) |
 | Se ve | como siempre, con la insignia BASIC | dorado: ventana, insignia PRO, barra para escribir y traducciones en el juego |
+
+**Tu voz con el botón, en vivo:** mientras mantenés el botón, tu voz va a la nube; cuando hacés la pausa final, la
+nube lo nota (~0,9 s) y el texto ya está: no se manda de nuevo (antes se leía todo lo dicho en cada pausa, ~1 s cada
+vez, pagándolo varias veces). Los nombres de los jugadores del chat se reconocen como se dicen ("xXShadowXx_2012" →
+"Shadow"), y las siglas deletreadas se juntan ("p v p" → "pvp").
 
 **Cambiar de plan:** en la página **✦ Pro**, o **en el juego**: en la barra para escribir, **Ctrl+P** (o un clic en
 «BASIC» / «✦ PRO», abajo a la derecha). Arriba del juego aparece un aviso que confirma el cambio. La escucha y tu voz

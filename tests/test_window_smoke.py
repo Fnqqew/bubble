@@ -113,3 +113,13 @@ def test_pro_options_are_locked_in_basic_and_switching_is_quick(window, monkeypa
     assert not window.pro_panel.try_button.instate(["disabled"])
     window.set_pro(False)
     assert all(box.dimmed for box in cards)
+
+
+def test_the_tone_chosen_in_the_bar_is_kept(window):
+    from bubble.state import load_state
+
+    window.compose.tone = 3
+    window.compose._change_tone(+1)  # ↑ en la barra para escribir
+    assert window.config.user.tone == 4
+    assert load_state()["settings"]["user"]["tone"] == 4  # queda para la próxima (antes volvía a casual)
+    assert window.tone.get() == window.tone.cget("values")[3]  # y Ajustes lo muestra

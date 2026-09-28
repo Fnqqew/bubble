@@ -311,28 +311,49 @@ class Translator:
         - los mensajes del chat: en lotes (llegan en ráfagas)."""
         voice = request.spoken or request.from_speech or fast
         if voice and self._voice_ready():
-            if on_delta is None:
-                return await self._hedged(request)
-            return await self.voice_router.translate(request, on_delta)
+            return await self._hedged(request, on_delta)
         if voice or request.direction == "outgoing":
             return await self.router.translate(request, on_delta)
         return await self.batcher.translate(request, on_delta)
 
-    async def _hedged(self, request: TranslationRequest):
+    async def _hedged(self, request: TranslationRequest, on_delta: DeltaCallback | None = None):
         """Carril rápido; si tarda, también el del chat, y gana el primero que termine bien. El que pierde termina
-        solo (cortarlo reiniciaría su sesión)."""
-        first = asyncio.ensure_future(self.voice_router.translate(request))
+        solo (cortarlo reiniciaría su sesión). Con `on_delta` (la voz se dice de a oraciones), los pedazos que se
+        pasan son solo los del carril que empezó a responder primero, y gana ese: así nunca se mezclan dos
+        traducciones."""
+        owner: list[str] = []
+
+        def relay(lane: str):
+            if on_delta is None:
+                return None
+
+            def forward(chunk: str) -> None:
+                if not owner:
+                    owner.append(lane)
+                if owner[0] == lane:
+                    on_delta(chunk)
+
+            return forward
+
+        first = asyncio.ensure_future(self.voice_router.translate(request, relay("voz")))
         done, _pending = await asyncio.wait({first}, timeout=HEDGE_AFTER_S)
         if first in done:
             if first.exception() is None:
                 return first.result()
-            return await self.router.translate(request)
-        second = asyncio.ensure_future(self.router.translate(request))
+            if owner:  # ya se dijo algo de esta traducción: no se empieza otra encima
+                raise first.exception()
+            return await self.router.translate(request, relay("chat"))
+        if owner:  # el carril rápido ya está respondiendo: se lo espera (sin otro pedido)
+            return await first
+        second = asyncio.ensure_future(self.router.translate(request, relay("chat")))
+        tasks = {"voz": first, "chat": second}
         pending = {first, second}
         error: BaseException | None = None
         while pending:
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
+                if owner and task is not tasks[owner[0]]:
+                    continue  # terminó el otro, pero la voz viene siguiendo a este
                 if task.exception() is None:
                     for other in pending:
                         other.add_done_callback(_forget)
@@ -340,6 +361,13 @@ class Translator:
                         log.info("Voz: respondió antes el carril del chat")
                     return task.result()
                 error = task.exception()
+                if owner:
+                    raise error
+            if owner and tasks[owner[0]] not in pending and tasks[owner[0]].done():
+                chosen = tasks[owner[0]]
+                if chosen.exception() is None:
+                    return chosen.result()
+                raise chosen.exception()
         raise error or RuntimeError("No se pudo traducir")
 
     def _short_from_my_side(self, text: str, speaker: str, target: str) -> bool:

@@ -257,7 +257,7 @@ class VoicePanel:
         threading.Thread(target=self._start_soundpad, name="bubble-soundpad", daemon=True).start()
         if self.app.translator is not None:
             self.app.translator.examples_for = self.profile.examples  # cómo querés sonar (página Pruebas)
-            self.app.translator.vocabulary_for = self.profile.vocabulary  # tus palabras, para Claude
+            self.app.translator.vocabulary_for = self._vocabulary_for_claude  # tus palabras, para Claude
         if not (self.config.subtitles or self.config.speak):
             return
         if load_state().get("voice_loading"):
@@ -411,7 +411,7 @@ class VoicePanel:
         self._open_voice_lane()
         if self.board is None:
             self.board = CaptionBoard(self.app.config.user.language, self._translate_heard,
-                                      on_translated=lambda line: self.app.events.put(("voice_line", line)))
+                                      is_native=self._is_my_language, on_translated=lambda line: self.app.events.put(("voice_line", line)))
         key = self._cloud_key()
         kind = "nube" if key else "pc"
         if kind != self._kind:
@@ -462,9 +462,21 @@ class VoicePanel:
             elif self.speaker is None:
                 self.out.warm_up(self.app.translator.outgoing_target())
                 binding = win32.parse_binding(self.config.push_to_talk)
+                stream = None
+                if key:
+                    # Pro: tu voz va a la nube mientras mantenés el botón; cuando terminás, ya está entendida.
+                    from ..cloud.deepgram import DeepgramListener
+                    from ..voice.pipelines import StreamedTurn
+
+                    stream = StreamedTurn(DeepgramListener(
+                        key, lambda _caption: None, source_factory=self._my_microphone,
+                        on_error=lambda msg: self._set_status(msg), on_fatal=self._cloud_failed,
+                        language=self.app.config.user.language, diarize=False, judge=self.profile.intonation,
+                        noise_filter=True, keyterms=self._my_keyterms, send_all=True), self.app.config.user.language)
                 self.speaker = VoiceSpeaker(self.my_asr(), self.out, self._translate_mine, binding.vk,
                                             self.app.config.user.language, on_event=self._spoke,
-                                            mic_factory=self._my_microphone, profile=self.profile)
+                                            mic_factory=self._my_microphone, profile=self.profile, stream=stream,
+                                            by_sentence=True)
                 self.speaker.on_turn = lambda turn: self.profile.note_times(turn.times)
             self.speaker.start()
             if not self.out.output.is_cable:
@@ -698,7 +710,11 @@ class VoicePanel:
         return native_by_words(text, mine) and not foreign_words(text, mine)
 
     # ------------------------------------------------------------ tu voz: texto en tu idioma → (traducción, idioma)
-    def _translate_mine(self, text: str, intonation: str = "") -> tuple[str, str] | None:
+    def _translate_mine(self, text: str, intonation: str = "", on_sentence=None) -> tuple[str, str] | None:
+        """Tu frase → (traducción, idioma). `on_sentence(oración, idioma)`: cada oración apenas está traducida (para
+        empezar a decirla ya; ver pipelines.Sentences)."""
+        from ..voice.pipelines import Sentences
+
         translator = self.app.translator
         target = translator.outgoing_target()
         marks = set(intonation.split("+")) if intonation else set()
@@ -708,12 +724,18 @@ class VoicePanel:
         if saved:  # ya lo dijiste antes: sale al instante
             translator.remember_target(target)
             self.app.tracker.mark_sent(saved)
+            if on_sentence:
+                on_sentence(saved, target)
             return saved, target
+        sentences = Sentences(lambda sentence: on_sentence(sentence, target)) if on_sentence else None
         result = self.app.runner.submit(
             translator.translate_outgoing(text, target, tone=self.app.config.user.tone, spoken=True,
-                                          from_speech=True, intonation=intonation)).result(timeout=25)
+                                          from_speech=True, intonation=intonation,
+                                          on_delta=sentences.add if sentences else None)).result(timeout=25)
         if result.status == "error" or not result.translation.strip():
             return None
+        if sentences:
+            sentences.finish(result.translation)
         translator.remember_target(target)
         self.profile.remember(key, target, result.translation)
         self.app.tracker.mark_sent(result.translation)
@@ -741,11 +763,23 @@ class VoicePanel:
 
         return load_key()
 
-    def _my_keyterms(self) -> list[str]:
-        """Palabras que la nube tiene que entenderte bien: la jerga de juego y las tuyas (lo que aprendió de vos)."""
-        from ..cloud.deepgram import GAME_TERMS
+    def _chat_names(self) -> list[str]:
+        """Los jugadores que aparecen en el chat (los más recientes primero)."""
+        tracker = getattr(self.app, "tracker", None)
+        return tracker.names.recent(20) if tracker is not None else []
 
-        return [*self.profile.vocabulary(self.app.config.user.language)[::-1], *GAME_TERMS]
+    def _my_keyterms(self) -> list[str]:
+        """Palabras que la nube tiene que entenderte bien: las tuyas (lo que aprendió de vos), los nombres de los
+        jugadores del chat (como se dicen) y la jerga de juego."""
+        from ..cloud.deepgram import GAME_TERMS, spoken_names
+
+        return [*self.profile.vocabulary(self.app.config.user.language)[::-1], *spoken_names(self._chat_names()),
+                *GAME_TERMS]
+
+    def _vocabulary_for_claude(self, language: str) -> tuple[str, ...]:
+        """Para Claude, al traducir tu voz: tus palabras y los nombres de los jugadores del chat (si el reconocimiento
+        escuchó mal un nombre, Claude lo corrige por el que suena parecido)."""
+        return (*self.profile.vocabulary(language), *self._chat_names())
 
     def _cloud_failed(self, error) -> None:
         """La nube falló. Sin conexión: se usa tu PC en esa frase. Sin saldo o con la clave mala: se apaga el Pro."""
@@ -781,7 +815,7 @@ class VoicePanel:
         if translator is None:
             return
         translator.examples_for = self.profile.examples
-        translator.vocabulary_for = self.profile.vocabulary
+        translator.vocabulary_for = self._vocabulary_for_claude
 
         async def open_lane() -> None:
             translator.start_voice()
@@ -836,7 +870,7 @@ class VoicePanel:
             from ..voice.captions import CaptionBoard
 
             self.board = CaptionBoard(self.app.config.user.language, self._translate_heard,
-                                      on_translated=lambda line: self.app.events.put(("voice_line", line)))
+                                      is_native=self._is_my_language, on_translated=lambda line: self.app.events.put(("voice_line", line)))
         self.board.notice(text)
 
     def _spoke(self, kind: str, text: str) -> None:
@@ -895,7 +929,7 @@ class VoicePanel:
             from ..voice.captions import CaptionBoard
 
             self.board = CaptionBoard(self.app.config.user.language, self._translate_heard,
-                                      on_translated=lambda line: self.app.events.put(("voice_line", line)))
+                                      is_native=self._is_my_language, on_translated=lambda line: self.app.events.put(("voice_line", line)))
         self.board.mine(original, translation, language)
 
     def _tick(self) -> None:
@@ -919,4 +953,4 @@ class VoicePanel:
         lines = self.board.visible() if self.board is not None else []
         self.subtitles.update(lines, area, visible)
         # Mientras una frase aparece (animación), más seguido; si no, cada 80 ms alcanza.
-        self.app.root.after(16 if self.subtitles.animating else 80, self._tick)
+        self.app.root.after(33 if self.subtitles.animating else 80, self._tick)

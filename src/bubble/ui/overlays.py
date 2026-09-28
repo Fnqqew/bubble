@@ -161,6 +161,8 @@ class ComposeBar:
         self.on_target: Callable[[str], None] | None = None
         # Ctrl+P: pasar de Basic a Pro (o al revés) sin salir del juego.
         self.on_toggle_plan: Callable[[], None] | None = None
+        # Cambiaste el tono con ↑/↓: queda ese para la próxima (antes volvía al de Ajustes al reabrir la barra).
+        self.on_tone: Callable[[int], None] | None = None
         self.targets: list[str] = []
         self.labels: dict[str, str] = {}
         self.index = 0
@@ -403,6 +405,8 @@ class ComposeBar:
             self.tone = tone
             self._render_target()
             self._schedule_preview()
+            if self.on_tone:
+                self.on_tone(tone)
         return "break"
 
     def _submit(self, _event=None, voice: bool = False) -> str:

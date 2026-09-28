@@ -158,7 +158,21 @@ def test_cloud_voices_are_cached_and_fall_back_to_your_pc(monkeypatch):
     assert voices.synthesize("ok", "en") is None and len(fake.calls) == 1  # prepararla no gasta
     fake.fail = True
     assert voices.synthesize("wait for me", "en") == "local" and failures
-    assert pro.month_characters() == 2
+    assert pro.month_characters() == 3  # "gg!": se manda con signo (la nube termina mejor las palabras sueltas)
+
+
+def test_short_cloud_words_get_a_sign_and_a_soft_ending():
+    from bubble.cloud.speak import SAMPLE_RATE, soften_end, speakable
+
+    assert speakable("nice") == "nice!" and speakable("gg") == "gg!"
+    assert speakable("wait for me at the tower") == "wait for me at the tower."
+    assert speakable("Good.") == "Good." and speakable("¿vamos?") == "¿vamos?"
+    t = np.arange(SAMPLE_RATE // 2) / SAMPLE_RATE
+    cut = (0.5 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)  # termina sonando fuerte (cortada)
+    soft = soften_end(cut)
+    assert abs(soft[-1]) < 0.01 and np.allclose(soft[:-2000], cut[:-2000])  # solo cambia el final
+    quiet = np.concatenate([cut, np.zeros(2400, np.float32)])
+    assert np.array_equal(soften_end(quiet), quiet)  # si ya terminaba en silencio, no se toca
 
 
 def test_cloud_voices_play_while_they_arrive(monkeypatch):

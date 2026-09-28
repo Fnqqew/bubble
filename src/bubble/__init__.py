@@ -1,3 +1,3 @@
 """Bubble: traductor en tiempo real para Roblox."""
 
-__version__ = "3.1.1"
+__version__ = "3.2.0"

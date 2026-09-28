@@ -77,6 +77,31 @@ def freshness(lines: list[Line], now: float) -> dict[int, float]:
     return fresh
 
 
+_corners: dict[tuple, Image.Image] = {}
+
+
+def card(width: int, height: int, radius: int, fill: tuple) -> Image.Image:
+    """Tarjeta redondeada de cualquier tamaño. Las esquinas suaves se dibujan una sola vez (grandes y achicadas) y el
+    resto se pinta directo: ~1 ms. Antes se dibujaba toda la tarjeta al triple y se achicaba en cada cuadro (~45 ms),
+    y con subtítulos que cambian seguido eso trababa a Bubble y le sacaba procesador al juego."""
+    radius = max(1, min(radius, width // 2, height // 2))
+    key = (radius, fill)
+    if key not in _corners:
+        big = Image.new("RGBA", (2 * radius * SUPERSAMPLE,) * 2, (0, 0, 0, 0))
+        ImageDraw.Draw(big).rounded_rectangle((0, 0, big.width - 1, big.height - 1), radius * SUPERSAMPLE, fill=fill)
+        _corners[key] = big.resize((2 * radius, 2 * radius), Image.Resampling.LANCZOS)
+    corners = _corners[key]
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    image.paste(fill, (radius, 0, width - radius, height))
+    image.paste(fill, (0, radius, width, height - radius))
+    r = radius
+    image.paste(corners.crop((0, 0, r, r)), (0, 0))
+    image.paste(corners.crop((r, 0, 2 * r, r)), (width - r, 0))
+    image.paste(corners.crop((0, r, r, 2 * r)), (0, height - r))
+    image.paste(corners.crop((r, r, 2 * r, 2 * r)), (width - r, height - r))
+    return image
+
+
 def render_subtitles(lines: list[Line], scale: float | None = None, show_original: bool | None = None,
                      fresh: dict[int, float] | None = None) -> Image.Image:
     """Tarjeta con las frases (la más nueva abajo). `fresh`: frases que están apareciendo (ver `freshness`)."""
@@ -90,9 +115,7 @@ def render_subtitles(lines: list[Line], scale: float | None = None, show_origina
         size, wrapped = layout_text(text, [Slot(0, 0, width - int(60 * k), line_h)] * 2, body)
         blocks.append((line, text, color, size, [w for w in wrapped if w] or [text[:40]]))
     height = int(14 * k) + sum(head + line_h * len(wrapped) + int(10 * k) for *_rest, wrapped in blocks)
-    big = Image.new("RGBA", (width * SUPERSAMPLE, height * SUPERSAMPLE), (0, 0, 0, 0))
-    ImageDraw.Draw(big).rounded_rectangle((0, 0, big.width - 1, big.height - 1), int(16 * k) * SUPERSAMPLE, fill=FILL)
-    image = big.resize((width, height), Image.Resampling.LANCZOS)
+    image = card(width, height, int(16 * k), FILL)
     draw = ImageDraw.Draw(image)
     y = int(12 * k)
     label_font = _font(int(14 * k))

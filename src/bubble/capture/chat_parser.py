@@ -338,7 +338,14 @@ class NameBook:
             cluster = {}
             self._clusters.append(cluster)
         cluster[name] = cluster.get(name, 0) + 1
+        if self._clusters[-1] is not cluster:  # el último que habló, al final (ver `recent`)
+            self._clusters.remove(cluster)
+            self._clusters.append(cluster)
         return max(cluster.items(), key=lambda item: item[1])[0]
+
+    def recent(self, limit: int = 20) -> list[str]:
+        """Los nombres de los jugadores del chat, del que habló más recién al más viejo."""
+        return [max(cluster.items(), key=lambda item: item[1])[0] for cluster in reversed(self._clusters)][:limit]
 
     def is_known(self, name: str) -> bool:
         cluster = self._find(name)

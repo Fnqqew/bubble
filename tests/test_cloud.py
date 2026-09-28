@@ -129,16 +129,25 @@ def test_only_voice_is_sent_and_the_phrase_is_closed_after_the_pause():
 
 def test_turning_it_off_and_on_quickly_does_not_mix_the_old_threads():
     listener = DeepgramListener("clave", lambda _c: None, source_factory=lambda: None)
-    started = []
-    listener._capture = lambda run: started.append(run)
-    listener._network = lambda run, outbox: started.append(outbox)
+    runs, outboxes = [], []
+    listener._capture = lambda run: runs.append(run)
+    listener._network = lambda run, outbox: outboxes.append(outbox)
     listener.start()
-    old_run, old_outbox = started[0], started[1]
+    listener._threads[-1].join(1)
+    old_run, old_outbox = runs[0], outboxes[0]
     listener.stop()
     listener.start()
-    assert not old_run.is_set() and started[2].is_set()
-    assert started[3] is not old_outbox and listener.running
+    for thread in listener._threads:
+        thread.join(1)
+    assert not old_run.is_set() and runs[1].is_set()
+    assert outboxes[1] is not old_outbox and listener.running
     listener.stop()
+    only_network = DeepgramListener("clave", lambda _c: None, source_factory=lambda: None)
+    only_network._capture = lambda run: runs.append("no")
+    only_network._network = lambda run, outbox: None
+    only_network.start(capture=False)  # tu voz con el botón: el audio lo pasa otro
+    assert len(only_network._threads) == 1 and "no" not in runs
+    only_network.stop()
 
 
 def test_audio_keepalive_finalize_and_close_are_sent_in_order():

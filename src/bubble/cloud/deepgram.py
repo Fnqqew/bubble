@@ -22,6 +22,7 @@ import json
 import logging
 import math
 import queue
+import re
 import threading
 import time
 import urllib.error
@@ -81,6 +82,34 @@ def understands(language: str | None) -> bool:
     """¿La nube entiende ese idioma? (si no, tu voz se entiende con tu PC)."""
     code = (language or "").split("-")[0].lower()
     return not code or code in NOVA3 or code in NOVA2
+
+
+# Siglas de juego que la nube a veces escribe deletreadas ("p v p"): se juntan. Solo estas (así "y a" no se toca).
+SPELLED = {"pvp", "pve", "afk", "gg", "ggwp", "op", "xp", "hp", "npc", "fps", "dm", "gtg", "brb", "lol", "idk", "tbh",
+           "ngl", "wtf", "omg", "rn", "irl", "ez", "tp", "ffa", "1v1", "2v2"}
+_LETTERS = re.compile(r"\b(?:[A-Za-z0-9] ){1,5}[A-Za-z0-9]\b")
+
+
+def join_spelled(text: str) -> str:
+    """"hacemos p v p" → "hacemos pvp"."""
+    def join(match: re.Match) -> str:
+        word = match.group(0).replace(" ", "")
+        return word if word.lower() in SPELLED else match.group(0)
+
+    return _LETTERS.sub(join, text)
+
+
+def spoken_names(names) -> list[str]:
+    """Los nombres del chat como se dicen en voz, para que la nube los reconozca: "xXShadowXx_2012" → "Shadow",
+    "lucas_br" → "lucas", "DarkNinja123" → "Dark Ninja" (y también el nombre tal cual)."""
+    result: list[str] = []
+    for name in names:
+        core = re.sub(r"^[xX]{2,}|[xX]{2,}$", "", name)
+        parts = [part for part in re.split(r"[^A-Za-zÀ-ÿ]+|(?<=[a-zà-ÿ])(?=[A-Z])", core) if len(part) >= 3]
+        for term in (" ".join(parts[:2]), name):
+            if term and term not in result:
+                result.append(term)
+    return result
 
 
 def fit_keyterms(terms) -> list[str]:
@@ -150,7 +179,7 @@ def parse_clip(data: dict, language: str | None, seconds: float, took: float) ->
     """La respuesta de Deepgram para una frase → lo mismo que devuelve Whisper (Heard)."""
     channel = (data.get("results", {}).get("channels") or [{}])[0]
     alternative = (channel.get("alternatives") or [{}])[0]
-    text = (alternative.get("transcript") or "").strip()
+    text = join_spelled((alternative.get("transcript") or "").strip())
     if not text:
         return None
     confidence = float(alternative.get("confidence") or 0.0)
@@ -215,6 +244,7 @@ class WithFallback:
 
 
 _FINALIZE = object()
+_SENTENCE_END = re.compile(r"[.!?…]['\"»”)]*$")
 
 
 def _next(outbox: queue.Queue):
@@ -242,7 +272,7 @@ class DeepgramListener:
                  on_fatal: Callable[[CloudError], None] = lambda _exc: None, language: str | None = None,
                  diarize: bool = True, judge=None, vad=None, endpointing_ms: int = 300, earshot=None,
                  noise_filter: bool = False, keyterms: Callable[[], list[str]] | list[str] = (),
-                 speakers=None) -> None:
+                 speakers=None, send_all: bool = False) -> None:
         self.key = key
         self.on_caption = on_caption
         self.source_factory = source_factory
@@ -263,6 +293,10 @@ class DeepgramListener:
         # Quién habla sin pagar la separación de la nube: el reconocimiento de voces de tu PC (voice/speakers.py).
         self.speakers = speakers if not diarize else None
         self._open = False  # hay una frase abierta (se está hablando o hubo voz hace menos de HOLD_S)
+        self.voice_at = 0.0  # cuándo se oyó voz por última vez (reloj de la PC)
+        # Tu voz con el botón: se manda todo mientras lo mantenés (también los silencios, que son cortos): así la nube
+        # nota enseguida que terminaste. Sin esto, a veces no cerraba la frase (medido: 3 s esperando).
+        self.send_all = send_all
         self.muted_until = 0.0  # mientras suena tu voz traducida por los parlantes, no se escucha
         self._vad = vad
         self._running = threading.Event()
@@ -285,7 +319,8 @@ class DeepgramListener:
     def running(self) -> bool:
         return self._running.is_set()
 
-    def start(self) -> None:
+    def start(self, capture: bool = True) -> None:
+        """`capture=False`: solo la conexión; el audio lo pasa otro con `feed` (tu voz con el botón)."""
         if self.running:
             return
         # Cada vez que se prende, su propia señal y su propia cola: si se apaga y se prende enseguida, los hilos de
@@ -293,11 +328,19 @@ class DeepgramListener:
         run, outbox = threading.Event(), queue.Queue()
         run.set()
         self._running, self._outbox = run, outbox
-        self._threads = [threading.Thread(target=self._capture, args=(run,), name="bubble-nube-captura", daemon=True),
-                         threading.Thread(target=self._network, args=(run, outbox), name="bubble-nube-red",
+        self._threads = [threading.Thread(target=self._network, args=(run, outbox), name="bubble-nube-red",
                                           daemon=True)]
+        if capture:
+            self._threads.append(threading.Thread(target=self._capture, args=(run,), name="bubble-nube-captura",
+                                                  daemon=True))
         for thread in self._threads:
             thread.start()
+
+    def finalize(self) -> None:
+        """Terminaste (soltaste el botón): que la nube cierre la frase ya, sin esperar la pausa."""
+        if self._open or self._pieces:
+            self._outbox.put(_FINALIZE)
+        self._open = self._sending = False
 
     def stop(self) -> None:
         self._running.clear()
@@ -333,6 +376,12 @@ class DeepgramListener:
         voice = len(probs) > 0 and float(np.max(probs)) >= 0.5
         if voice:
             self._last_voice = now
+            self.voice_at = time.monotonic()
+        if self.send_all:
+            self._open = self._open or voice
+            self._send(samples)
+            return
+        if voice:
             if not self._open and not self._far and self.earshot is not None:
                 level = speech_level(np.concatenate([self._recent, samples]))
                 self._far = not self.earshot.hears(level)
@@ -460,20 +509,21 @@ class DeepgramListener:
             if message.get("is_final"):
                 if text:
                     self._pieces.append(piece)
-                if message.get("speech_final"):
+                if message.get("speech_final") or message.get("from_finalize"):
                     self._emit(final=True)
                 elif self._pieces:
-                    self._emit(final=False)
+                    # Si ya termina como una oración (". ? !"), se pide la traducción ya, sin esperar la pausa.
+                    self._emit(final=False, stable=bool(_SENTENCE_END.search(self._pieces[-1][0])))
             elif text:
                 self._emit(final=False, interim=piece)
         elif kind == "UtteranceEnd" and self._pieces:
             self._emit(final=True)
 
-    def _emit(self, final: bool, interim: tuple | None = None) -> None:
+    def _emit(self, final: bool, interim: tuple | None = None, stable: bool = False) -> None:
         pieces = [*self._pieces, *([interim] if interim else [])]
         if not pieces:
             return
-        text = " ".join(p[0] for p in pieces if p[0]).strip()
+        text = join_spelled(" ".join(p[0] for p in pieces if p[0]).strip())
         words = [w for p in pieces for w in p[1]]
         start, end = pieces[0][2], pieces[-1][3]
         if final and self.noise_filter and cloud_noise(text, [float(w.get("confidence", 0.0)) for w in words]):
@@ -484,7 +534,7 @@ class DeepgramListener:
         language = str(_majority([w.get("language") for w in words], self.language or "en")).split("-")[0]
         confidence = float(np.mean([w.get("confidence", 0.0) for w in words])) if words else 0.0
         intonation = self._intonation(start, end, speaker) if final else ""
-        self.on_caption(Caption(self._current, start, end, text, language, max(0, speaker), final, False,
+        self.on_caption(Caption(self._current, start, end, text, language, max(0, speaker), final, stable,
                                 intonation, confidence > 0.8))
         if final:
             self._pieces = []

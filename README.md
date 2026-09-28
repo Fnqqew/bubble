@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 3.1" src="https://img.shields.io/badge/versión-3.1-4a90e2?style=flat-square">
+  <img alt="Versión 3.2" src="https://img.shields.io/badge/versión-3.2-4a90e2?style=flat-square">
   <img alt="Basic gratis" src="https://img.shields.io/badge/Basic-gratis-5b6270?style=flat-square">
   <img alt="Bubble Pro" src="https://img.shields.io/badge/✦%20Bubble-Pro-f2c14e?style=flat-square&labelColor=2b2f36">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
@@ -188,7 +188,8 @@ Y con Bubble Pro (medido con una cuenta real de Deepgram):
 | | |
 |---|---|
 | Voz de la nube | empieza a sonar en **0,31 a 0,40 s**, sin cortes (esperando la frase entera: 1 a 2,5 s) |
-| Una frase con el botón | entendida en **0,6 s** (inglés) · con *pvp*, *Blox Fruits* y *farmear* bien escritos |
+| Tu voz con el botón | se entiende **mientras hablás**: sabe que terminaste a los **~0,9 s** y el texto ya está · con *pvp*, *Blox Fruits* y *farmear* bien escritos |
+| Frases largas | la primera oración traducida suena mientras se traduce el resto |
 | Conexión en vivo | sigue abierta en los silencios largos · **14 s** sin hablar, sin cortes |
 | Costo de toda esa prueba | **0,006 US$** |
 
