@@ -34,7 +34,7 @@ CHAT_TEXT = (246, 247, 250)
 ACCENT = (84, 152, 255, 240)
 PILL_COLORS = {"grafito": (17, 19, 24), "medianoche": (14, 24, 48), "violeta": (38, 22, 56),
                "bosque": (14, 34, 28), "negro": (0, 0, 0)}
-ACCENTS = {"azul": (84, 152, 255), "verde": (92, 214, 140), "rosa": (255, 120, 180), "naranja": (255, 164, 72),
+ACCENTS = {"dorado": (242, 193, 78), "azul": (84, 152, 255), "verde": (92, 214, 140), "rosa": (255, 120, 180), "naranja": (255, 164, 72),
            "ninguno": None}
 
 

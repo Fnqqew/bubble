@@ -48,6 +48,63 @@ def title_bar(window: tk.Misc) -> None:
 
 dark_title_bar = title_bar  # nombre viejo
 
+GOLD_HUE = 42 / 360  # el tono del dorado de Bubble Pro
+_originals: dict[str, bytes] = {}  # imágenes del tema antes de pintarlas de dorado (para volver)
+
+
+def tint_accent(root: tk.Misc, gold: bool) -> int:
+    """Con Bubble Pro, los botones destacados, interruptores, casillas y barras del tema pasan del azul al dorado; sin
+    Pro, vuelven al azul. El tema dibuja todo con imágenes (las de los dos temas se cargan juntas): se cambia el tono
+    de los píxeles azules de cada una. Devuelve cuántas imágenes cambió."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    changed = 0
+    try:
+        names = [str(name) for name in root.tk.call("image", "names")]
+    except tk.TclError:
+        return 0
+    for name in names:
+        if name.startswith("::") or name.startswith("pyimage"):
+            continue  # íconos de Tk y las imágenes de Bubble (no son del tema)
+        try:
+            if not gold:
+                if name in _originals:
+                    _put_png(root, name, _originals.pop(name))
+                    changed += 1
+                continue
+            if name in _originals:
+                continue  # ya está dorada
+            data = bytes(root.tk.call(name, "data", "-format", "png"))
+            image = Image.open(io.BytesIO(data))
+            alpha = image.getchannel("A") if image.mode == "RGBA" else None
+            hsv = np.array(image.convert("RGB").convert("HSV"))
+            hue, saturation = hsv[..., 0].astype(np.float32) / 255, hsv[..., 1].astype(np.float32) / 255
+            blue = (hue > 0.5) & (hue < 0.7) & (saturation > 0.15)
+            if alpha is not None:
+                blue &= np.array(alpha) > 0
+            if not blue.any():
+                continue
+            hsv[..., 0][blue] = round(GOLD_HUE * 255)
+            tinted = Image.fromarray(hsv, "HSV").convert("RGB")
+            if alpha is not None:
+                tinted.putalpha(alpha)
+            out = io.BytesIO()
+            tinted.save(out, "PNG")
+            _originals[name] = data
+            _put_png(root, name, out.getvalue())
+            changed += 1
+        except (tk.TclError, OSError, ValueError):
+            log.debug("No se pudo cambiar el color de %s", name, exc_info=True)
+    return changed
+
+
+def _put_png(root: tk.Misc, name: str, data: bytes) -> None:
+    root.tk.call(name, "blank")
+    root.tk.call(name, "put", data, "-format", "png")
+
 
 def strong_font() -> str | tuple:
     """Letra destacada del tema (la misma familia y tamaño que el resto de la ventana)."""

@@ -26,9 +26,14 @@ PALETTES = {
 
 
 def palette() -> dict[str, str]:
+    """Los colores del tema. Con Bubble Pro el acento es dorado: se nota que estás usando el Pro."""
+    from .. import pro
     from . import theme
 
-    return PALETTES.get(theme.current(), PALETTES["oscuro"])
+    colors = PALETTES.get(theme.current(), PALETTES["oscuro"])
+    if pro.active():
+        colors = {**colors, "accent": pro.gold(), "pro": pro.gold()}
+    return colors
 
 
 def icon_font() -> tuple:

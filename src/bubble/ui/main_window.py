@@ -13,6 +13,7 @@ import tkinter as tk
 from pathlib import Path
 
 from .. import roblox, shortcut, win32
+from .. import pro
 from ..async_runner import AsyncRunner
 from PIL import ImageDraw
 
@@ -34,6 +35,7 @@ from .overlays import CalibrationOverlay, ComposeBar, HotkeyCaptureDialog, Trans
 from . import app_view
 from .theme import apply_theme
 from .tutorial import TutorialWindow, build_steps
+from .pro_panel import ProPanel
 from .tests_panel import TestsPanel
 from .voice_panel import VoicePanel
 
@@ -136,10 +138,15 @@ class BubbleWindow:
         if ICON_PATH.exists():
             self.root.iconbitmap(default=str(ICON_PATH))
         apply_theme(self.root, config.appearance.theme)
+        # Bubble Pro (la voz en la nube) queda prendido si lo dejaste así y la clave sigue guardada.
+        from ..cloud.keys import load_key
+
+        pro.set_active(config.pro.enabled and bool(load_key()))
         self.voice_panel = VoicePanel(self)
         self.tests_panel = TestsPanel(self)
+        self.pro_panel = ProPanel(self)
         app_view.build(self)
-        app_view.apply_overlay_style(self)
+        app_view.apply_pro_look(self)
         self._refresh_hotkey_label()
         self.overlay = TranslationOverlay(
             self.root, config.roblox.overlay_seconds, self._overlay_anchor, self._overlay_visible
@@ -414,7 +421,9 @@ class BubbleWindow:
     def _in_game(self) -> bool:
         """Estás jugando: Roblox al frente, o la barra para escribir abierta encima. Antes, al abrir la barra se
         escondían las traducciones del chat, de las burbujas y los subtítulos (Roblox dejaba de estar al frente)."""
-        return self.compose.showing or win32.roblox_is_foreground()
+        # (al arrancar, la voz ya pregunta esto antes de que exista la barra: sin la barra, cuenta solo Roblox)
+        compose = getattr(self, "compose", None)
+        return bool(compose is not None and compose.showing) or win32.roblox_is_foreground()
 
     def _overlay_visible(self) -> bool:
         return self._in_game()
@@ -1002,6 +1011,31 @@ class BubbleWindow:
 
     def _ev_hotkey(self, _payload) -> None:
         self._on_hotkey()
+
+    def set_pro(self, enabled: bool, reason: str = "") -> None:
+        """Prende o apaga Bubble Pro. `reason`: por qué se apagó solo (la clave dejó de andar, se quedó sin saldo)."""
+        from ..cloud.keys import load_key
+
+        enabled = bool(enabled and load_key())
+        self.config.pro.enabled = enabled
+        save_setting("pro", "enabled", enabled)
+        if enabled != pro.active():
+            pro.set_active(enabled)
+            # el cambio de colores, de una vez y suave (como el tema)
+            cover = app_view._freeze(self.root) if self.root.winfo_viewable() else None
+            app_view.apply_pro_look(self)
+            self.root.update_idletasks()
+            if cover is not None:
+                app_view._fade(cover)
+            self.voice_panel.pro_changed()
+        self.pro_panel.refresh()
+        if reason:
+            self._set_status(f"Bubble Pro se apagó: {reason}. Sigo con el reconocimiento de tu PC.")
+            self._append(f"Bubble Pro se apagó: {reason}.\n", "error")
+        elif enabled:
+            self._set_status("✦ Bubble Pro activado: las voces se entienden en la nube.")
+        else:
+            self._set_status("Bubble Pro apagado: las voces se entienden con tu PC.")
 
     def _ev_call(self, action) -> None:
         action()  # algo para hacer en el hilo de la ventana (página Pruebas)

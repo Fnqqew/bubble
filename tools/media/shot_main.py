@@ -31,6 +31,12 @@ mw.BubbleWindow._drain_events = lambda self: None
 
 config = load_config()
 config.appearance.theme = theme_name
+if "pro" in sys.argv[4:]:  # con Bubble Pro activo (dorado): una clave de mentira, no se conecta a nada
+    import bubble.cloud.keys
+
+    bubble.cloud.keys.load_key = lambda: "clave-de-prueba"
+    config.pro.enabled = True
+    theme_name += "_pro"
 root = tk.Tk()
 root.withdraw()
 root.attributes("-alpha", 0.0)

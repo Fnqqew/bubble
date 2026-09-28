@@ -107,6 +107,16 @@ class VoiceConfig:
 
 
 @dataclass
+class ProConfig:
+    """Bubble Pro: la voz se entiende en la nube (Deepgram), con tu propia cuenta. La traducción sigue con Claude."""
+
+    enabled: bool = False
+    provider: str = "deepgram"
+    # Quién habla (Voz 1, Voz 2…) según la nube: más preciso, Deepgram lo cobra aparte (~0,12 US$ por hora de voz).
+    diarize: bool = True
+
+
+@dataclass
 class AppearanceConfig:
     """Cómo se ve Bubble: la ventana y las traducciones en el juego."""
 
@@ -129,6 +139,7 @@ class Config:
     roblox: RobloxConfig = field(default_factory=RobloxConfig)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     appearance: AppearanceConfig = field(default_factory=AppearanceConfig)
+    pro: ProConfig = field(default_factory=ProConfig)
 
 
 def _merge(section, values: dict) -> None:
@@ -138,7 +149,7 @@ def _merge(section, values: dict) -> None:
             setattr(section, key, value)
 
 
-SECTIONS = ("user", "translation", "claude", "roblox", "voice", "appearance")
+SECTIONS = ("user", "translation", "claude", "roblox", "voice", "appearance", "pro")
 
 
 def save_setting(section: str, key: str, value) -> None:

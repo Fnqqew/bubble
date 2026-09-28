@@ -43,6 +43,8 @@ class VoicePanel:
         self.app = app
         self.config = app.config.voice
         self.models = None  # (whisper final, whisper rápido o None, voces conocidas)
+        self._kind = ""  # "nube" o "pc": con qué se armaron la escucha y tu voz (si cambia, se rearman)
+        self._cloud_warned = 0.0
         self.voices = None
         self.out = None  # la voz sintética (ver voice/pipelines.py)
         self.bridge = None  # tu micrófono pasando al virtual (voice/bridge.py)
@@ -358,8 +360,24 @@ class VoicePanel:
         if self.board is None:
             self.board = CaptionBoard(self.app.config.user.language, self._translate_heard,
                                       on_translated=lambda line: self.app.events.put(("voice_line", line)))
+        key = self._cloud_key()
+        kind = "nube" if key else "pc"
+        if kind != self._kind:
+            # Se prendió o se apagó Bubble Pro: la escucha y tu voz se arman de nuevo con lo que corresponde.
+            for part in (self.listener, self.speaker):
+                if part:
+                    part.stop()
+            self.listener = self.speaker = None
+            self._kind = kind
         if self.subtitles_var.get():
-            if self.listener is None:
+            if self.listener is None and key:
+                from ..cloud.deepgram import DeepgramListener
+                from ..voice import audio as audio_io
+
+                self.listener = DeepgramListener(key, self.board.caption, source_factory=audio_io.game_audio,
+                                                 on_error=lambda msg: self._set_status(msg),
+                                                 on_fatal=self._cloud_failed, diarize=self.app.config.pro.diarize)
+            elif self.listener is None:
                 self.listener = LiveListener(final, self.board.caption, partial_asr=quick, speakers=speakers,
                                              on_error=lambda msg: self._set_status(msg),
                                              native=self.app.config.user.language)
@@ -373,10 +391,19 @@ class VoicePanel:
             self.speaker = None
         if self.speak_var.get():
             if self.speaker is None and direct:
-                self.speaker = DirectVoice(self.my_asr(), self.out, self._translate_mine, self.app.config.user.language,
+                cloud_ear = None
+                if key:
+                    from ..cloud.deepgram import DeepgramListener
+
+                    cloud_ear = DeepgramListener(key, lambda _caption: None, source_factory=self._my_microphone,
+                                                 on_error=lambda msg: self._set_status(msg),
+                                                 on_fatal=self._cloud_failed,
+                                                 language=self.app.config.user.language, diarize=False,
+                                                 judge=self.profile.intonation)
+                self.speaker = DirectVoice(final, self.out, self._translate_mine, self.app.config.user.language,
                                            partial_asr=quick, on_event=self._spoke,
                                            target=self.app.translator.outgoing_target,
-                                           mic_factory=self._my_microphone, profile=self.profile)
+                                           mic_factory=self._my_microphone, profile=self.profile, listener=cloud_ear)
             elif self.speaker is None:
                 self.out.warm_up(self.app.translator.outgoing_target())
                 binding = win32.parse_binding(self.config.push_to_talk)
@@ -620,9 +647,48 @@ class VoicePanel:
         return result.translation, result.target_lang or target
 
     def my_asr(self):
-        """Con qué se entiende TU voz: el mismo modelo de siempre ("small" en esta PC). Los grandes (large-v3-turbo) con
-        este método repetían las palabras cortas ("Hola Hola Hola") y tardaban 2 s: se probó y se sacó (ver asr.py)."""
+        """Con qué se entiende TU voz: con Bubble Pro, la nube (y si falla, tu PC); si no, el modelo de siempre ("small"
+        en esta PC). Los grandes locales (large-v3-turbo) con este método repetían las palabras cortas y tardaban 2 s:
+        se probó y se sacó (ver asr.py)."""
+        key = self._cloud_key()
+        if key:
+            from ..cloud.deepgram import DeepgramClip, WithFallback
+
+            return WithFallback(DeepgramClip(key), self.models[0], self._cloud_failed)
         return self.models[0]
+
+    # ------------------------------------------------------------ Bubble Pro
+    def _cloud_key(self) -> str:
+        """La clave de la nube si Bubble Pro está activo (si no, "")."""
+        from .. import pro
+
+        if not pro.active():
+            return ""
+        from ..cloud.keys import load_key
+
+        return load_key()
+
+    def _cloud_failed(self, error) -> None:
+        """La nube falló. Sin conexión: se usa tu PC en esa frase. Sin saldo o con la clave mala: se apaga el Pro."""
+        from ..cloud.deepgram import BadKey, NoCredit
+
+        fatal = isinstance(error, (BadKey, NoCredit))
+        now = time.monotonic()
+        if not fatal and now - self._cloud_warned < 60:
+            return
+        self._cloud_warned = now
+        if fatal:
+            self._set_status(f"Bubble Pro: {error}. Sigo con el reconocimiento de tu PC.")
+            self.app.events.put(("call", lambda: self.app.set_pro(False, reason=str(error))))
+        else:
+            self._set_status(f"Bubble Pro: la nube no respondió ({error}). Esa frase la entendí con tu PC.")
+
+    def pro_changed(self) -> None:
+        """(hilo de la ventana) Se prendió o se apagó Bubble Pro, o cambió un ajuste suyo: la escucha y tu voz se
+        rearman con lo que corresponde."""
+        self._kind = ""
+        if self.models is not None and (self.subtitles_var.get() or self.speak_var.get()):
+            self._apply()
 
     def _open_voice_lane(self) -> None:
         """El carril rápido de Claude para la voz (se abre una vez y queda caliente)."""

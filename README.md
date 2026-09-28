@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 2.4" src="https://img.shields.io/badge/versión-2.4-4a90e2?style=flat-square">
+  <img alt="Versión 2.5" src="https://img.shields.io/badge/versión-2.5-4a90e2?style=flat-square">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
   <img alt="Con tu suscripción de Claude" src="https://img.shields.io/badge/con%20tu%20suscripción-Claude-d97757?style=flat-square">
 </p>
@@ -75,6 +75,11 @@ voz (y cuánto tarda cada paso), y cómo va a andar Bubble en tu PC. Y si queré
 leés unas frases de juego y contestás con tus palabras, y aprende tu vocabulario, tus expresiones, cómo preguntás y
 cómo gritás. [Más](docs/GUIA.md#pruebas).
 
+**✦ Bubble Pro (opcional):** las voces se entienden en la nube en vez de en tu procesador. Entiende mucho mejor a
+los que hablan rápido o se pisan, mezcla idiomas en la misma frase ("hagamos pvp"), sabe quién habla y deja tu
+procesador libre para Roblox. Se paga por uso con tu propia cuenta de Deepgram (~0,35 US$ por hora de voz; la cuenta
+nueva trae 200 US$ gratis), y cuando está activo la ventana se pone dorada. [Cómo se activa](docs/GUIA.md#bubble-pro).
+
 <br>
 
 ## Hecho para cualquier juego
@@ -91,7 +96,8 @@ cómo gritás. [Más](docs/GUIA.md#pruebas).
 ## Tu PC, tu cuenta
 
 Bubble corre en tu computadora y traduce con **tu propia suscripción de Claude**, a través de Claude Code. No hay
-claves que pegar ni servidores de por medio. La voz se reconoce y se sintetiza en tu PC: Claude solo ve texto.
+claves que pegar ni servidores de por medio. La voz se reconoce y se sintetiza en tu PC: Claude solo ve texto (con
+Bubble Pro, que es opcional, la voz se reconoce en la nube de Deepgram con tu cuenta).
 Cada traducción usa muy poco (medido: [cuánto usa de tu suscripción](docs/USO-DE-CLAUDE.md)).
 
 Nunca toca el programa de Roblox: solo mira la pantalla, como una app de grabación, y escribe como lo harías vos.

@@ -326,7 +326,9 @@ class DirectVoice:
         mic_factory: Callable = audio_io.microphone,
         target: Callable[[], str] = lambda: "en",
         profile=None,
+        listener=None,
     ) -> None:
+        """`listener`: otra escucha en vivo con la misma cara (Bubble Pro: la de la nube, cloud/deepgram.py)."""
         from .live import LiveListener, Settings
 
         self.out = out
@@ -341,10 +343,14 @@ class DirectVoice:
         # frase si lo último que dijiste queda a medias ("y…", "porque…"); si suena terminada, sale enseguida.
         settings = Settings(fast_final_languages=(mine,), first_partial_s=60.0, partial_every_s=60.0,
                             end_silence_s=0.7, quick_end_s=0.3, wait_for_tail=True, unfinished_end_s=1.5)
-        self.listener = LiveListener(final_asr, self._caption, partial_asr=final_asr, source_factory=mic_factory,
-                                     on_error=lambda msg: on_event("error", msg), settings=settings,
-                                     language=mine, hint=profile.hint if profile is not None else "", clean=True,
-                                     judge=profile.intonation if profile is not None else None)
+        if listener is not None:
+            listener.on_caption = self._caption
+            self.listener = listener
+        else:
+            self.listener = LiveListener(final_asr, self._caption, partial_asr=final_asr, source_factory=mic_factory,
+                                         on_error=lambda msg: on_event("error", msg), settings=settings,
+                                         language=mine, hint=profile.hint if profile is not None else "",
+                                         clean=True, judge=profile.intonation if profile is not None else None)
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="bubble-directo-trad")
         self._asked: dict[int, tuple[str, Future]] = {}
         self._queue: queue.Queue = queue.Queue()

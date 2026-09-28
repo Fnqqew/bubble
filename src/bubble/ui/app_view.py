@@ -20,6 +20,7 @@ from pathlib import Path
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
+from .. import pro
 from ..config import save_setting
 from ..translate.base import clamp_tone
 from . import inline, subtitles, theme, widgets
@@ -28,7 +29,8 @@ if TYPE_CHECKING:
     from .main_window import BubbleWindow
 
 LOGO = Path(__file__).resolve().parent.parent / "assets" / "bubble.png"
-PAGES = {"inicio": "Inicio", "voz": "Voz", "pruebas": "Pruebas", "ajustes": "Ajustes", "actividad": "Actividad"}
+PAGES = {"inicio": "Inicio", "voz": "Voz", "pruebas": "Pruebas", "pro": "✦ Pro", "ajustes": "Ajustes",
+         "actividad": "Actividad"}
 PILL_NAMES = {"grafito": "Grafito", "medianoche": "Medianoche", "violeta": "Violeta", "bosque": "Bosque",
               "negro": "Negro"}
 ACCENT_NAMES = {"azul": "Azul", "verde": "Verde", "rosa": "Rosa", "naranja": "Naranja", "ninguno": "Sin color"}
@@ -50,7 +52,9 @@ def build(app: BubbleWindow) -> None:
     root.bind_class("TCombobox", "<MouseWheel>", lambda _event: None)
     root.bind_all("<<ComboboxSelected>>", lambda event: (event.widget.selection_clear(),
                                                          root.after_idle(root.focus_set)), add="+")
-    shell = ttk.Frame(root, padding=(22, 18, 22, 10))
+    # Con Bubble Pro: una franja dorada arriba de todo (ver apply_pro_look).
+    app.pro_stripe = tk.Frame(root, height=3, background=pro.gold(), borderwidth=0, highlightthickness=0)
+    shell = app.shell = ttk.Frame(root, padding=(22, 18, 22, 10))
     shell.pack(fill="both", expand=True)
     _header(app, shell)
 
@@ -65,7 +69,7 @@ def build(app: BubbleWindow) -> None:
     stack = ttk.Frame(shell)
     stack.pack(fill="both", expand=True)
     builders = {"inicio": lambda page: _home(app, page), "voz": app.voice_panel.build_page,
-                "pruebas": app.tests_panel.build_page,
+                "pruebas": app.tests_panel.build_page, "pro": app.pro_panel.build_page,
                 "ajustes": lambda page: _settings(app, page), "actividad": lambda page: _activity(app, page)}
     for key in PAGES:
         if key == "actividad":
@@ -94,7 +98,12 @@ def _header(app: BubbleWindow, parent) -> None:
         ttk.Label(head, image=app._logo).pack(side="left", padx=(0, 12))
     texts = ttk.Frame(head)
     texts.pack(side="left", fill="x", expand=True)
-    ttk.Label(texts, text="Bubble", font="SunValleySubtitleFont").pack(anchor="w")
+    title = ttk.Frame(texts)
+    title.pack(anchor="w")
+    app.title_label = ttk.Label(title, text="Bubble", font="SunValleySubtitleFont")
+    app.title_label.pack(side="left")
+    app.pro_badge = tk.Label(title, text="PRO", font=("Segoe UI", 8, "bold"), padx=7, pady=1, borderwidth=0,
+                             background=pro.gold(), foreground=widgets.palette()["bg"])
     app.greeting = ttk.Label(texts, text="Preparando todo… dame un segundito.", font="SunValleyCaptionFont",
                              foreground=widgets.palette()["muted"])
     app.greeting.pack(anchor="w")
@@ -122,6 +131,8 @@ def _show_page(app: BubbleWindow) -> None:
             page.pack_forget()
     if app.page_var.get() in ("voz", "pruebas"):
         app.voice_panel.warm_up()  # que «Probar voz» (y tu voz traducida) salga enseguida
+    if app.page_var.get() == "pro":
+        app.pro_panel.refresh()
     if app.page_var.get() == "pruebas":
         app.tests_panel.refresh_learned()
         if app.ready:
@@ -347,10 +358,36 @@ def _fade(cover: tk.Toplevel, step: int = 0, steps: int = 12) -> None:
     cover.after(16, lambda: _fade(cover, step + 1, steps))
 
 
+def apply_pro_look(app: BubbleWindow) -> None:
+    """Bubble Pro se nota: "Bubble Pro" con una insignia dorada, una franja dorada arriba, el acento de la ventana
+    (botones, interruptores, íconos) dorado y lo mismo en las traducciones dentro del juego. Sin Pro, todo vuelve."""
+    recolor(app)
+    apply_overlay_style(app)
+    if hasattr(app, "look_preview"):
+        _render_preview(app)
+
+
+def _pro_header(app: BubbleWindow) -> None:
+    on = pro.active()
+    app.title_label.configure(text="Bubble Pro" if on else "Bubble")
+    if on:
+        app.pro_badge.configure(background=pro.gold(), foreground=widgets.palette()["bg"])
+        app.pro_badge.pack(side="left", padx=(8, 0), pady=(4, 0))
+        app.pro_stripe.configure(background=pro.gold())
+        app.pro_stripe.pack(fill="x", side="top", before=app.shell)
+    else:
+        app.pro_badge.pack_forget()
+        app.pro_stripe.pack_forget()
+
+
 def recolor(app: BubbleWindow) -> None:
-    """Después de cambiar el tema: lo que no es del tema (textos grises, registro, fondos) toma los colores nuevos."""
+    """Después de cambiar el tema (o de prender o apagar Bubble Pro): lo que no es del tema (textos grises, registro,
+    fondos, el acento) toma los colores nuevos."""
     colors = widgets.palette()
     app.root.configure(background=colors["bg"])
+    theme.tint_accent(app.root, pro.active())
+    _pro_header(app)
+    olds = [*widgets.PALETTES.values(), *({"accent": gold} for gold in pro.GOLD.values())]
     for page in app.pages.values():
         if isinstance(page, widgets.Scrollable):
             page.recolor()
@@ -359,9 +396,9 @@ def recolor(app: BubbleWindow) -> None:
         for child in widget.winfo_children():
             if isinstance(child, ttk.Label):
                 current = str(child.cget("foreground"))
-                for old in widgets.PALETTES.values():
+                for old in olds:
                     for key in ("muted", "faint", "accent", "good", "warn", "bad"):
-                        if current == old[key]:
+                        if current == old.get(key):
                             child.configure(foreground=colors[key])
             walk(child)
 
@@ -384,7 +421,9 @@ def _change_look(app: BubbleWindow, redraw_preview: bool = True) -> None:
 
 def apply_overlay_style(app: BubbleWindow) -> None:
     look = app.config.appearance
-    inline.set_style(look.pill_color, look.pill_opacity, look.accent, look.text_scale)
+    # Con Bubble Pro, la rayita de las traducciones en el juego es dorada (si no elegiste otro color).
+    accent = "dorado" if pro.active() and look.accent == "azul" else look.accent
+    inline.set_style(look.pill_color, look.pill_opacity, accent, look.text_scale)
     subtitles.set_subtitles(look.subtitle_size, look.subtitle_position, look.subtitle_original)
 
 

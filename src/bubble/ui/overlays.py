@@ -320,7 +320,10 @@ class ComposeBar:
     def _render_target(self) -> None:
         code = self.targets[self.index] if self.targets else ""
         text = "TODOS" if code == MULTI_TARGET else code.split("-")[0].upper()
-        self._images["chip"] = _chip_image(text, self.CHIP_BG, self.CHIP_FG, _rgb(self.FIELD))
+        from .. import pro
+
+        chip_bg, chip_fg = ((70, 57, 27), pro.GOLD_RGB) if pro.active() else (self.CHIP_BG, self.CHIP_FG)
+        self._images["chip"] = _chip_image(text, chip_bg, chip_fg, _rgb(self.FIELD))
         self.chip.configure(image=self._images["chip"])
         self._images["tone"] = _tone_image(self.tone, _rgb(self.FIELD))
         self.tone_view.configure(image=self._images["tone"])

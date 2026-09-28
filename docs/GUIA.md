@@ -9,6 +9,8 @@ hecho por dentro.
 - [Leer el chat y las burbujas](#leer-el-chat-y-las-burbujas)
 - [Escribir en otro idioma](#escribir-en-otro-idioma)
 - [Voz](#voz)
+- [Pruebas](#pruebas)
+- [Bubble Pro](#bubble-pro)
 - [Jerga, dialectos y tono](#jerga-dialectos-y-tono)
 - [Configuración](#configuración)
 - [Cómo está hecho](#cómo-está-hecho)
@@ -303,6 +305,42 @@ La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus 
   y la próxima vez seguís desde la misma frase. Está en español y en inglés (según tu idioma).
 - **Lo que aprendió:** cuántas frases y palabras tuyas conoce, cuántas traducciones aprobaste, cuántas salen al
   instante, los tiempos promedio de tu voz y lo que sacó del entrenamiento. **Borrar lo aprendido** empieza de cero.
+
+## Bubble Pro
+
+Opcional. Las voces del juego y tu voz se entienden **en la nube** (Deepgram, modelo Nova-3) en vez de en tu
+procesador. La traducción sigue igual, con tu suscripción de Claude; lo que cambia es quién pasa la voz a texto.
+
+**Qué mejora:**
+
+| | Tu PC (Whisper) | Bubble Pro (nube) |
+|---|---|---|
+| Gente que habla rápido o se pisa | se pierde mucho (en una pelea real: 2 de cada 3 palabras mal) | modelo grande en servidores con placas de video: mucho mejor |
+| Idiomas mezclados ("hagamos pvp") | un idioma por frase | el idioma de cada palabra (inglés, español, portugués, francés, alemán, italiano, ruso, hindi, japonés, neerlandés) |
+| Quién habla | por la voz, en tu PC | lo separa la nube (Voz 1, Voz 2…) |
+| Cuándo aparece el texto | ~1 s | mientras hablan (~0,3 s) y la frase entera ~0,5 s después de la pausa |
+| Tu procesador | casi un núcleo ocupado | libre para Roblox |
+
+**Cómo se paga:** con tu propia cuenta de [Deepgram](https://console.deepgram.com/signup). No es una suscripción: se
+paga por minuto de voz que se le manda (~0,35 US$ por hora; saber quién habla suma ~0,12 US$ por hora). Bubble solo
+manda audio cuando alguien habla (lo detecta tu PC), así que los silencios de la partida no se pagan. La cuenta nueva
+trae 200 US$ de crédito gratis: cientos de horas de partidas. En la página **✦ Pro** ves cuántos minutos se usaron
+este mes y cuánto costaron (aproximado).
+
+**Cómo se activa:**
+
+1. En **✦ Pro**, tocá **Crear cuenta en Deepgram** (gratis).
+2. En Deepgram: **API Keys** → **Create a New API Key** → copiala.
+3. Pegala en Bubble y tocá **Guardar y probar**. Se guarda cifrada con Windows: solo tu usuario la puede leer, y no
+   queda en ningún archivo de texto.
+4. Prendé **Bubble Pro**. La ventana se pone dorada y dice «Bubble Pro»; las traducciones en el juego y la barra para
+   escribir también toman el dorado.
+
+**Comparar con mi voz:** decís una frase y ves lo que entiende tu PC y lo que entiende la nube, y cuánto tarda cada
+uno.
+
+**Si algo falla:** sin internet, esa frase se entiende con tu PC y te avisa. Si la clave deja de andar o la cuenta se
+queda sin saldo, Bubble Pro se apaga solo, te avisa y todo sigue con tu PC.
 
 ## Jerga, dialectos y tono
 
