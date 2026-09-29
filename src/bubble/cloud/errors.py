@@ -21,4 +21,18 @@ def error_for(status: int, detail: str = "") -> CloudError:
         return BadKey("Deepgram no acepta tu clave")
     if status == 402:
         return NoCredit("Tu cuenta de Deepgram no tiene saldo")
-    return CloudError(f"Deepgram respondió {status} {detail}".strip())
+    if status == 408:
+        return CloudError("Deepgram tardó en responder")
+    if status == 429:
+        return CloudError("Deepgram está saturado: probá en un rato")
+    if status >= 500:
+        return CloudError(f"Deepgram tuvo un problema ({status})")
+    return CloudError(f"Deepgram respondió {status} {readable(detail)}".strip())
+
+
+def readable(detail: str, limit: int = 80) -> str:
+    """El detalle de un error, sin código de página (<html>…) y cortito, para mostrarlo en la ventana."""
+    import re
+
+    text = " ".join(re.sub(r"<[^>]+>", " ", detail or "").split())
+    return text if len(text) <= limit else text[:limit].rstrip() + "…"

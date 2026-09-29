@@ -239,3 +239,114 @@ def test_theme_images_turn_gold_and_come_back():
         theme._checked.clear()
         theme._state.update(root=None, gold=False)
         root.destroy()
+
+
+# ---------------------------------------------------------------- conexiones que quedan abiertas (keep-alive)
+class ImpatientServer:
+    """Como Deepgram: si a una conexión no le llega un pedido a tiempo, deja escrito un «408» y la cierra."""
+
+    def __init__(self, patience: float = 0.3):
+        import socket
+        import threading
+
+        self.patience = patience
+        self.server = socket.socket()
+        self.server.bind(("127.0.0.1", 0))
+        self.server.listen()
+        self.port = self.server.getsockname()[1]
+        self.connections = 0
+        threading.Thread(target=self._accept, daemon=True).start()
+
+    def _accept(self):
+        import threading
+
+        while True:
+            try:
+                client, _ = self.server.accept()
+            except OSError:
+                return
+            self.connections += 1
+            threading.Thread(target=self._serve, args=(client, self.connections), daemon=True).start()
+
+    def _serve(self, client, number):
+        import socket
+
+        client.settimeout(self.patience)
+        buffer = b""
+        while True:
+            try:
+                chunk = client.recv(65536)
+            except socket.timeout:
+                page = b"<html><body><h1>408 Request Time-out</h1></body></html>"
+                client.sendall(b"HTTP/1.1 408 Request Time-out\r\nContent-Length: %d\r\n\r\n%s" % (len(page), page))
+                client.close()
+                return
+            if not chunk:
+                client.close()
+                return
+            buffer += chunk
+            if b"\r\n\r\n" in buffer:
+                head, _, body = buffer.partition(b"\r\n\r\n")
+                length = int(next((line.split(b":")[1] for line in head.split(b"\r\n")
+                                   if line.lower().startswith(b"content-length")), b"0"))
+                if len(body) >= length:
+                    answer = b"ok %d" % number
+                    client.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n%s" % (len(answer), answer))
+                    buffer = b""
+
+
+def local_pool(server):
+    import http.client
+
+    from bubble.cloud.connection import Pool
+
+    return Pool("127.0.0.1", 2.0, factory=lambda host, timeout: http.client.HTTPConnection(host, server.port,
+                                                                                            timeout=timeout))
+
+
+def test_a_connection_the_server_gave_up_on_is_not_reused(monkeypatch):
+    import time
+
+    from bubble.cloud import connection
+
+    monkeypatch.setattr(connection, "IDLE_MAX_S", 60.0)  # (que la descarte por lo que mandó el servidor, no por vieja)
+    server = ImpatientServer()
+    pool = local_pool(server)
+    pool.warm()
+    time.sleep(0.6)  # el servidor ya dejó su «408» y la cerró
+    assert pool.request("POST", "/v1/speak", b"hola", {}) == b"ok 2"  # antes: «Deepgram respondió 408 <html>…»
+
+
+def test_a_stale_408_is_retried_with_a_fresh_connection(monkeypatch):
+    import time
+
+    from bubble.cloud import connection
+
+    monkeypatch.setattr(connection, "IDLE_MAX_S", 60.0)
+    monkeypatch.setattr(connection, "usable", lambda conn: True)  # aunque no se note antes de mandar el pedido
+    server = ImpatientServer()
+    pool = local_pool(server)
+    pool.warm()
+    time.sleep(0.6)
+    assert pool.request("POST", "/v1/speak", b"hola", {}) == b"ok 2"
+    pool.warm()
+    time.sleep(0.6)
+    assert b"".join(pool.stream("POST", "/v1/speak", b"hola", {})) == b"ok 3"
+
+
+def test_a_quiet_connection_is_dropped_before_deepgram_closes_it():
+    from bubble.cloud import connection
+
+    assert connection.IDLE_MAX_S < 5.0  # Deepgram corta a los ~5 s (medido)
+    server = ImpatientServer(patience=5.0)
+    pool = local_pool(server)
+    assert pool.request("GET", "/", b"", {}) == b"ok 1"
+    assert pool.request("GET", "/", b"", {}) == b"ok 1"  # enseguida: la misma conexión (más rápido)
+
+
+def test_errors_never_show_page_code():
+    from bubble.cloud.errors import error_for
+
+    assert str(error_for(408, "<html><body><h1>408 Request Time-out</h1>")) == "Deepgram tardó en responder"
+    assert str(error_for(503)) == "Deepgram tuvo un problema (503)"
+    assert "<" not in str(error_for(400, "<html><body>Bad <b>request</b></body></html>"))
