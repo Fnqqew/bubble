@@ -2,6 +2,9 @@
 
 La voz de cada idioma se elige sola del catálogo oficial de Piper (rhasspy/piper-voices) y se descarga la primera
 vez que hace falta (~60 MB por idioma).
+
+Si Windows no deja usar Piper (el «Control inteligente de aplicaciones» bloquea una parte suya que no tiene firma
+digital), se usan las voces que trae Windows (ver windows_voices.py): Bubble nunca se queda sin voz.
 """
 
 from __future__ import annotations
@@ -50,6 +53,24 @@ CURATED: dict[str, tuple[str | None, str | None]] = {
 }
 
 
+_piper_state: dict[str, str] = {}
+
+
+def piper_blocked() -> str:
+    """"" si las voces de Piper andan en esta PC; si no, por qué (se revisa una vez)."""
+    if "error" not in _piper_state:
+        try:
+            import piper.espeakbridge  # noqa: F401 - la parte que Windows puede bloquear (una DLL sin firma)
+
+            _piper_state["error"] = ""
+        except ImportError as exc:
+            import logging
+
+            logging.getLogger(__name__).warning("Las voces de Piper no se pueden usar (%s): uso las de Windows", exc)
+            _piper_state["error"] = str(exc) or "no se pudo cargar"
+    return _piper_state["error"]
+
+
 @dataclass
 class Speech:
     audio: np.ndarray  # float32, -1..1, mono
@@ -65,6 +86,17 @@ class Voices:
         self._catalog: dict | None = None
         self._loaded: dict[str, object] = {}
         self._lock = threading.Lock()
+        self._windows = None  # las voces de Windows, si Piper está bloqueado
+
+    def windows(self):
+        """Las voces de Windows si Windows no deja usar Piper (si no, None)."""
+        if not piper_blocked():
+            return None
+        if self._windows is None:
+            from .windows_voices import WindowsVoices
+
+            self._windows = WindowsVoices()
+        return self._windows
 
     def catalog(self) -> dict:
         if self._catalog is None:
@@ -119,6 +151,8 @@ class Voices:
 
     def download(self, language: str, gender: str | None = None) -> bool:
         """Baja la voz (sin cargarla), para tenerla lista de antemano. False si no hay voz para ese idioma."""
+        if self.windows() is not None:
+            return self.windows().has(language)  # (las de Windows ya están: no se baja nada)
         name = self.voice_for(language, gender or self.gender)
         if name is None:
             return False
@@ -128,15 +162,21 @@ class Voices:
         return True
 
     def is_loaded(self, language: str, gender: str | None = None) -> bool:
+        if self.windows() is not None:
+            return self.windows().has(language)
         name = self.voice_for(language, gender or self.gender)
         return name is not None and name in self._loaded
 
     def is_downloaded(self, language: str, gender: str | None = None) -> bool:
+        if self.windows() is not None:
+            return self.windows().has(language)
         name = self.voice_for(language, gender or self.gender)
         return name is not None and (self.folder / f"{name}.onnx").exists()
 
     def prepare(self, language: str, gender: str | None = None) -> bool:
         """Descarga (si hace falta) y carga la voz, sin decir nada: así la primera frase sale enseguida."""
+        if self.windows() is not None:
+            return self.windows().has(language)
         name = self.voice_for(language, gender or self.gender)
         if name is None:
             return False
@@ -150,6 +190,9 @@ class Voices:
                    style: str = "") -> Speech | None:
         """Dice `text` con una voz de `language`. None si no hay voz para ese idioma. `style`: cómo lo dijiste vos
         ("shout", "exclaim", "soft"…, ver voice/speech.py): la voz lo acompaña (más rápida y fuerte, o más suave)."""
+        if self.windows() is not None:
+            spoken = self.windows().synthesize(text, language, gender or self.gender, speed or self.speed, style)
+            return Speech(*spoken) if spoken is not None else None
         name = self.voice_for(language, gender or self.gender)
         if name is None or not text.strip():
             return None

@@ -59,7 +59,7 @@ hay, te muestra qué trae y te pregunta: **Actualizar ahora** o **Más tarde**.
 
 **Desinstalar:** **Ajustes → Desinstalar Bubble…** (o `Desinstalar.bat`, sin abrir Bubble). Elegís qué se borra:
 
-- tu configuración, tu clave de Pro, lo aprendido de tu voz, los entrenamientos y los registros;
+- tu configuración, tu clave de Pro, lo aprendido de tu voz, tus grabaciones y los registros;
 - los modelos y las voces descargados (te dice cuánto ocupan);
 - el acceso directo del escritorio;
 - el micrófono virtual (VB-Cable): se saca de Windows con su desinstalador oficial, sin ventanas, como si nunca
@@ -237,8 +237,6 @@ sintética lo acompaña: más rápida y fuerte si gritaste, más suave si hablas
 - Lo que ya dijiste queda guardado: si volvés a decir lo mismo ("dale, esperame"), sale al instante.
 - En **Pruebas** corregís lo que entendió o cómo lo tradujo: Claude usa esas traducciones de modelo para sonar como
   vos querés.
-- Si querés ir más rápido: **Pruebas → Entrenar tu voz** (opcional, ~5 minutos) le enseña tu vocabulario, tus
-  expresiones, cómo preguntás y cómo gritás de una vez.
 
 Todo queda en `%LOCALAPPDATA%\Bubble\perfil_voz.json` (solo en tu PC); se borra desde **Pruebas**.
 
@@ -345,21 +343,15 @@ La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus 
   Cloudflare).
 - **Cuánto tarda en tu PC:** cuánto tarda de verdad en esta PC entender una frase y armar la voz, y cuánto va a
   tardar tu voz traducida. Te dice si anda excelente, bien, normal o lenta, y qué ajustar.
-- **Entrenar tu voz (opcional):** unos 5 minutos, en una ventana aparte, en dos partes:
-  1. **Leé en voz alta** 28 frases como las de una partida: voseo, jerga de juego ("pvp", "tradear", "farmear",
-     "lag"), nombres de juegos, preguntas, exclamaciones y dos gritos. Después de cada una te dice qué entendió; las
-     palabras que no te entendió pasan a tu vocabulario (Claude las usa para entenderte), y si salió bien pasa sola a
-     la siguiente. Tus grabaciones quedan en tu PC (`%LOCALAPPDATA%\Bubble\tu_voz`), para poder medir cómo te
-     entiende con tu voz real.
-  2. **Con tus palabras:** te pregunta cómo saludás, qué decís cuando ganás o perdés, cómo pedís ayuda o proponés un
-     intercambio, los nombres de tus amigos y juegos, y las expresiones que más usás. Contestás como hablás, corregís
-     lo que entendió si hace falta y tocás **Guardar**: queda como tu vocabulario.
-
-  Además aprende tu voz de siempre, **cuánto sube tu voz cuando preguntás** y **cómo suena tu grito**: cada uno
-  pregunta y grita distinto, y desde ahí los umbrales son los tuyos. Cortás cuando quieras (**Terminar por ahora**)
-  y la próxima vez seguís desde la misma frase. Está en español y en inglés (según tu idioma).
 - **Lo que aprendió:** cuántas frases y palabras tuyas conoce, cuántas traducciones aprobaste, cuántas salen al
-  instante, los tiempos promedio de tu voz y lo que sacó del entrenamiento. **Borrar lo aprendido** empieza de cero.
+  instante y los tiempos promedio de tu voz. **Borrar lo aprendido** empieza de cero.
+
+**Si Windows bloquea las voces de Bubble.** En Windows 11, el **Control inteligente de aplicaciones** (Seguridad de
+Windows › Control de aplicaciones y exploradores) no deja cargar programas sin firma digital, y una parte de Piper (las
+voces de Basic) no la tiene. Bubble se da cuenta solo y usa **las voces que trae Windows** (Sabina, Raúl, Zira,
+Mark…): suenan un poco menos naturales, pero andan siempre. Para otro idioma, agregale una voz a Windows en
+Configuración › Hora e idioma › Voz. Con **Bubble Pro**, las voces son las de la nube y no cambia nada. No hace falta
+(ni conviene) apagar esa protección de Windows: una vez apagada, no se puede volver a prender sin reinstalar Windows.
 
 ## Bubble Pro
 

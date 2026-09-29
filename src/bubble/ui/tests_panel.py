@@ -7,8 +7,6 @@
 - Lo que te dicen: una voz sintética dice una frase en inglés, como si fuera otro jugador, y ves el subtítulo.
 - Tu equipo: lo que Bubble detectó de tu PC (memoria, micrófonos, tu cuenta de Claude, internet) y qué revisar.
 - Cuánto tarda en tu PC: cómo va a andar Bubble en esta computadora.
-- Entrenar tu voz (opcional): leés unas frases y contestás unas preguntas con tus palabras; aprende tu vocabulario,
-  tus expresiones, cómo preguntás y cómo gritás (ver ui/training_window.py).
 - Lo que aprendió: cuánto sabe de tu voz, y un botón para borrarlo.
 
 Todo suena solo en tus auriculares: nada le llega a Roblox.
@@ -53,7 +51,6 @@ class TestsPanel:
         self._last_speech = None  # la última voz traducida (para volver a escucharla)
         self._mine_target = ""
         self._chat_target = ""
-        self._training = None  # la ventana del entrenamiento, si está abierta
         self.equipment = None  # «Tu equipo» (se arma con la página)
 
     # ------------------------------------------------------------ armado
@@ -125,17 +122,6 @@ class TestsPanel:
         self.pc_rating = ttk.Label(row, text="", font="SunValleyBodyStrongFont")
         self.pc_rating.pack(side="left", padx=12)
         self.pc_info = widgets.muted(box, "")
-
-        box = widgets.card(page, "Entrenar tu voz (opcional)", "Leés unas frases de juego y contestás unas preguntas "
-                                                               "con tus palabras (unos 5 minutos). Aprende tu "
-                                                               "vocabulario y tus expresiones, cómo preguntás y cómo "
-                                                               "gritás. Cortás cuando quieras y seguís otro día.")
-        row = ttk.Frame(box)
-        row.pack(fill="x")
-        self.train_button = ttk.Button(row, text="Empezar", command=self._train, style="Accent.TButton")
-        self.train_button.pack(side="left")
-        self.train_info = ttk.Label(row, text="", foreground=colors["muted"])
-        self.train_info.pack(side="left", padx=12)
 
         box = widgets.card(page, "Lo que aprendió", "Todo queda en tu PC.")
         self.learned = widgets.muted(box, "")
@@ -391,13 +377,29 @@ class TestsPanel:
 
         language = self.app.config.user.language.split("-")[0]
 
+        def failed(message: str) -> None:
+            colors = widgets.palette()
+            self._ui(lambda: (self.pc_rating.configure(text="✗ No se pudo medir", foreground=colors["bad"]),
+                              self.pc_info.configure(text=message)))
+
         def work() -> None:
+            try:
+                measure()
+            except Exception as exc:  # noqa: BLE001 - se muestra en la tarjeta (antes quedaba «Midiendo…»)
+                log.exception("Falló la medición de la PC")
+                failed(f"Algo falló al medir ({exc}). Probá de nuevo; si sigue, contalo en Soporte.")
+
+        def measure() -> None:
             final = self.voice.my_asr()
             voices = self._voices()
             self._ui(lambda: (self.pc_rating.configure(text="Midiendo…", foreground=""),
                               self.pc_info.configure(text="")))
             sample = voices.synthesize("che, ¿alguien viene conmigo a la torre? esperame que ya voy", "es") or \
                 voices.synthesize("hey, is anyone coming with me to the tower? wait for me", "en")
+            if sample is None:
+                failed("No hay ninguna voz sintética en esta PC para armar la frase de prueba. Agregá una voz en "
+                       "Configuración de Windows › Hora e idioma › Voz (en español o en inglés) y probá de nuevo.")
+                return
             count = int(len(sample.audio) * 16000 / sample.sample_rate)
             audio = np.interp(np.linspace(0, len(sample.audio) - 1, count), np.arange(len(sample.audio)),
                               sample.audio).astype(np.float32)
@@ -442,46 +444,11 @@ class TestsPanel:
             known = [name for key, name in (("question_rise", "cómo preguntás"), ("shout_db", "cómo gritás"),
                                             ("exclaim_db", "cómo exclamás")) if key in calibration]
             if known:
-                text += "\nDel entrenamiento: " + ", ".join(known)
+                text += "\nTambién sabe " + ", ".join(known)
         if times:
             text += "\nTiempos de tu voz (promedio): " + " · ".join(
                 f"{stage} {_seconds(seconds)}" for stage, seconds in times.items())
         self.learned.configure(text=text)
-        self._refresh_training()
-
-    def _refresh_training(self) -> None:
-        from ..voice.training import script_for
-
-        language = self.app.config.user.language
-        total = len(script_for(language))
-        if not total:
-            self.train_button.state(["disabled"])
-            self.train_info.configure(text="Por ahora el entrenamiento está en español y en inglés.")
-            return
-        step = self.voice.profile.training_step(language)
-        self.train_button.state(["!disabled"])
-        if step >= total:
-            self.train_button.configure(text="Entrenar de nuevo")
-            self.train_info.configure(text="✓ Ya lo hiciste completo.")
-        elif step:
-            self.train_button.configure(text="Seguir")
-            self.train_info.configure(text=f"Vas por la frase {step + 1} de {total}.")
-        else:
-            self.train_button.configure(text="Empezar")
-            self.train_info.configure(text=f"{total} frases y preguntas.")
-
-    def _train(self) -> None:
-        from .training_window import TrainingWindow
-
-        if self._training is not None:
-            self._training.win.lift()
-            return
-
-        def closed() -> None:
-            self._training = None
-            self.refresh_learned()
-
-        self._training = TrainingWindow(self.app, closed)
 
     def _forget(self) -> None:
         self.voice.profile.forget()

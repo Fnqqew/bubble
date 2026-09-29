@@ -254,3 +254,52 @@ def test_ocr_uses_another_installed_language_if_yours_is_missing():
     from bubble.capture.ocr import WindowsOcr
 
     assert WindowsOcr("xx-XX").language  # antes: sin lector de texto, no se podía leer el chat
+
+
+# ---------------------------------------------------------------- si Windows bloquea las voces de Piper
+class FakeWindowsVoices:
+    def __init__(self):
+        self.said = []
+
+    def has(self, language):
+        return language.split("-")[0] in ("es", "en")
+
+    def synthesize(self, text, language, gender="femenina", speed=1.0, style=""):
+        self.said.append((text, language, gender, style))
+        return (np.zeros(2205, np.float32), 22050) if self.has(language) else None
+
+
+def test_when_windows_blocks_piper_the_windows_voices_are_used(monkeypatch):
+    import bubble.voice.windows_voices
+    from bubble.voice import tts
+
+    monkeypatch.setitem(tts._piper_state, "error", "Una directiva de Control de aplicaciones bloqueó este archivo")
+    fake = FakeWindowsVoices()
+    monkeypatch.setattr(bubble.voice.windows_voices, "WindowsVoices", lambda: fake)
+    voices = tts.Voices()
+    voices.gender = "masculina"
+    speech = voices.synthesize("esperame en la torre", "es-AR", style="exclaim")
+    assert speech.sample_rate == 22050 and fake.said == [("esperame en la torre", "es-AR", "masculina", "exclaim")]
+    assert voices.is_downloaded("en") and voices.prepare("es") and voices.download("en")  # nada que bajar
+    assert voices.synthesize("olá", "pt") is None and not voices.is_downloaded("pt")  # (esa voz no está en Windows)
+
+
+def test_your_pc_says_when_windows_blocks_the_voices():
+    found = levels(pc(voices_blocked=True))["aviso"]
+    assert any("Control inteligente de aplicaciones" in text for text in found)
+    assert dict(system.summary_lines(pc(voices_blocked=True)))["Voces sintéticas"].startswith("las de Windows")
+
+
+def test_windows_voices_really_speak():
+    from bubble.voice.windows_voices import WindowsVoices
+
+    voices = WindowsVoices()
+    if not voices.has("en") and not voices.has("es"):
+        pytest.skip("esta PC no tiene voces de Windows")
+    language = "es-AR" if voices.has("es") else "en"
+    audio, rate = voices.synthesize("¡Esperame en la torre!", language, "femenina", style="exclaim")
+    assert rate == 22050 and len(audio) > rate * 0.5 and 0.05 < float(np.abs(audio).max()) <= 1.0
+    if voices.has("es"):
+        chosen = voices.voice_for("es-AR", "femenina")
+        assert chosen.language in ("es-MX", "es-AR", "es-US") or not any(
+            v.language.lower() == "es-mx" for v in voices.voices())  # latino antes que de España

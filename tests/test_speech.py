@@ -92,56 +92,14 @@ def test_pc_check_estimates_how_fast_your_voice_sounds():
     assert slow.rating == "lenta" and len(slow.tips) >= 3
 
 
-def test_training_has_a_script_with_questions_shouts_and_your_own_words():
-    from bubble.voice.training import script_for
-
-    for language in ("es-AR", "en"):
-        kinds = [item.kind for item in script_for(language)]
-        assert kinds.count("question") >= 5 and kinds.count("shout") >= 2 and kinds.count("free") >= 5
-        assert kinds.count("normal") >= 8
-    assert script_for("xx") == []
-
-
-def test_training_learns_the_words_whisper_missed(tmp_path):
-    from bubble.voice.training import Item, check, feedback
-
-    result = check(Item("Quiero tradear mi mascota legendaria"), "quiero tratar mi mascota legendaria", None)
-    assert result.missed == ["tradear"] and "tradear" in feedback(result)
-    assert feedback(check(Item("dale vamos"), "Dale, vamos.", None)).startswith("✓ Te entendí perfecto")
-    profile = VoiceProfile(tmp_path / "perfil.json")
-    profile.learn_words(result.missed, "es")
-    assert "tradear" in profile.vocabulary("es-AR")
-
-
-def test_training_makes_the_question_and_shout_thresholds_yours(tmp_path):
-    from bubble.voice.training import Item, Result, calibrate
-
-    def said(kind, rise, level=-30.0):
-        return Result(Item("x", kind), "x", 0.0, [], Melody(rise, 150.0, level, -15.0, 4.0, 0.0, 1.0))
-
-    # esta persona casi no sube la voz al preguntar (+1,4) y sus afirmaciones bajan (-1)
-    results = [said("normal", -1.0), said("normal", -0.8), said("normal", -1.2), said("question", 1.4),
-               said("question", 1.6), said("shout", 0.0, level=-18.0)]
-    found = calibrate(results, (150.0, -30.0, -15.0))
-    assert 0.5 <= found["question_rise"] < 1.0 and found["shout_db"] >= 4.0
+def test_your_own_question_and_shout_thresholds_are_used(tmp_path):
     profile = VoiceProfile(tmp_path / "perfil.json")
     for _ in range(5):
         profile.learn_melody(Melody(0.0, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0))
     question = Melody(1.2, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0)
     assert profile.intonation(question) == ""  # con el umbral de todos (2 semitonos) no parecía pregunta
-    profile.calibrate(found)
-    assert profile.intonation(question) == "question"  # con el tuyo, sí
-
-
-def test_your_recordings_are_kept_on_your_pc(tmp_path, monkeypatch):
-    from bubble.voice.training import save_clip, saved_clips
-
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    save_clip(np.zeros(RATE, np.float32) + 0.1, "che vamos a la torre", "es-AR", 1)
-    save_clip(np.zeros(RATE, np.float32), "dale esperame", "es", 2)
-    clips = saved_clips("es")
-    assert [text for _audio, text in clips] == ["che vamos a la torre", "dale esperame"]
-    assert abs(float(clips[0][0].max()) - 0.1) < 1e-3
+    profile.calibrate({"question_rise": 0.8, "shout_db": 5.0})  # esta persona casi no sube la voz al preguntar
+    assert profile.intonation(question) == "question"  # con el suyo, sí
 
 
 def test_whisper_echoes_and_copies_are_undone():

@@ -71,7 +71,7 @@ def sounds_finished(text: str, language: str) -> bool:
     return bool(_SENTENCE_END.search(text.strip())) and not sounds_unfinished(text, language)
 
 
-QUESTION_RISE = 2.0  # semitonos (con el entrenamiento, el tuyo)
+QUESTION_RISE = 2.0  # semitonos (si ya aprendió el tuyo, el tuyo)
 SHOUT_DB = 8.0  # más fuerte que de costumbre
 SHOUT_STRAIN = 5.0
 SHOUT_EFFORT = -2.0  # sin saber cómo habla: voz con muchísimos agudos
@@ -96,7 +96,7 @@ class Melody:
              shout_db: float = SHOUT_DB, exclaim_db: float = EXCLAIM_DB) -> str:
         """Cómo lo dijo: "question", "shout", "exclaim" o "soft", juntos con "+" ("question+shout") o "".
         `usual`: (tono, volumen, esfuerzo) de siempre de esa persona. Sin eso solo se notan los gritos evidentes.
-        Los umbrales pueden ser los de esa persona (ver voice/training.py)."""
+        Los umbrales pueden ser los de esa persona (ver VoiceProfile.calibrate)."""
         if self.voiced_s < 0.3:
             return ""
         marks = ["question"] if self.rise >= question_rise else []

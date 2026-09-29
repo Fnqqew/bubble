@@ -101,7 +101,7 @@ def parts(project: Path = PROJECT_DIR) -> list[Part]:
     removable = is_bubble_folder(project) and not development
     return [
         Part("datos", "Tu configuración y lo aprendido",
-             "Ajustes, tu clave de Pro, tu perfil de voz, entrenamientos y registros.", [p for p in data if p.exists()]),
+             "Ajustes, tu clave de Pro, tu perfil de voz, tus grabaciones y registros.", [p for p in data if p.exists()]),
         Part("modelos", "Modelos y voces descargados", f"{human(size_of(models))} en tu disco.",
              [p for p in models if p.exists()]),
         Part("accesos", "Acceso directo", "El de tu escritorio.", [link] if link and link.exists() else []),

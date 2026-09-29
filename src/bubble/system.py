@@ -65,6 +65,7 @@ class System:
     virtual_cable: bool = False
     ocr_languages: list[str] = field(default_factory=list)
     roblox: str = ""  # "roblox.com", "Microsoft Store", o "" (no se encontró)
+    voices_blocked: bool = False  # Windows no deja usar las voces de Piper (se usan las de Windows)
     claude: Claude = field(default_factory=Claude)
     internet: Internet | None = None
 
@@ -131,6 +132,15 @@ def _ocr_languages() -> list[str]:
         return [language.language_tag for language in OcrEngine.available_recognizer_languages]
     except Exception:  # noqa: BLE001
         return []
+
+
+def _voices_blocked() -> bool:
+    try:
+        from .voice.tts import piper_blocked
+
+        return bool(piper_blocked())
+    except ImportError:
+        return False  # (sin la parte de voz no hay nada que bloquear)
 
 
 def roblox_installed() -> str:
@@ -252,7 +262,7 @@ def detect(internet: bool = False) -> System:
         cpu=cpu_name(), threads=os.cpu_count() or 1, ram_gb=round(memory_gb(), 1), gpus=gpu_names(),
         screen=size, work_area=work, scale=scale, ascii_home=home.isascii(), microphones=mics,
         default_microphone=default_mic, speakers=speakers, virtual_cable=cable, ocr_languages=_ocr_languages(),
-        roblox=roblox_installed(), claude=claude_status(),
+        roblox=roblox_installed(), claude=claude_status(), voices_blocked=_voices_blocked(),
     )
     if internet:
         info.internet = measure_internet()
@@ -328,6 +338,9 @@ def recommend(info: System) -> Plan:
     if not info.ocr_languages:
         add(Advice("problema", "Windows no tiene ningún idioma para leer texto: agregá uno en Configuración › Hora e "
                                "idioma › Idioma (con «Reconocimiento óptico de caracteres»)."))
+    if info.voices_blocked:
+        add(Advice("aviso", "Windows (el «Control inteligente de aplicaciones») no deja usar las voces de Bubble: uso "
+                            "las que trae Windows, que suenan un poco menos naturales. Con Bubble Pro, las de la nube."))
     if not info.microphones:
         add(Advice("aviso", "No encontré ningún micrófono: tu voz traducida no va a funcionar hasta que conectes uno."))
     if info.work_area[1] and info.work_area[1] / max(info.scale, 1.0) < 700:
@@ -397,7 +410,8 @@ def summary_lines(info: System) -> list[tuple[str, str]]:
              ("Micrófono", info.default_microphone or "—"),
              ("Micrófono virtual", "instalado" if info.virtual_cable else "no instalado"),
              ("Roblox", info.roblox or "no encontrado"), ("Claude Code", claude),
-             ("Lectura del chat", ", ".join(info.ocr_languages[:4]) or "sin idiomas")]
+             ("Lectura del chat", ", ".join(info.ocr_languages[:4]) or "sin idiomas"),
+             ("Voces sintéticas", "las de Windows (Piper bloqueado por Windows)" if info.voices_blocked else "Piper")]
     if info.internet is not None:
         net = info.internet
         parts = []

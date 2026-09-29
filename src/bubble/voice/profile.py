@@ -1,10 +1,10 @@
 """Lo que Bubble aprende de cómo hablás, para entenderte mejor y traducir más rápido cuanto más lo usás.
 
-- Tus palabras (tus nombres, tu jerga, las que Whisper no te entendía en el entrenamiento) y tus frases (solo las que
+- Tus palabras (tus nombres, tu jerga, las que corregiste) y tus frases (solo las que
   confirmaste vos): se le pasan a Claude, que con eso entiende qué quisiste decir aunque Whisper haya escuchado otra
   cosa. A Whisper NO: con una lista de palabras o frases de ejemplo largas, en frases cortas ("hola") inventaba o
   repetía ("Hola Hola Hola", "Podla"); medido. Whisper recibe solo un ejemplo fijo y corto (voice/speech.py).
-- Cuánto sube tu voz al preguntar y cómo suena tu grito (del entrenamiento): cada uno pregunta y grita distinto.
+- Cuánto sube tu voz al preguntar y cómo suena tu grito (si lo aprendió): cada uno pregunta y grita distinto.
 - Cómo querés sonar: las traducciones que aprobaste o corregiste en Pruebas; Claude las usa de modelo.
 - Frases ya traducidas: si volvés a decir lo mismo ("dale, esperame"), sale al instante, sin preguntarle a Claude.
 - Tu voz de siempre (tono y volumen): para darse cuenta cuando exclamás o gritás.
@@ -108,7 +108,7 @@ class VoiceProfile:
     @staticmethod
     def _empty() -> dict:
         return {"phrases": {}, "examples": {}, "saved": {}, "melody": {}, "times": {}, "words": {},
-                "calibration": {}, "training": {}}
+                "calibration": {}}
 
     # ------------------------------------------------------------ Whisper y Claude: tus palabras
     def hint(self, language: str) -> str:
@@ -199,7 +199,7 @@ class VoiceProfile:
         return known["pitch"], known["level"], known["effort"]
 
     def intonation(self, melody: Melody | None) -> str:
-        """Cómo lo dijiste, con tus umbrales si ya entrenaste (si no, los de todos)."""
+        """Cómo lo dijiste, con tus umbrales si ya los aprendió (si no, los de todos)."""
         return melody.kind(self.usual(), **self.data["calibration"]) if melody else ""
 
     def calibrate(self, found: dict[str, float]) -> None:
@@ -214,16 +214,6 @@ class VoiceProfile:
         with self._lock:
             self.data["models"] = {"puntajes": {s.name: {"accuracy": round(s.accuracy, 3), "seconds": round(s.seconds, 2)}
                                                 for s in scores}, "elegido": chosen}
-        self.save()
-
-    # ------------------------------------------------------------ entrenamiento
-    def training_step(self, language: str) -> int:
-        """Por qué frase va el entrenamiento en ese idioma (para seguir otro día)."""
-        return int(self.data["training"].get(language.split("-")[0].lower(), 0))
-
-    def set_training_step(self, language: str, step: int) -> None:
-        with self._lock:
-            self.data["training"][language.split("-")[0].lower()] = step
         self.save()
 
     # ------------------------------------------------------------ tiempos
@@ -242,7 +232,6 @@ class VoiceProfile:
             "guardadas": len(self.data["saved"]),
             "voz": int(self.data["melody"].get("count", 0)),
             "palabras": sum(len(w) for w in self.data["words"].values()),
-            "entrenada": int(bool(self.data["calibration"])),
         }
 
     def forget(self) -> None:

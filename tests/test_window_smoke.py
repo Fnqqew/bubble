@@ -200,3 +200,31 @@ def test_without_claude_or_a_key_it_shows_how_to_continue(window, monkeypatch):
     window._ev_started(mw.NoClaudeError("Falta Claude para traducir"))
     assert opened == [""] and window.link == "error"
     assert "Falta Claude" in str(window.greeting.cget("text"))
+
+
+def test_measuring_your_pc_without_any_voice_says_so(window, monkeypatch):
+    import time
+
+    from bubble.ui import app_view
+
+    window.page_var.set("pruebas")
+    app_view._show_page(window)
+    panel = window.tests_panel
+
+    class NoVoices:
+        def synthesize(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(panel.voice, "my_asr", lambda: object())
+    monkeypatch.setattr(panel, "_voices", lambda: NoVoices())
+    monkeypatch.setattr(panel, "_run", lambda work, **kwargs: work())  # (sin hilos ni modelos)
+    panel._test_pc()
+    end = time.monotonic() + 3
+    while time.monotonic() < end and "No se pudo" not in str(panel.pc_rating.cget("text")):
+        window._drain_events() if hasattr(window, "_drain_events") else None
+        while not window.events.empty():
+            kind, payload = window.events.get_nowait()
+            window._handle(kind, payload)
+        window.root.update()
+    assert str(panel.pc_rating.cget("text")) == "✗ No se pudo medir"  # antes: «Midiendo…» para siempre
+    assert "voz" in str(panel.pc_info.cget("text"))
