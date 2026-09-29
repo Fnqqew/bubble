@@ -303,3 +303,22 @@ def test_windows_voices_really_speak():
         chosen = voices.voice_for("es-AR", "femenina")
         assert chosen.language in ("es-MX", "es-AR", "es-US") or not any(
             v.language.lower() == "es-mx" for v in voices.voices())  # latino antes que de España
+
+
+def test_windows_voices_load_on_any_kind_of_thread():
+    """La ventana (Tk) prepara COM de «un solo hilo»; el audio, «multihilo»: las voces de Windows andan en los dos."""
+    import subprocess
+    import sys
+
+    code = ("import ctypes, threading\n"
+            "ctypes.windll.ole32.CoInitializeEx(None, 2)\n"  # como el hilo de la ventana
+            "from bubble.voice.windows_voices import WindowsVoices\n"
+            "w = WindowsVoices(); w.voices()\n"
+            "out = []\n"
+            "def run():\n"
+            "    ctypes.windll.ole32.CoInitializeEx(None, 0)\n"  # como el hilo del audio
+            "    out.append(len(w.voices()))\n"
+            "t = threading.Thread(target=run); t.start(); t.join()\n"
+            "print('ok', out)\n")
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0 and done.stdout.startswith("ok"), done.stderr[-400:]

@@ -50,14 +50,23 @@ def _com() -> None:
     ctypes.windll.ole32.CoInitializeEx(None, 0)  # cada hilo que usa las voces (si ya estaba, no hace nada)
 
 
+def _apartment() -> int | None:
+    """Cómo tiene preparado COM este hilo: 0 o 3 = «un solo hilo» (el de la ventana, Tk), 1 = «multihilo» (el audio);
+    None si todavía no lo preparó nadie."""
+    kind, qualifier = ctypes.c_int(), ctypes.c_int()
+    if ctypes.windll.ole32.CoGetApartmentType(ctypes.byref(kind), ctypes.byref(qualifier)) != 0:
+        return None
+    return kind.value
+
+
 def _comtypes():
-    """comtypes, preparado como el audio de Windows (COM «multihilo»). Al cargarse, comtypes prepara COM en ese hilo a
-    su manera, y si el audio ya lo había preparado distinto, Windows no deja («No se puede cambiar el modo de
-    subproceso después de establecerlo»)."""
+    """comtypes, preparado igual que COM en este hilo. Al cargarse, comtypes prepara COM a su manera, y si el hilo ya
+    estaba preparado distinto (la ventana usa «un solo hilo»; el audio, «multihilo»), Windows no deja («No se puede
+    cambiar el modo de subproceso después de establecerlo»)."""
     import sys
 
     if "comtypes" not in sys.modules:
-        sys.coinit_flags = 0  # COINIT_MULTITHREADED, como soundcard y _com()
+        sys.coinit_flags = 2 if _apartment() in (0, 3) else 0  # APARTMENTTHREADED o MULTITHREADED
     import comtypes.client
 
     return comtypes.client
