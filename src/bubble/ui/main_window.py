@@ -231,7 +231,7 @@ class BubbleWindow:
         # El tutorial se abre solo la primera vez; después, solo desde el botón "Tutorial".
         self.tutorial: TutorialWindow | None = None
         if not load_state().get("tutorial_seen"):
-            self.root.after(600, self.open_tutorial)
+            self.root.after(2500, lambda: self.when_free(self.open_tutorial))
         # Conexión: se conecta al abrir y se desconecta sola si cerrás Roblox (vuelve sola cuando lo abrís).
         self.link = "desconectado"  # "conectando" | "conectado" | "desconectando" | "desconectado" | "error"
         self._closed_by_roblox = False
@@ -273,7 +273,7 @@ class BubbleWindow:
                 log.debug("No se pudo revisar la instalación", exc_info=True)
                 return
             if missing:
-                self.events.put(("call", self.open_setup))
+                self.events.put(("call", lambda: self.when_free(self.open_setup)))
 
         threading.Thread(target=work, name="bubble-revisar-instalacion", daemon=True).start()
 
@@ -303,10 +303,54 @@ class BubbleWindow:
             return
         self._support = SupportWindow(self.root, grab_roblox=lambda: WindowCapture().whole())
 
+    # ================= el cartel del micrófono (Inicio) =================
+    def test_microphone(self) -> None:
+        """«Probar mi micrófono»: a Pruebas, y arranca la prueba del micrófono."""
+        self.page_var.set("pruebas")
+        app_view._show_page(self)
+        self.tests_panel._test_mic()
+
+    def hide_mic_tip(self) -> None:
+        """Se va el cartel del micrófono (lo cerraste, o la prueba dijo que tu micrófono anda bien) y no vuelve."""
+        tip = getattr(self, "mic_tip", None)
+        update_state(mic_tip_done=True)
+        if tip and tip["outer"].winfo_exists():
+            tip["outer"].destroy()
+        self.mic_tip = None
+
     def open_about(self) -> None:
         from .about_window import AboutWindow
 
         AboutWindow(self.root, self.open_support)
+
+    # ================= las ventanas que se abren solas, de a una =================
+    def _dialog_open(self) -> bool:
+        """¿Hay abierta alguna de las ventanas que se abren solas (o el tutorial)?"""
+        tutorial = getattr(self, "tutorial", None)
+        if tutorial is not None:
+            try:
+                if tutorial.win.winfo_exists():
+                    return True
+            except tk.TclError:
+                pass
+        for name in ("_setup_window", "_no_claude_window", "_update_window"):
+            dialog = getattr(self, name, None)
+            try:
+                if dialog is not None and dialog.window.winfo_exists():
+                    return True
+            except tk.TclError:
+                pass
+        return False
+
+    def when_free(self, action) -> None:
+        """Abre una ventana que aparece sola cuando no haya otra abierta y no estés jugando. Antes, en la primera vez
+        se encimaban el tutorial, «Preparar Bubble» y «Bubble necesita Claude». (Las que abrís vos, enseguida.)"""
+        if self._in_game():
+            self.root.after(30000, lambda: self.when_free(action))
+        elif self._dialog_open():
+            self.root.after(1500, lambda: self.when_free(action))
+        else:
+            action()
 
     # ================= sin Claude (ver cloud/agent.py y no_claude_window.py) =================
     def _ev_claude_access(self, payload) -> None:
@@ -360,7 +404,7 @@ class BubbleWindow:
             self._append(f"Bubble Pro: {error}. Sin Claude no se puede traducir.\n", "error")
             self.open_no_claude(reason)
 
-        self.events.put(("call", show))
+        self.events.put(("call", lambda: self.when_free(show)))
 
     # ================= actualizaciones (ver update.py y update_window.py) =================
     def check_update(self, force: bool = False) -> None:
@@ -404,8 +448,8 @@ class BubbleWindow:
         if self._update_window is not None and self._update_window.window.winfo_exists():
             self._update_window.window.lift()
             return
-        if self._in_game():
-            self.root.after(30000, lambda: self._offer_update(release))
+        if self._in_game() or self._dialog_open():
+            self.root.after(30000 if self._in_game() else 3000, lambda: self._offer_update(release))
             return
         self._update_window = UpdateWindow(self.root, release, lambda action: self.events.put(("call", action)),
                                            self._on_close)
@@ -1300,7 +1344,7 @@ class BubbleWindow:
             self._append(f"{error}\n", "error")
             self._refresh_header()
             if isinstance(error, NoClaudeError):
-                self.open_no_claude()
+                self.when_free(self.open_no_claude)
             return
         self.link = "conectado"
         self.ready = True

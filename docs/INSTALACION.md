@@ -18,7 +18,12 @@ No hace falta saber programar ni tener nada instalado de antemano: si te falta a
   ¿Todavía no tenés? Bubble Pro traduce igual con el crédito de regalo de Deepgram (ver el paso 4).
 - **Roblox**, el de roblox.com o el de la Microsoft Store: andan los dos.
 - **Unos 1,5 GB libres** e internet.
-- Si querés que te escuchen traducido: **auriculares con micrófono** (los de siempre sirven).
+- Si querés que te escuchen traducido: **auriculares con micrófono**.
+
+> [!IMPORTANT]
+> **🎙 Lo más importante: un buen micrófono.** Bubble entiende tu voz tan bien como la escucha. Un micrófono de
+> auriculares (gamer) o uno USB, cerca de la boca, hace toda la diferencia: el de la notebook o el de la webcam
+> agarran ruido y eco, y tu voz traducida sale peor. Probalo en Bubble: **Inicio → Probar mi micrófono**.
 
 <br>
 

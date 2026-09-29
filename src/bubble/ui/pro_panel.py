@@ -102,6 +102,8 @@ class ProPanel:
                   foreground=colors["warn"], wraplength=460, justify="left").pack(anchor="w", pady=(6, 0))
 
         box = widgets.card(page, "Basic y Pro")
+        # Con Pro, lo de Basic queda difuminado (así no se confunde qué está andando).
+        self.comparison_note = _gold(ttk.Label(box, text="", font="SunValleyCaptionFont", foreground=gold))
         grid = self.comparison = ttk.Frame(box)
         grid.pack(fill="x")
         grid.columnconfigure(1, weight=1, uniform="plan")
@@ -191,9 +193,16 @@ class ProPanel:
             widgets.dim(box, not on, animate)
             note.configure(text="✦  Incluido en tu plan Pro" if on else "🔒  Solo en Pro · activalo arriba",
                            foreground=pro.gold() if on else colors["muted"])
-        # Sin Claude, lo de Basic se ve difuminado (como lo de Pro en Basic): se usa recién con Claude conectado.
+        # Lo de Basic se ve difuminado (como lo de Pro en Basic): con Pro activado (queda en pausa) y sin Claude (se
+        # usa recién cuando lo conectes). Son dos motivos distintos: se libera cuando no queda ninguno.
         without_claude = self.app.cloud_translation
-        widgets.dim(self.comparison, without_claude, animate, only=self._basic_cells)
+        widgets.dim(self.comparison, on, animate, only=self._basic_cells, reason="pro")
+        widgets.dim(self.comparison, without_claude, animate, only=self._basic_cells, reason="sin_claude")
+        self.comparison_note.configure(text="✦  Estás en Pro: lo de Basic queda en pausa (difuminado)" if on else "")
+        if on and not self.comparison_note.winfo_manager():
+            self.comparison_note.pack(anchor="w", pady=(0, 6), before=self.comparison)
+        elif not on and self.comparison_note.winfo_manager():
+            self.comparison_note.pack_forget()
         self.intro.configure(text=INTRO_WITHOUT_CLAUDE if without_claude else INTRO)
         if without_claude and not self.no_claude.winfo_manager():
             self.no_claude.pack(fill="x", pady=(8, 0))
@@ -335,7 +344,7 @@ class ProPanel:
             return
         voice = self.app.voice_panel
         self._busy = True
-        self.compare_button.state(["disabled"])
+        widgets.set_enabled(self.compare_button, False)
         self.compare_state.configure(text="Te escucho… decí una frase y hacé una pausa.")
         self.compare_result.configure(text="")
 
@@ -371,7 +380,7 @@ class ProPanel:
             finally:
                 def done() -> None:
                     self._busy = False
-                    self.compare_button.state(["!disabled"])
+                    widgets.set_enabled(self.compare_button, True)
                     self.refresh()
 
                 self._ui(done)

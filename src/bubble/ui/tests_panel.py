@@ -21,6 +21,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING, Callable
 
+from .. import pro
 from . import widgets
 
 if TYPE_CHECKING:
@@ -115,7 +116,12 @@ class TestsPanel:
 
         self.equipment = EquipmentCard(self.app, page)
 
-        box = widgets.card(page, "Cuánto tarda en tu PC", "Mide de verdad cuánto tarda cada paso de tu voz traducida.")
+        box = self.pc_box = widgets.card(page, "Cuánto tarda en tu PC", "Mide de verdad cuánto tarda cada paso de "
+                                                                        "tu voz traducida con Basic (en tu PC).")
+        # Con Pro, esto (Basic) queda difuminado: la voz va por la nube (se prueba en ✦ Pro › Comparar con mi voz).
+        self.pc_note = ttk.Label(box.master, text="🔒  Mide Basic (tu PC) · con Pro, la voz va por la nube: probala en "
+                                                  "✦ Pro › «Comparar con mi voz»", font="SunValleyCaptionFont",
+                                 foreground=colors["muted"])
         row = ttk.Frame(box)
         row.pack(fill="x")
         self._button(row, "Medir", self._test_pc, accent=True).pack(side="left")
@@ -123,12 +129,24 @@ class TestsPanel:
         self.pc_rating.pack(side="left", padx=12)
         self.pc_info = widgets.muted(box, "")
 
+        self.app.plan_hooks.append(self.apply_plan)
+        self.apply_plan(False)
+
         box = widgets.card(page, "Lo que aprendió", "Todo queda en tu PC.")
         self.learned = widgets.muted(box, "")
         row = ttk.Frame(box)
         row.pack(fill="x", pady=(6, 0))
         ttk.Button(row, text="Borrar lo aprendido", command=self._forget).pack(side="left")
         self.refresh_learned()
+
+    def apply_plan(self, animate: bool = True) -> None:
+        """Con Pro, «Cuánto tarda en tu PC» (mide Basic) queda difuminado y bloqueado, con su cartelito."""
+        on = pro.active()
+        widgets.dim(self.pc_box, on, animate, reason="pro")
+        if on and not self.pc_note.winfo_manager():
+            self.pc_note.pack(anchor="w", before=self.pc_box, pady=(0, 2))
+        elif not on and self.pc_note.winfo_manager():
+            self.pc_note.pack_forget()
 
     def _button(self, parent, text: str, command: Callable[[], None], accent: bool = False) -> ttk.Button:
         button = ttk.Button(parent, text=text, command=command, style="Accent.TButton" if accent else "TButton")
@@ -157,7 +175,7 @@ class TestsPanel:
             self.voice._open_voice_lane()  # el carril rápido de la voz (si ya estaba abierto, no hace nada)
         self._busy = True
         for button in self._buttons:
-            button.state(["disabled"])
+            widgets.set_enabled(button, False)
 
         def wrapped() -> None:
             try:
@@ -184,7 +202,7 @@ class TestsPanel:
     def _done(self) -> None:
         self._busy = False
         for button in self._buttons:
-            button.state(["!disabled"])
+            widgets.set_enabled(button, True)  # (los de una tarjeta difuminada quedan bloqueados)
         self.refresh_learned()
 
     def _voices(self):
@@ -232,6 +250,8 @@ class TestsPanel:
                 details += "\n\n" + "\n".join(f"• {tip}" for tip in report.tips)
             self._ui(lambda: (self.mic_rating.configure(text=text, foreground=widgets.palette()[color]),
                               self.mic_details.configure(text=details)))
+            if report.rating == "bien":
+                self._ui(self.app.hide_mic_tip)  # tu micrófono anda bien: el cartel de Inicio ya no hace falta
 
         self._run(work)
 

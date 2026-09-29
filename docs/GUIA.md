@@ -341,7 +341,8 @@ La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus 
   adaptó. Si algo impide que ande del todo, te lo dice con palabras claras y qué hacer. **Medir internet** mide de
   nuevo (se hace solo una vez por día: se conecta con Claude y con la nube de Pro, y baja 3 MB de prueba de
   Cloudflare).
-- **Cuánto tarda en tu PC:** cuánto tarda de verdad en esta PC entender una frase y armar la voz, y cuánto va a
+- **Cuánto tarda en tu PC** (Basic; con Pro queda difuminado, porque la voz va por la nube: se prueba en
+  **✦ Pro → Comparar con mi voz**): cuánto tarda de verdad en esta PC entender una frase y armar la voz, y cuánto va a
   tardar tu voz traducida. Te dice si anda excelente, bien, normal o lenta, y qué ajustar.
 - **Lo que aprendió:** cuántas frases y palabras tuyas conoce, cuántas traducciones aprobaste, cuántas salen al
   instante y los tiempos promedio de tu voz. **Borrar lo aprendido** empieza de cero.
@@ -390,6 +391,9 @@ seguir** y desde **Preparar Bubble**):
 Mientras traduce sin Claude, **Pro queda activado**: en la página **✦ Pro** lo de Basic se ve difuminado, con un
 candado («Basic necesita Claude»), y ni el interruptor ni **Ctrl+P** pasan a Basic hasta que conectes Claude. Si la
 cuenta de Deepgram se queda sin crédito, Bubble te avisa y te vuelve a mostrar los dos caminos.
+
+**Con Pro, lo de Basic queda en pausa.** Para que no haya confusiones, lo que Pro reemplaza se ve difuminado: la
+columna Basic de la comparación y **Pruebas → Cuánto tarda en tu PC** (mide Basic). Al volver a Basic, vuelve todo.
 
 **Cambiar de plan:** en la página **✦ Pro**, o **en el juego**: en la barra para escribir, **Ctrl+P** (o un clic en
 «BASIC» / «✦ PRO», abajo a la derecha). Arriba del juego aparece un aviso que confirma el cambio. La escucha y tu voz

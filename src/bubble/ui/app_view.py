@@ -190,9 +190,18 @@ def _show_page(app: BubbleWindow) -> None:
 
 
 # ---------------------------------------------------------------- Inicio
+MIC_TIP_TITLE = "Lo más importante: un buen micrófono"
+MIC_TIP = ("Bubble entiende tu voz tan bien como la escucha. Un micrófono de auriculares (gamer) o uno USB, cerca de "
+             "la boca, hace toda la diferencia: el de la notebook o el de la webcam agarran ruido y eco, y la "
+             "traducción sale peor.")
+
+
 def _home(app: BubbleWindow, page) -> None:
+    from ..state import load_state
     from .main_window import LANG_CHOICES, _choice
 
+    if not load_state().get("mic_tip_done"):
+        _mic_tip(app, page)  # lo primero que se ve al entrar (hasta que tu micrófono ande bien o lo cierres)
     box = widgets.card(page, "Hablo", "Te muestro todo en este idioma.")
     app.my_lang = ttk.Combobox(box, values=LANG_CHOICES, state="readonly")
     app.my_lang.set(_choice(app.config.user.language))
@@ -320,6 +329,52 @@ def _settings(app: BubbleWindow, page) -> None:
     ttk.Button(row, text="Acerca de", command=app.open_about).pack(side="left", padx=(8, 0))
     ttk.Label(box, text=f"Traduce: Claude {app.config.claude.model}", font="SunValleyCaptionFont",
               foreground=widgets.palette()["faint"]).pack(anchor="w", pady=(10, 0))
+
+
+def _mic_tip(app: BubbleWindow, page) -> None:
+    """«Lo más importante: un buen micrófono», bien a la vista: con fondo de color, una barra del acento y el botón para
+    probarlo. Se va cuando la prueba dice que tu micrófono anda bien, o si lo cerrás."""
+    outer = tk.Frame(page, highlightthickness=1)
+    outer.pack(fill="x", pady=(0, 12))
+    bar = tk.Frame(outer, width=4)
+    bar.pack(side="left", fill="y")
+    inner = tk.Frame(outer)
+    inner.pack(side="left", fill="both", expand=True, padx=(14, 10), pady=(10, 12))
+    top = tk.Frame(inner)
+    top.pack(fill="x")
+    icon = tk.Label(top, text=widgets.ICONS["mic"], font=widgets.icon_font())
+    icon.pack(side="left", padx=(0, 8))
+    title = tk.Label(top, text=MIC_TIP_TITLE, font=("Segoe UI Semibold", 11))
+    title.pack(side="left")
+    close = tk.Label(top, text="✕", font=("Segoe UI", 10), cursor="hand2")
+    close.pack(side="right")
+    close.bind("<Button-1>", lambda _event: app.hide_mic_tip())
+    body = tk.Label(inner, text=MIC_TIP, font=("Segoe UI", 9), wraplength=470, justify="left")
+    body.pack(anchor="w", pady=(4, 8))
+    ttk.Button(inner, text="Probar mi micrófono", style="Accent.TButton", command=app.test_microphone).pack(anchor="w")
+    app.mic_tip = {"outer": outer, "bar": bar, "backs": [outer, inner, top, icon, title, close, body],
+                   "texts": [title, body], "accents": [icon], "muted": [close]}
+    paint_mic_tip(app)
+
+
+def paint_mic_tip(app: BubbleWindow) -> None:
+    """Los colores del cartel del micrófono (con el tema y el plan de ahora: dorado con Pro)."""
+    tip = getattr(app, "mic_tip", None)
+    if not tip or not tip["outer"].winfo_exists():
+        return
+    colors = widgets.palette()
+    tint = widgets.mix(colors["accent"], colors["bg"], 0.86)
+    tip["outer"].configure(highlightbackground=widgets.mix(colors["accent"], colors["bg"], 0.45),
+                           highlightcolor=widgets.mix(colors["accent"], colors["bg"], 0.45))
+    tip["bar"].configure(background=colors["accent"])
+    for widget in tip["backs"]:
+        widget.configure(background=tint)
+    for widget in tip["texts"]:
+        widget.configure(foreground=colors["text"])
+    for widget in tip["accents"]:
+        widget.configure(foreground=colors["accent"])
+    for widget in tip["muted"]:
+        widget.configure(foreground=colors["muted"])
 
 
 def later(app: BubbleWindow, name: str, action, delay_ms: int = 250) -> None:
@@ -507,6 +562,7 @@ def recolor(app: BubbleWindow, animate: bool = False) -> None:
     app.root.configure(background=colors["bg"])
     theme.tint_accent(app.root, pro.active())
     _pro_header(app, animate)
+    paint_mic_tip(app)
     olds = [*widgets.PALETTES.values(), *({"accent": gold} for gold in pro.GOLD.values())]
     for page in app.pages.values():
         if isinstance(page, widgets.Scrollable):

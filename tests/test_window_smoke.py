@@ -185,9 +185,11 @@ def test_without_claude_pro_translates_and_basic_stays_locked(window, monkeypatc
     assert pro.active() and "Basic necesita Claude" in shown[0]
 
     window._ev_claude_access(("", False))  # conectaste Claude
-    assert not window.cloud_translation and not panel.comparison.dimmed and not panel.no_claude.winfo_manager()
+    assert not window.cloud_translation and not panel.no_claude.winfo_manager()
+    assert panel.comparison.dimmed  # (sigue difuminado, pero ahora solo porque estás en Pro)
     window.set_pro(False)
     assert not pro.active()  # ahora sí se puede volver a Basic
+    assert not panel.comparison.dimmed and not panel.comparison_note.winfo_manager()
 
 
 def test_without_claude_or_a_key_it_shows_how_to_continue(window, monkeypatch):
@@ -228,3 +230,116 @@ def test_measuring_your_pc_without_any_voice_says_so(window, monkeypatch):
         window.root.update()
     assert str(panel.pc_rating.cget("text")) == "✗ No se pudo medir"  # antes: «Midiendo…» para siempre
     assert "voz" in str(panel.pc_info.cget("text"))
+
+
+# ---------------------------------------------------------------- bloqueos que se enciman (no se pisan)
+def test_two_locks_on_the_same_button_do_not_step_on_each_other(window):
+    from tkinter import ttk
+
+    from bubble.ui import widgets
+
+    outer = ttk.Frame(window.root)
+    inner = ttk.Frame(outer)
+    label = ttk.Label(inner, text="Botón para hablar")
+    button = ttk.Button(inner, text="Cambiar")
+    widgets.dim(outer, True, animate=False)  # tu voz apagada
+    widgets.dim(inner, True, animate=False)  # modo directo (sin botón)
+    widgets.dim(outer, False, animate=False)  # prendés tu voz: sigue el modo directo
+    assert "disabled" in button.state() and label.dim_color  # (antes: el texto volvía normal)
+    widgets.dim(inner, False, animate=False)  # pasás a «con botón»
+    assert "disabled" not in button.state() and not hasattr(label, "dim_color")  # (antes: bloqueado para siempre)
+
+
+def test_finishing_a_test_does_not_unlock_a_dimmed_button(window):
+    from tkinter import ttk
+
+    from bubble.ui import widgets
+
+    box = ttk.Frame(window.root)
+    button = ttk.Button(box, text="Medir")
+    widgets.dim(box, True, animate=False, reason="pro")
+    widgets.set_enabled(button, True)  # (termina otra prueba y se habilitan los botones)
+    assert "disabled" in button.state()
+    widgets.dim(box, False, animate=False, reason="pro")
+    assert "disabled" not in button.state()  # se habilita recién al liberarse
+
+
+# ---------------------------------------------------------------- con Pro, lo de Basic difuminado
+def test_with_pro_the_basic_parts_are_dimmed(window, monkeypatch):
+    import bubble.cloud.keys
+    from bubble import pro
+    from bubble.ui import app_view
+
+    monkeypatch.setattr(bubble.cloud.keys, "load_key", lambda: "clave-de-prueba")
+    monkeypatch.setattr(window.voice_panel, "pro_changed", lambda: None)
+    for page in ("pro", "pruebas"):
+        window.page_var.set(page)
+        app_view._show_page(window)
+    panel, tests = window.pro_panel, window.tests_panel
+    assert not panel.comparison.dimmed and not tests.pc_box.dimmed
+    window.set_pro(True)
+    assert pro.active() and panel.comparison.dimmed and panel.comparison_note.winfo_manager()
+    assert tests.pc_box.dimmed and tests.pc_note.winfo_manager()  # «Cuánto tarda en tu PC» mide Basic
+    medir = next(b for b in tests._buttons if str(b.cget("text")) == "Medir")
+    tests._done()  # (termina otra prueba)
+    assert "disabled" in medir.state()
+    window.set_pro(False)
+    assert not panel.comparison.dimmed and not tests.pc_box.dimmed and not tests.pc_note.winfo_manager()
+    assert "disabled" not in medir.state()
+
+
+# ---------------------------------------------------------------- un buen micrófono, lo primero
+def test_the_microphone_tip_is_the_first_thing_you_see(window, monkeypatch):
+    from bubble.state import load_state
+    from bubble.ui import app_view
+
+    tip = window.mic_tip
+    assert tip and tip["outer"].winfo_manager()
+    home = app_view.PAGES and window.pages["inicio"]
+    first = home.body.winfo_children()[0] if hasattr(home, "body") else home.winfo_children()[0]
+    assert first is tip["outer"]  # arriba de todo en Inicio
+    assert any("buen micrófono" in str(w.cget("text")) for w in tip["texts"])
+    started = []
+    monkeypatch.setattr(window.tests_panel, "_test_mic", lambda: started.append(1))
+    window.test_microphone()
+    assert window.page_var.get() == "pruebas" and started  # «Probar mi micrófono»
+    window.hide_mic_tip()
+    assert window.mic_tip is None and load_state().get("mic_tip_done")  # no vuelve
+
+
+def test_the_tutorial_opens_with_the_microphone(window):
+    from bubble.ui.tutorial import build_steps
+
+    first = build_steps("F8", lambda: None)[0]
+    assert first.highlight and "micrófono" in first.highlight[0]
+
+
+def test_windows_that_open_by_themselves_wait_their_turn(window, monkeypatch):
+    import tkinter as tk
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(window, "_in_game", lambda: False)
+    later = []
+    monkeypatch.setattr(window.root, "after", lambda ms, action: later.append((ms, action)))
+    other = tk.Toplevel(window.root)
+    other.withdraw()
+    window._setup_window = SimpleNamespace(window=other)  # «Preparar Bubble» abierta
+    opened = []
+    window.when_free(lambda: opened.append("tutorial"))
+    assert opened == [] and later and later[0][0] == 1500  # espera su turno
+    other.destroy()
+    later.pop(0)[1]()
+    assert opened == ["tutorial"]  # y se abre cuando se cierra la otra
+
+
+def test_the_microphone_tip_turns_gold_with_pro(window, monkeypatch):
+    import bubble.cloud.keys
+    from bubble import pro
+
+    monkeypatch.setattr(bubble.cloud.keys, "load_key", lambda: "clave-de-prueba")
+    monkeypatch.setattr(window.voice_panel, "pro_changed", lambda: None)
+    bar = window.mic_tip["bar"]
+    blue = str(bar.cget("background"))
+    window.set_pro(True)
+    window.root.update()
+    assert str(bar.cget("background")).lower() == pro.gold().lower() != blue.lower()

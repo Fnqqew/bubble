@@ -151,16 +151,25 @@ def _hex(widget: tk.Misc, color: str) -> str:
     return f"#{red // 256:02x}{green // 256:02x}{blue // 256:02x}"
 
 
-def dim(container: tk.Misc, dimmed: bool, animate: bool = True, only: list | None = None) -> None:
+def dim(container: tk.Misc, dimmed: bool, animate: bool = True, only: list | None = None, reason: str = "") -> None:
     """Bloquea (o desbloquea) todo lo de adentro: los textos se difuminan suave hacia el fondo y los controles no se
-    pueden tocar. Sirve para lo que no corresponde en este momento (lo de Pro en Basic, lo de tu voz si no está
-    prendida…): se ve que existe, pero no se puede usar ni probar por error. `only`: solo esas partes del contenedor
-    (por ejemplo, una columna de una tabla)."""
+    pueden tocar. Sirve para lo que no corresponde en este momento (lo de Pro en Basic, lo de Basic en Pro, lo de tu
+    voz si no está prendida…): se ve que existe, pero no se puede usar ni probar por error. `only`: solo esas partes
+    del contenedor (por ejemplo, una columna de una tabla).
+
+    Cada bloqueo tiene su motivo (`reason`; si no, el contenedor): algo queda difuminado mientras quede al menos uno,
+    y al salir el último vuelve exactamente a como estaba. Antes, dos bloqueos encimados (tu voz apagada y el modo
+    directo, sobre el mismo botón) se pisaban: sacar uno podía dejar un botón bloqueado para siempre, o un texto
+    normal con su control bloqueado."""
     from . import motion
 
-    if getattr(container, "dimmed", False) == dimmed:
+    reason = reason or f"contenedor-{id(container)}"
+    reasons = container.__dict__.setdefault("dim_reasons", set())
+    container.dimmed = bool(reasons)
+    if (reason in reasons) == dimmed:
         return
-    container.dimmed = dimmed
+    (reasons.add if dimmed else reasons.discard)(reason)
+    container.dimmed = bool(reasons)
     background = palette()["bg"]
     labels, controls = [], []
 
@@ -181,21 +190,30 @@ def dim(container: tk.Misc, dimmed: bool, animate: bool = True, only: list | Non
             elif isinstance(widget, CONTROLS):
                 controls.append(widget)
             collect(widget)
+
+    def lock(widget: tk.Misc) -> bool | None:
+        """Suma o saca este motivo. Devuelve True si recién se bloqueó, False si recién se liberó, None si no cambió."""
+        locks = widget.__dict__.setdefault("dim_locks", set())
+        before = bool(locks)
+        (locks.add if dimmed else locks.discard)(reason)
+        return None if bool(locks) == before else bool(locks)
+
     for control in controls:
-        if dimmed:
+        changed = lock(control)
+        if changed is True:
             control.locked_before = control.instate(["disabled"])  # (si ya estaba bloqueado por otra cosa, sigue)
             control.state(["disabled"])
-        elif not getattr(control, "locked_before", False):
+        elif changed is False and not getattr(control, "locked_before", False):
             control.state(["!disabled"])
     moves = []
     for label in labels:
+        changed = lock(label)
         current = _hex(label, str(label.cget("foreground")))
-        original = getattr(label, "dim_color", None)
-        if dimmed:
-            original = original or current
-            label.dim_color = original
-            moves.append((label, current, mix(original, background, DIM)))
-        elif original:
+        if changed is True:
+            label.dim_color = getattr(label, "dim_color", None) or current
+            moves.append((label, current, mix(label.dim_color, background, DIM)))
+        elif changed is False and getattr(label, "dim_color", None):
+            original = label.dim_color
             del label.dim_color
             moves.append((label, current, original))
 
@@ -207,6 +225,16 @@ def dim(container: tk.Misc, dimmed: bool, animate: bool = True, only: list | Non
         motion.animate(container, 0.22, step)
     else:
         step(1.0)
+
+
+def set_enabled(control: ttk.Widget, enabled: bool) -> None:
+    """Habilita o bloquea un control sin pisar un difuminado (ver dim): si está difuminado, queda bloqueado y se
+    habilita (o no) recién cuando se libere. Antes, al terminar una prueba se habilitaban todos sus botones, aunque
+    estuvieran en una tarjeta difuminada."""
+    if control.__dict__.get("dim_locks"):
+        control.locked_before = not enabled
+        return
+    control.state(["!disabled"] if enabled else ["disabled"])
 
 
 WHEEL_PX = 64  # píxeles por "clic" de la ruedita

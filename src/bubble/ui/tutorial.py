@@ -22,6 +22,12 @@ def _colors() -> dict[str, str]:
             "on_accent": "#0b1a2a" if dark else "#ffffff"}
 
 
+def _mix(color_a: str, color_b: str, amount: float) -> str:
+    from .widgets import mix
+
+    return mix(color_a, color_b, amount)
+
+
 @dataclass(frozen=True)
 class Step:
     title: str
@@ -29,6 +35,8 @@ class Step:
     # Botón opcional para hacer el paso en el momento (ej. "Calibrar ahora").
     action_label: str = ""
     action: Callable[[], None] | None = None
+    # Un cartel destacado (título, texto), para lo más importante: se ve de color, debajo del texto.
+    highlight: tuple[str, str] | None = None
 
 
 def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callable[[], None] | None = None,
@@ -36,9 +44,12 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
     return [
         Step(
             "¡Hola! Soy Bubble",
-            "Traduzco Roblox mientras jugás: el chat, lo que dicen sobre la cabeza de los jugadores y hasta la voz.\n\n"
-            "Uso tu suscripción de Claude, así que no tenés que configurar nada. Cuando arriba diga «Listo», "
-            "estamos.",
+            "Traduzco Roblox mientras jugás: el chat, lo que dicen sobre la cabeza de los jugadores y hasta la voz. "
+            "Uso tu suscripción de Claude: cuando arriba diga «Listo», estamos.",
+            highlight=("Lo más importante: un buen micrófono",
+                       "Te entiendo tan bien como te escucho. Un micrófono de auriculares (gamer) o uno USB, cerca de "
+                       "la boca, hace toda la diferencia: el de la notebook o el de la webcam agarran ruido y eco, y "
+                       "tu voz traducida sale peor. Probalo cuando quieras en Inicio o en Pruebas → Tu micrófono."),
         ),
         Step(
             "Contame cómo hablás",
@@ -163,6 +174,25 @@ class TutorialWindow:
         )
         self.body.pack(fill="both", expand=True, padx=24, pady=(10, 6))
 
+        # El cartel destacado (lo más importante del paso): fondo de color, una barra del acento y el ícono.
+        tint = _mix(self.c["accent"], self.c["bg"], 0.84)
+        self.callout = tk.Frame(self.win, bg=tint, highlightthickness=1,
+                                highlightbackground=_mix(self.c["accent"], self.c["bg"], 0.45))
+        tk.Frame(self.callout, bg=self.c["accent"], width=4).pack(side="left", fill="y")
+        inner = tk.Frame(self.callout, bg=tint)
+        inner.pack(side="left", fill="both", expand=True, padx=(12, 12), pady=(10, 10))
+        top = tk.Frame(inner, bg=tint)
+        top.pack(fill="x")
+        from .widgets import ICONS, icon_font
+
+        tk.Label(top, text=ICONS["mic"], font=icon_font(), fg=self.c["accent"], bg=tint).pack(side="left",
+                                                                                          padx=(0, 8))
+        self.callout_title = tk.Label(top, font=("Segoe UI Semibold", 12), fg=self.c["text"], bg=tint, anchor="w")
+        self.callout_title.pack(side="left")
+        self.callout_body = tk.Label(inner, font=("Segoe UI", 10), fg=self.c["text"], bg=tint, justify="left",
+                                     anchor="w", wraplength=WIDTH - 110)
+        self.callout_body.pack(anchor="w", pady=(4, 0))
+
         self.action_button = self._button(self.win, "", self._run_action, primary=False)
 
         self.dots = tk.Canvas(self.win, height=14, bg=self.c["bg"], highlightthickness=0)
@@ -224,6 +254,12 @@ class TutorialWindow:
         last = self.index == len(self.steps) - 1
         self.title.configure(text=step.title)
         self.body.configure(text=step.body)
+        if step.highlight:
+            self.callout_title.configure(text=step.highlight[0])
+            self.callout_body.configure(text=step.highlight[1])
+            self.callout.pack(fill="x", padx=24, pady=(0, 10), before=self.dots)  # (el botón del paso, después)
+        else:
+            self.callout.pack_forget()
         self.counter.configure(text=f"Paso {self.index + 1} de {len(self.steps)}")
         if step.action:
             self.action_button.configure(text=step.action_label)
