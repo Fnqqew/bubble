@@ -1,12 +1,12 @@
 """Traducciones dibujadas encima del chat y de las burbujas de Roblox.
 
-Cada mensaje traducido se tapa con una "píldora": fondo oscuro casi opaco con bordes redondeados, la
-traducción en letra blanca con sombra suave y una rayita azul que indica que es una traducción. El nombre
-del jugador queda visible. Mientras se traduce, la píldora muestra el original en gris.
+Cada mensaje traducido se tapa con una "píldora": fondo oscuro casi opaco con bordes redondeados, la traducción en letra
+blanca con sombra suave y una línea azul que indica que es una traducción. El nombre del jugador queda visible. Mientras
+se traduce, la píldora muestra el original en gris.
 
-Las píldoras son ventanas con transparencia real (ver layered.py): dejan pasar los clics, no salen en las
-capturas de pantalla (así el OCR sigue leyendo el chat original de debajo) y, como no dependen del fondo,
-se reutilizan: mover una traducción es solo mover su ventana.
+Las píldoras son ventanas con transparencia real (ver layered.py): dejan pasar los clics, no aparecen en las capturas de
+pantalla (así el OCR sigue leyendo el chat original que queda debajo) y, al no depender del fondo, se reutilizan: mover
+una traducción equivale a mover su ventana.
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ from PIL import Image, ImageDraw, ImageFont
 from ..translate.base import ChatLine
 from .rtl import visual
 
-FONT_FILES = ["seguisb.ttf", "segoeuib.ttf", "arialbd.ttf"]  # parecidas a la letra del chat de Roblox
-MIN_SCALE = 0.6  # la letra se achica hasta 60% antes de cortar con "…"
-MAX_BUBBLE_SPEED = 1800  # px/s: más rápido que esto es un giro brusco de cámara
-RENDER_DELAY_S = 0.03  # lo que tarda en verse la ventana después de moverla
+FONT_FILES = ["seguisb.ttf", "segoeuib.ttf", "arialbd.ttf"]  # similares a la fuente del chat de Roblox
+MIN_SCALE = 0.6  # la letra se reduce hasta 60% antes de cortar con "…"
+MAX_BUBBLE_SPEED = 1800  # px/s: una velocidad mayor indica un giro brusco de cámara
+RENDER_DELAY_S = 0.03  # demora en hacerse visible la ventana tras moverla
 
-# Estilo de las píldoras del chat (los valores por defecto; se pueden cambiar en Ajustes, ver `set_style`).
-CHAT_FILL = (17, 19, 24, 252)  # casi opaca: con menos se transparentaba el texto original debajo
+# Estilo de las píldoras del chat (valores por defecto; configurables en Ajustes, ver `set_style`).
+CHAT_FILL = (17, 19, 24, 252)  # casi opaca: con menos se transparenta el texto original
 CHAT_TEXT = (246, 247, 250)
 ACCENT = (84, 152, 255, 240)
 PILL_COLORS = {"grafito": (17, 19, 24), "medianoche": (14, 24, 48), "violeta": (38, 22, 56),
@@ -51,7 +51,7 @@ STYLE = Style()
 
 
 def set_style(color: str = "grafito", opacity: float = 0.98, accent: str = "azul", scale: float = 1.0) -> None:
-    """Aplica los ajustes de apariencia a las traducciones (se ven en la próxima captura)."""
+    """Aplica los ajustes de apariencia a las traducciones (visibles desde la próxima captura)."""
     rgb = PILL_COLORS.get(color, PILL_COLORS["grafito"])
     STYLE.fill = (*rgb, int(255 * max(0.6, min(1.0, opacity))))
     tint = ACCENTS.get(accent, ACCENTS["azul"])
@@ -59,14 +59,14 @@ def set_style(color: str = "grafito", opacity: float = 0.98, accent: str = "azul
     STYLE.scale = max(0.8, min(1.5, scale))
     STYLE.version += 1
 SHADOW = (0, 0, 0, 170)
-PILL_BEFORE_TEXT = 5  # la píldora arranca un poco antes del texto (tapa el espacio después de "Nombre:")
-TEXT_INSET = 10  # dentro de la píldora: rayita azul + espacio
+PILL_BEFORE_TEXT = 5  # la píldora empieza antes del texto (cubre el espacio tras "Nombre:")
+TEXT_INSET = 10  # interior de la píldora: línea azul + espacio
 RIGHT_PAD = 8
-SUPERSAMPLE = 3  # bordes redondeados suaves: se dibujan 3 veces más grandes y se achican
+SUPERSAMPLE = 3  # suaviza los bordes: se dibuja al triple de tamaño y se reduce
 
-# Letras de Windows para otras escrituras (la del chat no tiene hindi, coreano, chino…).
+# Fuentes de Windows para otras escrituras (la del chat no incluye hindi, coreano, chino, etc.).
 SCRIPT_FONTS = [
-    (re.compile(r"[\u0900-\u0DFF]"), ["Nirmala.ttc"]),  # hindi, bengalí, tamil… (indias)
+    (re.compile(r"[\u0900-\u0DFF]"), ["Nirmala.ttc"]),  # hindi, bengalí, tamil, etc. (escrituras indias)
     (re.compile(r"[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]"), ["malgunbd.ttf", "malgun.ttf"]),  # coreano
     (re.compile(r"[\u3040-\u30FF]"), ["YuGothB.ttc", "msyhbd.ttc"]),  # japonés
     (re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF]"), ["msyhbd.ttc", "msyh.ttc"]),  # chino
@@ -77,7 +77,7 @@ _fonts: dict[tuple[int, str], ImageFont.FreeTypeFont] = {}
 
 
 def _font(size: int, text: str = "") -> ImageFont.FreeTypeFont:
-    """La letra del chat en ese tamaño; si `text` usa otra escritura, una letra de Windows que la tenga."""
+    """La fuente del chat en ese tamaño; si `text` usa otra escritura, una fuente de Windows que la incluya."""
     size = max(6, size)
     files = next((names for pattern, names in SCRIPT_FONTS if text and pattern.search(text)), FONT_FILES)
     key = (size, files[0])
@@ -96,7 +96,7 @@ def _font(size: int, text: str = "") -> ImageFont.FreeTypeFont:
 # ---------------------------------------------------------------- disposición del texto
 @dataclass(frozen=True)
 class Slot:
-    """Espacio disponible para texto: una línea (coordenadas de la captura)."""
+    """Espacio disponible para el texto de una línea (coordenadas de la captura)."""
 
     left: int
     top: int
@@ -113,11 +113,11 @@ class Slot:
 
 
 def layout_text(text: str, slots: list[Slot], base_size: int, balance: bool = False) -> tuple[int, list[str]]:
-    """Reparte el texto en las líneas disponibles achicando la letra si hace falta.
+    """Reparte el texto en las líneas disponibles, reduciendo la letra si es necesario.
 
-    Devuelve (tamaño de letra, texto por línea). Si ni con la letra mínima entra, corta con "…". Con `balance`, si
-    sobra lugar el texto se reparte parejo entre todas las líneas (en el chat, cada línea tapa un renglón del
-    mensaje original: una vacía se veía como un rectángulo negro sin nada).
+    Devuelve (tamaño de letra, texto por línea). Si no entra ni con la letra mínima, corta con "…". Con `balance`,
+    si sobra espacio el texto se reparte de forma pareja entre todas las líneas (en el chat, cada línea tapa un
+    renglón del mensaje original: una línea vacía se vería como un rectángulo negro sin contenido).
     """
     words = text.split()
     size = base_size
@@ -136,7 +136,7 @@ def layout_text(text: str, slots: list[Slot], base_size: int, balance: bool = Fa
 
 
 def _balanced(words: list[str], slots: list[Slot], font) -> list[str] | None:
-    """Las palabras repartidas en todas las líneas, de largo parecido."""
+    """Las palabras repartidas en todas las líneas, con largos similares."""
     target = font.getlength(" ".join(words)) / len(slots)
     lines: list[str] = []
     index = 0
@@ -211,7 +211,7 @@ def render_pill(width: int, height: int, text: str, size: int, *, fill: tuple, t
         font = _font(size, text)
         x, anchor = (TEXT_INSET, "lm") if align == "left" else (width / 2, "mm")
         y = height / 2
-        shown = visual(text)  # (hebreo, árabe…: en el orden en que se leen)
+        shown = visual(text)  # (hebreo, árabe, etc.: en orden de lectura)
         if shadow:
             draw.text((x + 1, y + 1), shown, font=font, fill=SHADOW, anchor=anchor)
         draw.text((x, y), shown, font=font, fill=text_color, anchor=anchor)
@@ -232,28 +232,28 @@ def _wrap(words: list[str], font, max_width: float) -> list[str]:
 def fit_bubble_text(text: str, width: int, height: int, rows: int) -> tuple[int, list[str], int, int]:
     """(tamaño de letra, líneas, ancho, alto) de la burbuja traducida.
 
-    La letra es como la de la burbuja original. La traducción suele ser más larga que el original (el español
-    más que el inglés): nunca se corta. Primero la burbuja se ensancha (hasta 1,8 veces), después la letra se achica
-    un poco y, si todavía no entra, se suman líneas. Nunca queda más chica que la original (la tapa entera).
-    Antes probaba hasta 3 líneas: una burbuja de 4 renglones perdía el final de la traducción.
+    La letra es similar a la de la burbuja original. La traducción suele ser más larga que el original (el español
+    más que el inglés) y nunca se corta. Primero se ensancha la burbuja (hasta 1,8 veces), después se reduce un poco
+    la letra y, si aún no entra, se agregan líneas. Nunca queda más chica que la original (la cubre entera). No se
+    limita a 3 líneas: una burbuja de 4 renglones perdería el final de la traducción.
     """
     words = text.split() or [text]
-    line_height = max(10.0, (height - 12) / max(1, rows))  # alto de cada línea de texto de la original
-    base = int(max(10, min(30, line_height * 0.72)))  # letra parecida a la original
+    line_height = max(10.0, (height - 12) / max(1, rows))  # alto de cada línea de texto original
+    base = int(max(10, min(30, line_height * 0.72)))  # letra similar a la original
     widest = max(width, min(int(width * 1.8), 460))
     most = max(rows + 3, 5)
     for size in sorted({base, max(10, int(base * 0.9)), max(10, int(base * 0.8))}, reverse=True):
         font = _font(size, text)
-        step = line_height * size / base  # con letra más chica, renglones más juntos
+        step = line_height * size / base  # letra más chica, renglones más juntos
         for count in range(max(1, rows), most + 1):
-            target = max(width - 24, font.getlength(text) / count + size)  # líneas parejas
+            target = max(width - 24, font.getlength(text) / count + size)  # líneas de largo parejo
             if target > widest - 24:
                 continue
             lines = _wrap(words, font, target)
             longest = max(font.getlength(line) for line in lines)
             if len(lines) <= count and longest <= widest - 24:
                 return size, lines, max(width, int(longest) + 28), max(height, int(len(lines) * step + 12))
-    # Muchísimo texto: todo el ancho posible y las líneas que hagan falta (se lee entero, nunca con "…").
+    # Mucho texto: todo el ancho posible y las líneas necesarias (se lee completo, nunca con "…").
     size = max(10, int(base * 0.8))
     font = _font(size, text)
     lines = _wrap(words, font, widest - 24)
@@ -278,7 +278,7 @@ def render_bubble(size_px: tuple[int, int], text_lines: list[str], font_size: in
 
 # ---------------------------------------------------------------- geometría del chat
 def base_font_size(rows) -> int:
-    """Tamaño de letra parecido al del chat, estimado con la altura de las palabras que leyó el OCR."""
+    """Tamaño de letra similar al del chat, estimado con la altura de las palabras que leyó el OCR."""
     heights = sorted(w.height for row in rows for w in row.words) or sorted(r.height for r in rows)
     median = heights[len(heights) // 2] if heights else 16
     return int(max(10, min(40, median * 1.15)))
@@ -286,13 +286,13 @@ def base_font_size(rows) -> int:
 
 @dataclass(frozen=True)
 class PillSpot:
-    """Dónde va la píldora de una línea del mensaje (coordenadas de la captura del chat)."""
+    """Ubicación de la píldora de una línea del mensaje (coordenadas de la captura del chat)."""
 
     left: int
     top: int
     bottom: int
-    cover_right: int  # tiene que llegar al menos hasta acá para tapar el original
-    max_right: int  # y como mucho hasta acá (el borde del chat)
+    cover_right: int  # debe llegar al menos hasta acá para cubrir el original
+    max_right: int  # y como máximo hasta acá (el borde del chat)
 
     @property
     def height(self) -> int:
@@ -302,19 +302,19 @@ class PillSpot:
         return Slot(self.left, self.top, self.max_right - TEXT_INSET - RIGHT_PAD, self.bottom)
 
 
-TEXT_EDGE_FLOOR = 0.6  # sin haber visto mensajes largos, las traducciones llegan al menos a esta parte del ancho
-TEXT_EDGE_MARGIN = 45  # px más allá del texto más largo: Roblox corta los renglones bastante antes del borde del panel
+TEXT_EDGE_FLOOR = 0.6  # sin mensajes largos vistos, las traducciones llegan al menos a esta fracción del ancho
+TEXT_EDGE_MARGIN = 45  # px más allá del texto más largo: Roblox corta los renglones antes del borde del panel
 
 
 def chat_spots(item, frame_width: int, row_height: float | None = None, text_right: float = 0) -> list[PillSpot]:
-    """Una píldora por línea del mensaje: la primera desde donde termina el nombre, el resto enteras.
+    """Una píldora por línea del mensaje: la primera desde donde termina el nombre, el resto completas.
 
-    Con `row_height` (la altura típica de las líneas del chat) todas las píldoras tienen el mismo alto, centradas en
-    su línea: el OCR mide cada línea un poco distinto (una banderita la agranda) y se veían desparejas. Pueden pasar
-    unos píxeles el borde calibrado, para tapar el final del texto original.
+    Con `row_height` (la altura típica de las líneas del chat) todas las píldoras tienen el mismo alto y quedan
+    centradas en su línea: el OCR mide cada línea de forma algo distinta (una bandera la agranda) y quedarían
+    desparejas. Pueden exceder unos píxeles el borde calibrado, para cubrir el final del texto original.
 
-    Con `text_right` (hasta dónde llega el texto del chat) las píldoras no pasan de ahí: la zona calibrada suele ser
-    más ancha que el chat, y una traducción larga se salía del chat.
+    Con `text_right` (hasta dónde llega el texto del chat) las píldoras no lo superan: la zona calibrada suele ser
+    más ancha que el chat, y una traducción larga sobresaldría.
     """
     edge = frame_width
     if text_right:
@@ -345,7 +345,7 @@ def chat_metrics(items) -> tuple[int, float] | None:
 
 
 def chat_slots(item, frame_width: int) -> list[Slot]:
-    """Espacio para texto de cada línea del mensaje (compatibilidad y pruebas)."""
+    """Espacio para el texto de cada línea del mensaje (compatibilidad y pruebas)."""
     return [spot.text_slot() for spot in chat_spots(item, frame_width)]
 
 
@@ -362,7 +362,7 @@ class Entry:
 
 # ---------------------------------------------------------------- ventanas
 class Patch:
-    """Una traducción en pantalla. Si la imagen no cambió, solo se mueve la ventana (rápido)."""
+    """Una traducción en pantalla. Si la imagen no cambió, solo se mueve la ventana (más rápido)."""
 
     def __init__(self) -> None:
         from ..layered import LayeredWindow
@@ -377,7 +377,7 @@ class Patch:
             self.window.update(image, x, y)
             self._image = image
         elif (x, y) != self._at or not self._shown:
-            self.window.move(x, y)  # mismo dibujo en otro lugar: solo se mueve
+            self.window.move(x, y)  # mismo dibujo en otra posición: solo se mueve
         self._at, self._shown = (x, y), True  # quieta y sin cambios: no se toca (menos CPU)
 
     def hide(self) -> None:
@@ -429,16 +429,16 @@ class ImageCache:
 
 # ---------------------------------------------------------------- chat
 class InlineChatView:
-    """Dibuja cada traducción encima de su mensaje en el chat, en el lugar exacto.
+    """Dibuja cada traducción sobre su mensaje en el chat, en la posición exacta.
 
-    Cada mensaje en otro idioma queda "seleccionado" apenas se pide su traducción (píldora con el original
-    en gris) y la traducción se escribe encima a medida que llega. Si el chat se cierra o salís de Roblox,
-    se ocultan.
+    Cada mensaje en otro idioma queda "seleccionado" en cuanto se pide su traducción (píldora con el original en
+    gris) y la traducción se escribe encima a medida que llega. Si el chat se cierra o el jugador sale de Roblox, se
+    ocultan.
     """
 
     SEARCH_LAST = 60
-    # Una línea que el OCR no leyó en una captura (el fondo del chat se desvaneció y la cámara se mueve detrás)
-    # mantiene su traducción este tiempo, mientras ahí siga habiendo texto.
+    # Una línea que el OCR no leyó en una captura (el fondo del chat se desvanece y la cámara se mueve detrás) conserva
+    # su traducción durante este tiempo, mientras siga habiendo texto en esa posición.
     HOLD_S = 3.0
     JITTER_PX = 2  # diferencias de posición menores no mueven la traducción (el OCR varía 1-2 px)
 
@@ -447,20 +447,22 @@ class InlineChatView:
         self.same_message = same_message
         self.entries: deque[Entry] = deque(maxlen=500)
         self.by_id: dict[int, Entry] = {}
-        # Búsqueda exacta (lo normal): sin comparar textos. Varias entradas si el mismo mensaje se repitió.
+        # Búsqueda exacta (caso normal): sin comparar textos. Varias entradas si el mismo mensaje se repitió.
         self.by_line: dict[tuple[str, str], list[Entry]] = {}
         self.images = ImageCache()
         self._positions: dict[int, float] = {}
         self._moving_frames = 0
         self._last_bottom: ChatLine | None = None
-        self._placed: dict[object, tuple[Image.Image, int, int, float]] = {}  # lo que se mostró: imagen, x, y, cuándo
-        self._metrics: tuple[int, float] | None = None  # letra y alto de línea del chat
+        self._placed: dict[object, tuple[Image.Image, int, int, float]] = {}  # lo mostrado: imagen, x, y, instante
+        self._metrics: tuple[int, float] | None = None  # fuente y alto de línea del chat
         self._layouts: dict[tuple, tuple[int, list[str]]] = {}
         self.last_frame = None
         self.last_patches: list[tuple[Image.Image, int, int]] = []
 
     def reset(self, same_message: Callable[[ChatLine, ChatLine], bool] | None = None) -> None:
-        """Empezar de cero (se cerró Roblox o se refrescó): se ocultan las traducciones y se olvida la partida."""
+        """Reinicia el estado (se cerró Roblox o se refrescó): se ocultan las traducciones y se descarta la
+        partida.
+        """
         self.layer.hide_all()
         if same_message is not None:
             self.same_message = same_message
@@ -495,7 +497,9 @@ class InlineChatView:
             entry.text += chunk
 
     def final(self, msg_id: int, line: ChatLine, text: str | None) -> None:
-        """`text` = traducción a mostrar, o None si no hace falta mostrar nada (ya estaba en tu idioma)."""
+        """`text` = traducción a mostrar, o None si no hace falta mostrar nada (ya estaba en el idioma del
+        jugador).
+        """
         entry = self.by_id.get(msg_id)
         if entry is None:
             entry = Entry(msg_id, line.speaker, line.text)
@@ -506,7 +510,7 @@ class InlineChatView:
     def find(self, line: ChatLine) -> Entry | None:
         exact = self.by_line.get((line.speaker, line.text))
         if exact:
-            # Mismo mensaje repetido: mientras se traduce el nuevo, sirve la traducción del anterior.
+            # Mismo mensaje repetido: mientras se traduce el nuevo, se usa la traducción del anterior.
             return next((e for e in reversed(exact) if e.status == "done"), exact[-1])
         for entry in reversed(list(self.entries)[-self.SEARCH_LAST:]):
             if self.same_message(ChatLine(entry.speaker, entry.original), line):
@@ -522,11 +526,13 @@ class InlineChatView:
 
     # --- dibujo
     def _movement(self, placed: dict[int, float], bottom: ChatLine | None) -> tuple[bool, bool, float]:
-        """(se movió, lo estás desplazando, cuánto). Cuando llega un mensaje nuevo todo sube: eso no es desplazar (en una
-        ráfaga pasa varias capturas seguidas y antes ocultaba todas las traducciones: parpadeaban). Si el chat se
-        mueve dos capturas seguidas sin mensajes nuevos abajo, lo estás desplazando: se ocultan las traducciones
-        hasta que se quede quieto, así no quedan desfasadas."""
-        # Se movió si se movió la mayoría (la mediana): una sola línea mal leída en otra altura no cuenta.
+        """(se movió, se está desplazando, cuánto). Cuando llega un mensaje nuevo todo sube: eso no es
+        desplazamiento (en una ráfaga ocurre en varias capturas seguidas y ocultaría todas las traducciones, que
+        parpadearían). Si el chat se mueve en dos capturas seguidas sin mensajes nuevos abajo, se considera
+        desplazamiento: se ocultan las traducciones hasta que quede quieto, para que no queden desfasadas.
+        """
+        # Se considera que hubo desplazamiento si se movió la mayoría (la mediana): una sola línea mal leída en otra
+        # altura no cuenta.
         shifts = sorted(top - self._positions[key] for key, top in placed.items() if key in self._positions)
         dy = shifts[len(shifts) // 2] if shifts else 0.0
         moved = bool(shifts) and abs(dy) > 4
@@ -544,11 +550,11 @@ class InlineChatView:
             self._placed.clear()
             return
         found = [(item, self.find(item.origin or item.line)) for item in frame.items]
-        # Solo se muestra la traducción terminada: una píldora "traduciendo" con el original repetido (y los errores
-        # del OCR a la vista) que después cambiaba y crecía palabra por palabra eran parpadeos y rectángulos de más.
-        # El mismo mensaje repetido (spam, "gg" dos veces) usa la misma traducción, pero cada aparición tiene su propia
-        # píldora, con la identidad estable que le da el seguidor del chat: si compartían una (o se numeraban por
-        # orden), una pisaba a la otra o saltaban de llave al subir el chat, y parpadeaban.
+        # Solo se muestra la traducción terminada: una píldora "traduciendo" con el texto original repetido (y los
+        # errores del OCR a la vista) que luego cambia y crece palabra por palabra produce parpadeos y rectángulos
+        # innecesarios. Un mensaje repetido (spam, "gg" dos veces) reutiliza la misma traducción, pero cada aparición
+        # tiene su propia píldora, con la identidad estable que le asigna el seguidor del chat: si compartieran una (o
+        # se numeraran por orden), una pisaría a la otra o cambiarían de llave al subir el chat, y parpadearían.
         matches, seen = [], {}
         for item, entry in found:
             if entry is not None and entry.status == "done":
@@ -563,8 +569,8 @@ class InlineChatView:
             return
         now = time.monotonic()
         shown: set = set()
-        # Un solo tamaño de letra y alto de píldora para todo el chat (antes cada línea tenía el suyo según lo que
-        # midiera el OCR y se veían desparejas). Solo cambia si el chat cambia de verdad (más de 1 px).
+        # Un único tamaño de letra y alto de píldora para todo el chat, para que las líneas no se vean desparejas según
+        # lo que midió el OCR. Solo cambia si el chat cambia de verdad (más de 1 px).
         metrics = chat_metrics(frame.items)
         if metrics and (self._metrics is None or abs(metrics[0] - self._metrics[0]) > 1
                         or abs(metrics[1] - self._metrics[1]) > 2):
@@ -574,7 +580,8 @@ class InlineChatView:
             spots = chat_spots(item, frame.image.width, row_height, getattr(frame, "text_right", 0))
             text = entry.text
             slots = [spot.text_slot() for spot in spots]
-            # Acomodar el texto (probar tamaños, medir palabras) es lo más caro del dibujo: se recuerda.
+            # Acomodar el texto (probar tamaños, medir palabras) es lo más costoso del dibujo, por lo que se guarda el
+            # resultado.
             size_wanted = int(round(base * STYLE.scale))
             layout_key = (text, size_wanted, tuple(slot.width for slot in slots))
             if layout_key not in self._layouts:
@@ -594,13 +601,13 @@ class InlineChatView:
                 x, y = frame.region.left + spot.left, frame.region.top + spot.top
                 previous = self._placed.get(key)
                 if previous and abs(previous[1] - x) <= self.JITTER_PX and abs(previous[2] - y) <= self.JITTER_PX:
-                    x, y = previous[1], previous[2]  # el OCR varió 1-2 px: la traducción no tiembla
+                    x, y = previous[1], previous[2]  # el OCR varió 1-2 px: la traducción no se mueve
                 self._placed[key] = (image, x, y, now)
                 self.last_patches.append((image, x - frame.region.left, y - frame.region.top))
                 self.layer.show(key, image, x, y)
-        # Una línea que el OCR no leyó en esta captura mantiene su traducción un momento: si no, se apaga y se prende
-        # (pasa sobre todo justo cuando llega un mensaje y todo sube). Si el chat se movió, se mueve lo mismo que el
-        # resto; en los dos casos, solo si en ese lugar sigue habiendo letras.
+        # Una línea que el OCR no leyó en esta captura conserva su traducción un instante; de lo contrario parpadea
+        # (ocurre sobre todo al llegar un mensaje, cuando todo sube). Si el chat se movió, se desplaza igual que el
+        # resto. En ambos casos, solo si en esa posición siguen habiendo letras.
         whites = None
         for key, (image, x, y, when) in list(self._placed.items()):
             if key in shown:
@@ -612,7 +619,7 @@ class InlineChatView:
             left, top = x - frame.region.left, y - frame.region.top
             inside = 0 <= top and top + image.height <= frame.image.height + 6
             still_there = inside and whites[max(0, top):top + image.height, max(0, left):left + image.width].sum() >= 4
-            # No se sostiene encima de otra traducción que ya ocupa ese renglón.
+            # No se conserva encima de otra traducción que ya ocupa ese renglón.
             taken = any(abs(other[2] - y) < image.height * 0.6 and other[1] < x + image.width and x < other[1] +
                         other[0].width for other_key, other in self._placed.items() if other_key in shown)
             if now - when <= self.HOLD_S and still_there and not taken:
@@ -626,8 +633,10 @@ class InlineChatView:
         self.layer.keep_only(shown)
 
     def shift(self, dy: int) -> None:
-        """El chat se desplazó `dy` px (llegó un mensaje y todo subió): las traducciones se mueven ya, sin esperar
-        la próxima lectura con OCR. Antes quedaban corridas una línea (encima del mensaje de al lado) hasta ~200 ms."""
+        """El chat se desplazó `dy` px (llegó un mensaje y todo subió): las traducciones se mueven de inmediato,
+        sin esperar la próxima lectura con OCR. De lo contrario quedarían corridas una línea (sobre el mensaje
+        contiguo) hasta ~200 ms.
+        """
         frame = self.last_frame
         if frame is None or not self._placed:
             return
@@ -651,8 +660,10 @@ class InlineChatView:
         return render_pill(width, spot.height, line, size, fill=STYLE.fill, text_color=CHAT_TEXT, accent=STYLE.accent)
 
     def preview(self) -> Image.Image | None:
-        """Cómo se ve el chat con las traducciones encima. Las traducciones no salen en capturas de pantalla
-        (a propósito, para que el OCR no se lea a sí mismo), así que esta es la forma de verlas."""
+        """Imagen del chat con las traducciones superpuestas. Las traducciones no aparecen en las capturas de
+        pantalla (a propósito, para que el OCR no lea su propio resultado), por lo que esta es la forma de
+        verlas.
+        """
         if self.last_frame is None:
             return None
         image = self.last_frame.image.convert("RGBA")
@@ -663,7 +674,7 @@ class InlineChatView:
 
 # ---------------------------------------------------------------- burbujas
 class BubbleView:
-    """Traducción encima de las burbujas de chat de los jugadores (fondo claro, letra oscura)."""
+    """Traducción superpuesta a las burbujas de chat de los jugadores (fondo claro, letra oscura)."""
 
     def __init__(self, root, same_message: Callable[[ChatLine, ChatLine], bool]) -> None:
         self.layer = PatchLayer(root)
@@ -677,8 +688,8 @@ class BubbleView:
         self._visible = False
         self._resolve: Callable[[Entry], str] = lambda entry: ""
         self.last_patches: list[tuple[Image.Image, int, int]] = []
-        # Lo último mostrado de cada burbuja (imagen, x, y, cuándo, velocidad): si en una detección no aparece (el OCR
-        # la leyó distinta o no la vio), se sostiene un instante en vez de apagarse y prenderse.
+        # Último estado mostrado de cada burbuja (imagen, x, y, instante, velocidad). Si en una detección no aparece (el
+        # OCR la leyó distinta o no la vio), se conserva un instante en vez de parpadear.
         self._recent: dict[int, tuple[Image.Image, int, int, float, float, float]] = {}
 
     def reset(self, same_message: Callable[[ChatLine, ChatLine], bool] | None = None) -> None:
@@ -691,7 +702,7 @@ class BubbleView:
         self.last_patches = []
 
     def entry_for(self, text: str) -> tuple[Entry, bool]:
-        """Entrada de esa burbuja; True si es nueva (hay que traducirla)."""
+        """Devuelve la entrada de esa burbuja; True si es nueva (hay que traducirla)."""
         for entry in reversed(self.entries):
             if self.same_message(ChatLine("?", entry.original), ChatLine("?", text)):
                 return entry, False
@@ -700,16 +711,19 @@ class BubbleView:
         return entry, True
 
     def render(self, area, items, visible: bool, resolve: Callable[[Entry], str]) -> None:
-        """Nueva detección de burbujas. `resolve(entry)` devuelve la traducción a mostrar ("" si todavía no
-        hay o no hace falta). Se resuelve acá, una vez por detección, no en cada cuadro de la animación."""
+        """Procesa una nueva detección de burbujas. `resolve(entry)` devuelve la traducción a mostrar ("" si
+        todavía no existe o no hace falta). Se resuelve aquí, una vez por detección, y no en cada cuadro de la
+        animación.
+        """
         self._area, self._visible, self._resolve = area, visible, resolve
         self._pairs = [(item, self.entry_for(item.text)[0]) for item in items]
         self._texts = {entry.key: resolve(entry) for _item, entry in self._pairs}
         self._draw()
 
     def animate(self) -> None:
-        """Entre detecciones mueve las traducciones según la velocidad de cada burbuja, así la siguen de
-        forma continua con la cámara. Solo mueve ventanas: no redibuja."""
+        """Entre detecciones, mueve las traducciones según la velocidad de cada burbuja, de modo que la sigan de
+        forma continua con la cámara. Solo mueve ventanas, no redibuja.
+        """
         if self._pairs and self._visible:
             self._draw()
 
@@ -727,10 +741,10 @@ class BubbleView:
                 continue
             speed = (item.vx ** 2 + item.vy ** 2) ** 0.5
             if speed > MAX_BUBBLE_SPEED:
-                self._recent.pop(entry.key, None)  # tampoco se sostiene: se movería mal
-                continue  # giro brusco de cámara: mejor ocultar un instante que dejarla fuera de lugar
-            # Se predice dónde está la burbuja AHORA (se capturó hace unos milisegundos y se viene moviendo). Si está
-            # tapada en parte (detrás del chat) no se predice: el borde del chat no se mueve.
+                self._recent.pop(entry.key, None)  # tampoco se conserva: se movería mal
+                continue  # giro brusco de cámara: es mejor ocultarla un instante que dejarla fuera de lugar
+            # Se predice dónde está la burbuja ahora (se capturó hace unos milisegundos y venía moviéndose). Si está
+            # parcialmente tapada (detrás del chat) no se predice, porque el borde del chat no se mueve.
             ahead = 0.0
             if item.captured_at and not item.clip:
                 ahead = min(0.25, max(0.0, time.monotonic() - item.captured_at) + RENDER_DELAY_S)
@@ -743,11 +757,11 @@ class BubbleView:
                 entry.key, (text, width // 3, height // 3),  # cambios de 1-2 px no redibujan
                 lambda item=item, text=text, width=width, height=height: self._bubble_image(item, text, width, height),
             )
-            # Si la traducción no entraba, la burbuja es más grande: centrada y apoyada abajo (sobre la colita).
+            # Si la traducción no entraba, la burbuja es más grande: se centra y se apoya abajo (sobre la colita).
             left += (width - image.width) // 2
             top += height - image.height
             if item.clip:
-                # Solo la parte que se ve de la burbuja: la traducción queda tapada igual que el original.
+                # Solo la parte visible de la burbuja: la traducción queda tapada igual que el original.
                 x0, y0 = max(0, item.clip[0] - left), max(0, item.clip[1] - top)
                 x1, y1 = min(image.width, item.clip[2] - left), min(image.height, item.clip[3] - top)
                 if x1 - x0 < 12 or y1 - y0 < 8:
@@ -775,7 +789,7 @@ class BubbleView:
                 del self._recent[key]
                 continue
             nx, ny = int(x + vx * age), int(y + vy * age)
-            # No encima de otra traducción (la burbuja pudo haber cambiado de mensaje).
+            # No se dibuja encima de otra traducción (la burbuja pudo haber cambiado de mensaje).
             if any(nx < b[2] and b[0] < nx + image.width and ny < b[3] and b[1] < ny + image.height for b in boxes):
                 continue
             shown.add(key)

@@ -1,14 +1,13 @@
-"""Tu voz traducida, para que te escuchen los demás (lo que te dicen a vos está en live.py).
+"""Voz traducida del jugador, para que los demás lo escuchen (la traducción de lo que dicen los demás está en live.py).
 
-Tres formas de usarla:
-- VoiceSpeaker: tocás un botón y hablás (termina solo cuando dejás de hablar), o lo mantenés apretado mientras
-  hablás → Whisper → Claude → voz sintética.
-- DirectVoice: traducción directa, sin tecla: cada frase que decís se traduce y se dice sola.
-- Escribiendo (la barra, Ctrl+Enter): el texto traducido se dice con la voz sintética.
+Tres formas de usarla: - VoiceSpeaker: con un botón, el jugador habla (termina solo al dejar de hablar) o lo mantiene
+apretado mientras habla → Whisper → Claude → voz sintética. - DirectVoice: traducción directa, sin tecla: cada frase
+dicha se traduce y se reproduce automáticamente. - Texto escrito (la barra, Ctrl+Enter): el texto traducido se reproduce
+con la voz sintética.
 
-Las tres terminan en VoiceOut: la voz sintética sale por el micrófono virtual (lo que Roblox escucha como tu
-micrófono) y, si querés, también por tus auriculares, para que sepas qué dijo. En Roblox tenés que tener el micrófono
-activado: si no, no te escucha nadie (la página Voz te avisa).
+Las tres terminan en VoiceOut: la voz sintética sale por el micrófono virtual (que Roblox recibe como el micrófono del
+jugador) y, opcionalmente, también por los auriculares, para que el jugador sepa qué se dijo. En Roblox el micrófono
+debe estar activado; de lo contrario nadie escucha al jugador (la página Voz lo advierte).
 """
 
 from __future__ import annotations
@@ -35,13 +34,13 @@ log = logging.getLogger(__name__)
 SAMPLE_RATE = 16000
 BLOCK = 480  # 30 ms a 16 kHz
 
-# (texto en tu idioma, entonación: "question" | "exclaim" | "") -> (traducción, idioma) o None
+# (texto en el idioma del jugador, entonación: "question" | "exclaim" | "") -> (traducción, idioma) o None
 Translate = Callable[[str, str], tuple[str, str] | None]
 
 
 @dataclass
 class Turn:
-    """Una frase tuya de punta a punta: qué se entendió, cómo se tradujo y cuánto tardó cada paso."""
+    """Una frase del jugador de punta a punta: qué se entendió, cómo se tradujo y cuánto tardó cada paso."""
 
     heard: str = ""
     translation: str = ""
@@ -53,26 +52,29 @@ class Turn:
 
 
 class VoiceOut:
-    """Dice un texto con voz sintética: al micrófono virtual y (si querés) a tus auriculares."""
+    """Reproduce un texto con voz sintética: al micrófono virtual y, opcionalmente, a los auriculares del jugador."""
 
     def __init__(self, voices: Voices, hear_myself: bool = True, output: audio_io.Output | None = None,
                  bridge=None) -> None:
         self.voices = voices
         self.output = output or audio_io.voice_output()
-        self.bridge = bridge  # tu micrófono pasando al virtual (ver bridge.py): baja mientras suena la traducida
-        # Con el micrófono virtual, tu voz traducida va a Roblox y vos no la escucharías: también suena, más bajo,
-        # en tus auriculares (sin micrófono virtual ya sale por ahí).
+        # micrófono del jugador pasando al virtual (ver bridge.py); baja mientras suena la traducción
+        self.bridge = bridge
+        # Con el micrófono virtual, la voz traducida llega a Roblox y el jugador no la escucharía: también suena, más
+        # bajo, en sus auriculares (sin micrófono virtual ya sale por ahí).
         self.hear_myself = hear_myself
         self.monitor_volume = 0.7
-        self.listeners: list[Callable[[float], None]] = []  # avisos "va a sonar tanto tiempo" (para no escucharla)
+        self.listeners: list[Callable[[float], None]] = []  # avisos de duración de la voz (para silenciar el micrófono)
         self._lock = threading.Lock()  # una frase a la vez
         self._warm_lock = threading.Lock()
         self._warm_next: str | None = None
         self._warming = False
 
     def warm_up(self, language: str) -> None:
-        """Carga ya la voz de ese idioma (la primera vez tarda ~3 s): así tu primera frase no espera. De a una: si
-        piden varias seguidas, se carga la que está en curso y después solo la última pedida (las del medio no)."""
+        """Carga de antemano la voz de ese idioma (la primera vez tarda ~3 s), para que la primera frase no espere.
+        Se procesa de a una: si llegan varios pedidos seguidos, se carga el que está en curso y después solo el
+        último (los intermedios se descartan).
+        """
         with self._warm_lock:
             self._warm_next = language
             if self._warming:
@@ -95,8 +97,10 @@ class VoiceOut:
                 log.debug("No se pudo preparar la voz de %s", language, exc_info=True)
 
     def say(self, text: str, language: str, on_ready: Callable[[float], None] | None = None, style: str = "") -> bool:
-        """Bloquea hasta que termina de sonar. False si no hay voz para ese idioma. `on_ready(segundos)`: la voz ya
-        está lista y empieza a sonar (para medir cuánto tardó). `style`: cómo lo dijiste (gritando, bajito…)."""
+        """Bloquea hasta que termina de sonar. Devuelve False si no hay voz para ese idioma. `on_ready(segundos)`:
+        la voz está lista y empieza a sonar (sirve para medir la demora). `style`: cómo se dijo la frase
+        (gritada, en voz baja, etc.).
+        """
         started = time.perf_counter()
         style = style or written_style(text)
         streaming = getattr(self.voices, "stream", None)
@@ -122,8 +126,9 @@ class VoiceOut:
         return True
 
     def _say_streaming(self, text: str, opened, started: float, on_ready) -> bool:
-        """Las voces de la nube: suenan apenas llega el primer pedazo. Los avisos ("va a sonar tanto") se van
-        renovando con cada pedazo, porque el largo total no se sabe hasta el final."""
+        """Voces de la nube: suenan apenas llega el primer fragmento. Los avisos de duración se renuevan con cada
+        fragmento, porque el largo total no se conoce hasta el final.
+        """
         rate, pieces = opened
         first = next(pieces, None)
         if first is None:
@@ -179,7 +184,7 @@ _SENTENCE_BOUNDARY = re.compile(r"[.!?…]+['\"»”)]*\s")
 
 
 def written_style(text: str) -> str:
-    """Cómo suena lo escrito, por el signo del final: "question" ("¿venís?"), "exclaim" ("¡vamos!") o ""."""
+    """Estilo de lo escrito según el signo final: "question" ("¿venís?"), "exclaim" ("¡vamos!") o ""."""
     end = text.rstrip(" \"'»”)")
     if end.endswith(("?", "？")):
         return "question"
@@ -187,11 +192,12 @@ def written_style(text: str) -> str:
 
 
 class Sentences:
-    """Junta la traducción a medida que llega y avisa la primera oración completa, para empezar a decirla ya: en una
-    frase larga, la primera oración suena mientras Claude sigue traduciendo el resto (antes se esperaba la traducción
-    entera). El resto se dice junto, al final: cada pedido a la voz de la nube sale con un tono un poco distinto, y
-    oración por oración parecía que cambiaba de persona. Las oraciones muy cortas se juntan con la siguiente (una voz
-    que dice "Ok." y frena suena rara)."""
+    """Acumula la traducción a medida que llega y avisa la primera oración completa, para empezar a reproducirla de
+    inmediato: en una frase larga, la primera oración suena mientras Claude sigue traduciendo el resto. El resto se
+    dice junto al final, porque cada pedido a la voz de la nube sale con un tono ligeramente distinto y, oración por
+    oración, parecía cambiar de persona. Las oraciones muy cortas se unen con la siguiente (una voz que dice "Ok." y
+    se detiene suena extraña).
+    """
 
     MIN_CHARS = 14
 
@@ -203,7 +209,7 @@ class Sentences:
     def add(self, chunk: str) -> None:
         self.text += chunk
         if self.done:
-            return  # la primera ya se está diciendo: lo demás, junto al final
+            return  # la primera ya se está diciendo; el resto, junto al final
         rest = self.text
         cut = next((m.end() for m in _SENTENCE_BOUNDARY.finditer(rest) if len(rest[:m.end()].strip()) >= self.MIN_CHARS),
                    None)
@@ -218,16 +224,17 @@ class Sentences:
             rest = final.strip()
         elif final.startswith(said):
             rest = final[len(said):].strip()
-        else:  # la versión final cambió lo ya dicho (una corrección): se sigue con lo que faltaba de lo que llegó
+        else:  # la versión final corrigió lo ya dicho: se sigue con lo pendiente de lo recibido
             rest = self.text[self.done:].strip()
         if rest:
             self.emit(rest)
 
 
 class StreamedTurn:
-    """Tu frase entendida en vivo mientras hablás (Bubble Pro, con el botón): el audio va a la nube a medida que lo
-    decís y, cuando terminás, el texto ya está (~0,3 s). Antes se mandaba todo lo dicho en cada pausa para saber si
-    habías terminado (~1 s cada vez, pagando lo mismo varias veces) y otra vez al final."""
+    """Frase del jugador entendida en vivo mientras habla (Bubble Pro, con el botón): el audio se envía a la nube a
+    medida que se dice y, al terminar, el texto ya está disponible (~0,3 s). Evita reenviar todo lo dicho en cada
+    pausa para saber si terminó (~1 s cada vez, pagando lo mismo varias veces) y otra vez al final.
+    """
 
     def __init__(self, listener, language: str) -> None:
         self.listener = listener
@@ -266,17 +273,20 @@ class StreamedTurn:
         return " ".join(c.text for c in sorted(self._finals.values(), key=lambda c: c.start)).strip()
 
     def _closed(self) -> bool:
-        """¿La nube ya cerró todo lo que dijiste? (texto sin terminar pendiente no hay, y el último cierre es posterior
-        a tu última voz)"""
+        """Indica si la nube ya cerró todo lo dicho (no hay texto sin terminar pendiente y el último cierre es
+        posterior a la última voz).
+        """
         return not self.listener._pieces and self._final_at >= self.listener.voice_at
 
     def said_since(self, moment: float) -> str | None:
-        """Lo que dijiste, si la nube ya cerró la frase después de `moment` (si no, None: todavía no se sabe)."""
+        """Lo dicho, si la nube cerró la frase después de `moment`; si no, None (todavía no se sabe)."""
         with self._changed:
             return self._text() if self._final_at >= moment and not self.listener._pieces else None
 
     def finish(self, seconds: float, timeout: float = 1.5) -> Heard | None:
-        """Terminaste: se espera que la nube cierre lo que falte (casi siempre ya está) y se devuelve la frase."""
+        """El jugador terminó: se espera a que la nube cierre lo pendiente (casi siempre ya está) y se devuelve la
+        frase.
+        """
         started = time.monotonic()
         with self._changed:
             closed = self._closed()
@@ -292,21 +302,20 @@ class StreamedTurn:
 
 
 class VoiceSpeaker:
-    """Con un botón, de dos formas:
-    - lo tocás (y lo soltás enseguida): te escucha y termina solo cuando dejás de hablar (o cuando lo volvés a tocar);
-    - lo mantenés apretado mientras hablás: termina al soltarlo.
-    Después se traduce y se dice.
+    """Con un botón, de dos formas: - un toque breve: escucha y termina solo cuando el jugador deja de hablar (o con
+    otro toque); - mantenido apretado mientras habla: termina al soltarlo. Después se traduce y se reproduce.
 
-    Para que salga rápido y sin cortarte: apenas hacés una pausa se lee lo que dijiste (en segundo plano). Si suena
-    terminado, se traduce ya, sin esperar más silencio ni volver a leer el audio; si quedó a medias ("y…", "porque…"),
-    se espera un poco más a que sigas."""
+    Para que sea rápido y no corte al jugador: en cuanto hace una pausa se lee lo dicho (en segundo plano). Si suena
+    terminado, se traduce de inmediato, sin esperar más silencio ni volver a leer el audio; si quedó a medias ("y…",
+    "porque…"), se espera un poco más.
+    """
 
-    MAX_SECONDS = 60.0  # (antes 20 s: si hablabas mucho, lo último no se traducía)
-    TAP_S = 0.35  # soltarlo antes de esto es "tocarlo"
+    MAX_SECONDS = 60.0  # límite de grabación; un tope menor dejaba sin traducir el final de frases largas
+    TAP_S = 0.35  # soltarlo antes de esto cuenta como toque
     PEEK_AFTER_S = 0.2  # a los 200 ms de silencio se lee lo dicho hasta ahí
     END_SILENCE_S = 0.8  # silencio que termina la frase si no se pudo leer
-    UNFINISHED_S = 1.5  # si lo último suena a frase sin terminar, se espera hasta acá
-    NO_SPEECH_S = 6.0  # tocándolo: si no hablás en este tiempo, se cancela
+    UNFINISHED_S = 1.5  # si lo último suena inconcluso, se espera hasta este tiempo
+    NO_SPEECH_S = 6.0  # en modo toque: si no hay voz en este tiempo, se cancela
     MIN_SPEECH_S = 0.2  # menos voz que esto (una tecla, un golpe) no es una frase
 
     def __init__(
@@ -324,8 +333,10 @@ class VoiceSpeaker:
         stream: StreamedTurn | None = None,
         by_sentence: bool = False,
     ) -> None:
-        """`stream`: con Bubble Pro, tu voz se entiende en vivo mientras hablás (ver StreamedTurn). `by_sentence`:
-        `translate` acepta `on_sentence` y la voz empieza con la primera oración traducida (ver _translate_and_say)."""
+        """`stream`: con Bubble Pro, la voz se entiende en vivo mientras se habla (ver StreamedTurn).
+        `by_sentence`: `translate` acepta `on_sentence` y la voz empieza con la primera oración traducida (ver
+        _translate_and_say).
+        """
         self.transcriber = transcriber
         self.stream = stream
         self.by_sentence = by_sentence
@@ -337,7 +348,7 @@ class VoiceSpeaker:
         self.on_turn: Callable[[Turn], None] | None = None  # cada frase terminada, con sus tiempos
         self.mic_factory = mic_factory
         self.vad_factory = vad_factory
-        self.profile = profile  # lo que se aprendió de cómo hablás (voice/profile.py)
+        self.profile = profile  # lo aprendido sobre cómo habla el jugador (voice/profile.py)
         if held is not None:
             self._held = held
         self._running = threading.Event()
@@ -353,7 +364,7 @@ class VoiceSpeaker:
             return
         self._running.set()
         if self.stream is not None:
-            self.stream.start()  # la conexión queda abierta: cuando tocás el botón no hay que esperarla
+            self.stream.start()  # la conexión queda abierta: al tocar el botón no hay que esperarla
         self._thread = threading.Thread(target=self._loop, name="bubble-tu-voz", daemon=True)
         self._thread.start()
 
@@ -366,7 +377,7 @@ class VoiceSpeaker:
         return bool(ctypes.windll.user32.GetAsyncKeyState(self.vk) & 0x8000)
 
     def _loop(self) -> None:
-        was_down = True  # si ya estaba apretada al empezar, se espera a que la suelte
+        was_down = True  # si ya estaba apretada al empezar, se espera a que se suelte
         while self.running:
             down = self._held()
             if down and not was_down:
@@ -374,7 +385,7 @@ class VoiceSpeaker:
                 if recorded is not None and len(recorded) > SAMPLE_RATE * 0.4:
                     threading.Thread(target=self.speak, args=(recorded, early), name="bubble-tu-voz-trad",
                                      daemon=True).start()
-                down = self._held()  # un segundo toque para terminar no vuelve a empezar: se espera a que lo sueltes
+                down = self._held()  # un segundo toque para terminar no reinicia: se espera a que se suelte
             was_down = down
             time.sleep(0.015)
 
@@ -393,18 +404,18 @@ class VoiceSpeaker:
                                            clean=True)
 
     def _ended(self, quiet: float, peek: Future | None, quiet_since: float | None = None) -> bool:
-        """¿Ya terminaste de hablar? Depende de cómo sonó lo último que dijiste."""
+        """Indica si el jugador terminó de hablar, según cómo sonó lo último que dijo."""
         if self.stream is not None and quiet_since is not None:
             said = self.stream.said_since(quiet_since)
             if said is None:
-                return quiet >= self.UNFINISHED_S  # la nube todavía no cerró la frase (tarda ~0,3 s)
+                return quiet >= self.UNFINISHED_S  # la nube aún no cerró la frase (tarda ~0,3 s)
             if not said or sounds_unfinished(said, self.my_language):
                 return quiet >= self.UNFINISHED_S
-            return True  # suena terminado: ya
+            return True  # suena terminado: se cierra de inmediato
         if peek is None:
             return quiet >= self.END_SILENCE_S
         if not peek.done():
-            return quiet >= self.UNFINISHED_S  # se espera la lectura (pero no para siempre)
+            return quiet >= self.UNFINISHED_S  # se espera la lectura, con un límite de tiempo
         try:
             heard = peek.result()
         except Exception:  # noqa: BLE001
@@ -413,11 +424,12 @@ class VoiceSpeaker:
             return quiet >= self.END_SILENCE_S
         if sounds_unfinished(heard.text, self.my_language):
             return quiet >= self.UNFINISHED_S
-        return True  # suena terminado: ya
+        return True  # suena terminado: se cierra de inmediato
 
     def _record(self) -> tuple[np.ndarray | None, Future | None]:
-        """Graba mientras lo mantenés apretado, o, si lo tocaste, hasta que terminás de hablar. Devuelve el audio y, si
-        ya se leyó en la última pausa (y no volviste a hablar), esa lectura."""
+        """Graba mientras el botón se mantiene apretado o, si fue un toque, hasta que el jugador termina de hablar.
+        Devuelve el audio y, si ya se leyó en la última pausa (y no volvió a hablar), esa lectura.
+        """
         self.on_event("grabando", "")
         blocks: list[np.ndarray] = []
         total = 0
@@ -429,14 +441,14 @@ class VoiceSpeaker:
             vad = self._new_vad()
             with self.mic_factory().recorder(samplerate=SAMPLE_RATE, channels=1, blocksize=BLOCK * 4) as recorder:
                 started = time.monotonic()
-                released_at: float | None = None  # cuándo lo soltaste, si fue un toque
+                released_at: float | None = None  # momento en que se soltó, si fue un toque
                 spoke, quiet_since, speech_end, voiced = False, None, 0, 0
                 while self.running and time.monotonic() - started < self.MAX_SECONDS:
                     block = audio_io.to_mono(recorder.record(numframes=BLOCK))
                     blocks.append(block)
                     total += len(block)
                     if self.stream is not None:
-                        self.stream.feed(block)  # a la nube, mientras hablás
+                        self.stream.feed(block)  # a la nube, mientras se habla
                     now, held = time.monotonic(), self._held()
                     probs = vad.feed(block)
                     voiced += int(np.sum(np.asarray(probs) >= 0.5)) if len(probs) else 0
@@ -453,11 +465,11 @@ class VoiceSpeaker:
                         if held:
                             continue
                         if now - started >= self.TAP_S:
-                            break  # lo mantuviste apretado mientras hablabas: al soltarlo, listo
-                        released_at = now  # fue un toque: se escucha hasta que termines de hablar
+                            break  # se mantuvo apretado mientras hablaba: al soltarlo, termina
+                        released_at = now  # fue un toque: se escucha hasta que termine de hablar
                         self.on_event("escuchando", "")
                     if held and now - released_at > 0.3:
-                        break  # otro toque: terminaste
+                        break  # otro toque: termina
                     if spoke and quiet_since is not None and self._ended(quiet, peek, quiet_since):
                         break
                     if not spoke and now - released_at >= self.NO_SPEECH_S:
@@ -473,13 +485,14 @@ class VoiceSpeaker:
                 self.stream.listener.finalize()
             return None, None  # fue un ruido (una tecla, un golpe), no una frase: no se traduce nada
         if self.stream is not None:
-            # Lo entendido en vivo (casi siempre ya está); si la nube no responde, se lee de nuevo al traducir.
+            # Lo entendido en vivo (casi siempre ya está); si la nube no responde, se vuelve a leer al traducir.
             return np.concatenate(blocks), self._peeker.submit(self.stream.finish, total / SAMPLE_RATE)
         return np.concatenate(blocks), (peek if quiet_since is not None else None)
 
     def speak(self, recorded: np.ndarray, early: Future | None = None) -> Turn:
-        """Tu voz grabada → texto → traducción → voz sintética → salida. Separado para poder probarlo sin micrófono.
-        `early`: la lectura ya hecha en la pausa (si no, se lee ahora)."""
+        """Voz grabada → texto → traducción → voz sintética → salida. Está separado para poder probarlo sin
+        micrófono. `early`: la lectura ya hecha en la pausa (si no, se lee ahora).
+        """
         turn = Turn()
         try:
             started = time.perf_counter()
@@ -532,8 +545,9 @@ class VoiceSpeaker:
         return turn
 
     def _translate_and_say(self, text: str, turn: Turn, ready: Callable[[float], None]) -> None:
-        """Traduce y dice de a oraciones: la primera suena mientras se traduce el resto (`translate` avisa cada
-        oración con `on_sentence(texto, idioma)`)."""
+        """Traduce y reproduce por oraciones: la primera suena mientras se traduce el resto (`translate` avisa cada
+        oración con `on_sentence(texto, idioma)`).
+        """
         pending: queue.Queue = queue.Queue()
         missing: list[str] = []
 
@@ -564,10 +578,10 @@ class VoiceSpeaker:
 
 
 class DirectVoice:
-    """Traducción directa: escucha tu micrófono todo el tiempo y cada frase que decís sale traducida en voz.
+    """Traducción directa: escucha el micrófono todo el tiempo y cada frase dicha sale traducida en voz.
 
-    Usa la misma escucha en vivo que los subtítulos (live.py): la traducción se pide apenas hacés una pausa y la
-    frase suena terminada, y las frases se dicen en orden, sin pisarse.
+    Usa la misma escucha en vivo que los subtítulos (live.py): la traducción se pide en cuanto hay una pausa y la
+    frase suena terminada, y las frases se reproducen en orden, sin superponerse.
     """
 
     def __init__(
@@ -583,19 +597,20 @@ class DirectVoice:
         profile=None,
         listener=None,
     ) -> None:
-        """`listener`: otra escucha en vivo con la misma cara (Bubble Pro: la de la nube, cloud/deepgram.py)."""
+        """`listener`: otra escucha en vivo con la misma interfaz (Bubble Pro: la de la nube, cloud/deepgram.py)."""
         from .live import LiveListener, Settings
 
         self.out = out
         self.translate = translate
         self.on_event = on_event
-        self.target = target  # idioma al que se traduce (para precargar su voz)
+        self.target = target  # idioma de destino (para precargar su voz)
         self.profile = profile
         mine = my_language.split("-")[0].lower()
-        # Tu idioma ya se sabe: no se detecta (antes, a veces tu español salía como otro idioma). Tu texto no hace falta
-        # verlo mientras hablás: se lee solo en las pausas, con el modelo preciso, y esa lectura ya es la final. Así la
-        # traducción se pide en la pausa y nunca hay que repetirla. Las pausas son tuyas: una pausa corta no corta la
-        # frase si lo último que dijiste queda a medias ("y…", "porque…"); si suena terminada, sale enseguida.
+        # El idioma del jugador ya se conoce, por lo que no se detecta (la detección automática a veces identificaba el
+        # español como otro idioma). El texto no hace falta verlo mientras se habla: se lee solo en las pausas, con el
+        # modelo preciso, y esa lectura ya es la final. Así la traducción se pide en la pausa y nunca se repite. Las
+        # pausas las marca el jugador: una pausa corta no corta la frase si lo último dicho queda a medias ("y…",
+        # "porque…"); si suena terminada, se cierra de inmediato.
         settings = Settings(fast_final_languages=(mine,), first_partial_s=60.0, partial_every_s=60.0,
                             end_silence_s=0.7, quick_end_s=0.3, wait_for_tail=True, unfinished_end_s=1.5)
         if listener is not None:
@@ -611,7 +626,7 @@ class DirectVoice:
         self._queue: queue.Queue = queue.Queue()
         self._running = threading.Event()
         self.listening = True  # False: fuera del juego no se escucha (ver set_listening)
-        # Mientras suena tu voz traducida por tus auriculares, el micrófono no la tiene que escuchar como tuya.
+        # Mientras suena la voz traducida en los auriculares del jugador, el micrófono no debe captarla como propia.
         out.listeners.append(self._mute)
 
     @property
@@ -634,8 +649,9 @@ class DirectVoice:
             self.out.listeners.remove(self._mute)
 
     def set_listening(self, on: bool) -> None:
-        """Solo se escucha mientras jugás (Roblox al frente, o la barra para escribir abierta). Fuera del juego el
-        micrófono no se traduce (ni se manda a la nube, con Bubble Pro)."""
+        """Solo escucha mientras el jugador está en partida (Roblox en primer plano o la barra de escritura
+        abierta). Fuera del juego el micrófono no se traduce ni se envía a la nube (con Bubble Pro).
+        """
         if on == self.listening:
             return
         self.listening = on

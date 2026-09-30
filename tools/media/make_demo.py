@@ -1,9 +1,9 @@
 """GIF de demostración para el README.
 
-Escena ilustrada y con movimiento (un mundo de Roblox al atardecer: nubes, pájaros, un obby con plataformas que se
-mueven y alguien haciéndolo) y, encima, el chat de Roblox con las traducciones dibujadas por el MISMO código de Bubble:
-píldoras del chat, burbuja traducida, barra para escribir (capturada de la ventana real), subtítulos de voz y tu voz
-dicha con voz artificial.
+Escena ilustrada y animada (un mundo de Roblox al atardecer: nubes, pájaros, un obby con plataformas móviles y un avatar
+que lo recorre) y, encima, el chat de Roblox con las traducciones dibujadas por el MISMO código de Bubble: píldoras del
+chat, burbuja traducida, barra de escritura (capturada de la ventana real), subtítulos de voz y la voz del jugador
+reproducida con voz artificial.
 """
 
 from __future__ import annotations
@@ -64,13 +64,13 @@ def vertical_gradient(size, top, bottom) -> Image.Image:
 
 
 def shade(color, factor):
-    """Más claro u oscuro. La opacidad (si la hay) no se toca: antes el costado de la torre quedaba transparente."""
+    """Aclara u oscurece un color. La opacidad, si la hay, se conserva."""
     rgb = tuple(max(0, min(255, int(c * factor))) for c in color[:3])
     return rgb + tuple(color[3:])
 
 
 def block(draw: ImageDraw.ImageDraw, box, color, depth=0, top_face=0):
-    """Bloque con cara frontal, costado y tapa (un poco de volumen)."""
+    """Bloque con cara frontal, costado y tapa, para dar algo de volumen."""
     x0, y0, x1, y1 = box
     if top_face:
         draw.polygon([(x0, y0), (x0 + depth, y0 - top_face), (x1 + depth, y0 - top_face), (x1, y0)],
@@ -82,7 +82,7 @@ def block(draw: ImageDraw.ImageDraw, box, color, depth=0, top_face=0):
 
 
 def avatar(size, shirt, pants, skin=(245, 205, 48), face_dir=1) -> Image.Image:
-    """Avatar de bloques estilo R6 (dibujado a 3x y achicado)."""
+    """Avatar de bloques estilo R6, dibujado al triple de tamaño y luego reducido."""
     s = 3
     u = size * s
     img = Image.new("RGBA", (int(u * 4.6), int(u * 6.2)), (0, 0, 0, 0))
@@ -90,7 +90,7 @@ def avatar(size, shirt, pants, skin=(245, 205, 48), face_dir=1) -> Image.Image:
     cx = img.width // 2
     depth, top = int(u * 0.35), int(u * 0.2)
     legs_y, torso_y, head_y = u * 3.9, u * 1.9, u * 0.55
-    # piernas, brazos, torso, cabeza (de atrás hacia adelante)
+    # piernas, brazos, torso y cabeza (de atrás hacia adelante)
     block(d, (cx - u, legs_y, cx - 0.04 * u, legs_y + 2 * u), shade(pants, 0.95), depth, 0)
     block(d, (cx + 0.04 * u, legs_y, cx + u, legs_y + 2 * u), pants, depth, 0)
     block(d, (cx - 2 * u, torso_y, cx - u, torso_y + 2 * u), skin, depth, 0)
@@ -113,7 +113,7 @@ AVATAR_B = dict(x=790, feet=470, size=24, shirt=(196, 72, 70), pants=(52, 52, 60
 
 
 def gradient_stops(size, stops) -> Image.Image:
-    """Degradé vertical con varios colores: [(posición 0-1, color), ...]."""
+    """Degradé vertical con varias paradas: [(posición 0-1, color), ...]."""
     w, h = size
     t = np.linspace(0, 1, h)
     positions = [p for p, _c in stops]
@@ -123,8 +123,9 @@ def gradient_stops(size, stops) -> Image.Image:
 
 
 def cloud(scale: float, alpha: int) -> Image.Image:
-    """Nube de caricatura: una base redondeada con bolas encima, y una sombra suave solo abajo."""
-    s3 = 3  # se dibuja a 3x y se achica: bordes suaves sin desenfocar
+    """Nube de estilo caricatura: una base redondeada con círculos encima y una sombra suave solo en la parte inferior.
+    """
+    s3 = 3  # se dibuja a 3x y se reduce: bordes suaves sin desenfoque
     w, h = int(240 * scale), int(118 * scale)
     big = (w * s3, h * s3)
 
@@ -147,7 +148,7 @@ def cloud(scale: float, alpha: int) -> Image.Image:
 
 
 def soft_ridge(width: int, base: int, height: int, bumps: int, seed: int) -> list[tuple[float, float]]:
-    """Lomas suaves (curva que pasa por cimas al azar), no picos."""
+    """Lomas suaves (curva que pasa por cimas aleatorias), sin picos."""
     rng = random.Random(seed)
     tops = [(i * width / bumps, base - rng.uniform(0.45, 1.0) * height) for i in range(bumps + 1)]
     points = []
@@ -160,8 +161,8 @@ def soft_ridge(width: int, base: int, height: int, bumps: int, seed: int) -> lis
 
 
 def tree(d: ImageDraw.ImageDraw, x: int, ground: int, size: int, green) -> None:
-    """Árbol de bloques: tronco y tres cubos de hojas apilados. La copa se apoya sobre el tronco y lo tapa arriba (antes
-    arrancaba más arriba de la punta del tronco y quedaba flotando)."""
+    """Árbol de bloques: tronco y tres cubos de hojas apilados. La copa se apoya sobre la punta del tronco y la cubre.
+    """
     depth, lift = max(3, size // 8), max(2, size // 12)
     trunk_w = max(4, size // 4)
     trunk_top = ground - int(size * 0.42)
@@ -171,11 +172,11 @@ def tree(d: ImageDraw.ImageDraw, x: int, ground: int, size: int, green) -> None:
         top = bottom - int(height * size)
         box = (x - int(half * size), top, x + int(half * size), bottom)
         block(d, box, shade(green, 1.0 + 0.08 * i) + (255,), depth, lift)
-        bottom = top + 1  # el cubo de arriba se apoya sobre este
+        bottom = top + 1  # el cubo superior se apoya sobre este
 
 
 def bird(phase: int) -> Image.Image:
-    """Un pájaro lejano (una "v"); phase 0-2 = alas arriba, en el medio, abajo."""
+    """Pájaro lejano (una "v"); phase 0-2: alas arriba, al medio y abajo."""
     s3, w, h = 3, 17, 10
     img = Image.new("RGBA", (w * s3, h * s3), (50, 58, 94, 0))
     wing = (1.0, 4.0, 7.0)[phase]
@@ -184,22 +185,25 @@ def bird(phase: int) -> Image.Image:
     return img.resize((w, h), Image.Resampling.LANCZOS)
 
 
-# Lo que se mueve en el fondo repite su movimiento un número entero de veces por vuelta: el GIF empalma sin salto.
-PLATFORMS = [  # x, y, ancho, alto, color, cuánto se mueve en x y en y, vueltas por GIF
+# Cada elemento móvil del fondo repite su movimiento un número entero de veces por ciclo, de modo que el GIF empalma sin
+# saltos.
+PLATFORMS = [  # x, y, ancho, alto, color, desplazamiento en x e y, ciclos por GIF
     (520, 250, 84, 16, (255, 96, 96), 0, -12, 4),     # sube y baja
     (590, 196, 70, 16, (255, 200, 70), -30, 0, 3),    # va y viene
     (800, 196, 90, 18, (90, 176, 255), 0, 0, 1),
     (860, 256, 70, 16, (176, 116, 244), 0, 0, 1),
 ]
 CLOUDS = [(500, 36, 0.95, 240, 26), (760, 70, 0.72, 225, 20), (880, 150, 0.5, 200, 14), (640, 160, 0.42, 185, 12)]
-# el que hace el obby: salta del violeta al azul, festeja y vuelve (en segundos de su vuelta)
+# el avatar que recorre el obby salta del violeta al azul, celebra y vuelve (tiempos en segundos de su ciclo)
 HOP_FROM, HOP_TO = (901, 252), (851, 192)
 RUNNER_HOPS = [(1.4, 2.0, HOP_FROM, HOP_TO, 44), (4.6, 5.0, HOP_TO, HOP_TO, 16), (6.6, 7.2, HOP_TO, HOP_FROM, 26)]
-RUNNER_TURNS = [(0.0, -1), (5.3, 1), (8.0, -1)]  # hacia dónde mira desde cada momento
+RUNNER_TURNS = [(0.0, -1), (5.3, 1), (8.0, -1)]  # dirección hacia la que mira desde cada instante
 
 
 def runner_pose(u: float) -> tuple[tuple[float, float], float]:
-    """Dónde tiene los pies y cuánto se estira (en el aire) o se aplasta (al caer), en el segundo `u` de su vuelta."""
+    """Posición de los pies y factor de estiramiento (en el aire) o aplastamiento (al caer) en el segundo `u` de su
+    ciclo.
+    """
     feet, stretch = HOP_FROM, 1.0
     for start, end, a, b, height in RUNNER_HOPS:
         if u < start:
@@ -212,7 +216,7 @@ def runner_pose(u: float) -> tuple[tuple[float, float], float]:
 
 
 def put(img: Image.Image, sprite: Image.Image, x: int, y: int) -> None:
-    """alpha_composite que acepta posiciones fuera del cuadro (recorta lo que sobra)."""
+    """alpha_composite que admite posiciones fuera del cuadro (recorta el excedente)."""
     if x <= -sprite.width or y <= -sprite.height or x >= img.width or y >= img.height:
         return
     if x < 0 or y < 0:
@@ -222,8 +226,9 @@ def put(img: Image.Image, sprite: Image.Image, x: int, y: int) -> None:
 
 
 class Backdrop:
-    """Un mundo de Roblox al atardecer, en capas: lo quieto se arma una vez y lo que se mueve (nubes, pájaros,
-    plataformas del obby y alguien haciéndolo) se dibuja en cada cuadro."""
+    """Mundo de Roblox al atardecer, en capas: los elementos estáticos se arman una sola vez y los móviles (nubes,
+    pájaros, plataformas del obby y el avatar que lo recorre) se dibujan en cada cuadro.
+    """
 
     horizon = 330
 
@@ -235,17 +240,17 @@ class Backdrop:
         ImageDraw.Draw(glow).ellipse((690, 150, 910, 370), fill=255)
         glow = glow.filter(ImageFilter.GaussianBlur(64))
         sky = Image.composite(Image.new("RGBA", (W, H), (255, 232, 196, 255)), sky, glow.point(lambda v: int(v * 0.75)))
-        sun = Image.new("RGBA", (W, H), (255, 246, 216, 0))  # transparente del mismo color: sin aro oscuro
+        sun = Image.new("RGBA", (W, H), (255, 246, 216, 0))  # transparente del mismo color: evita un aro oscuro
         ImageDraw.Draw(sun).ellipse((764, 222, 840, 298), fill=(255, 246, 216, 255))
         self.sky = Image.alpha_composite(sky, sun.filter(ImageFilter.GaussianBlur(1.2)))
         self.clouds = [(cloud(scale, alpha), x, y, drift) for x, y, scale, alpha, drift in CLOUDS]
         self.birds = [bird(phase) for phase in range(3)]
 
-        # la tierra: lomas, suelo con su grilla, camino, árboles y la torre (transparente arriba de las lomas)
+        # el terreno: lomas, suelo con grilla, camino, árboles y torre (transparente sobre las lomas)
         land = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         for base, height, bumps, seed, color, blur in ((horizon - 4, 110, 6, 4, (160, 168, 214), 1.2),
                                                        (horizon + 6, 64, 8, 11, (104, 160, 132), 0.6)):
-            layer = Image.new("RGBA", (W, H), color + (0,))  # transparente del mismo color: sin borde oscuro
+            layer = Image.new("RGBA", (W, H), color + (0,))  # transparente del mismo color: evita un borde oscuro
             ImageDraw.Draw(layer).polygon(soft_ridge(W, base, height, bumps, seed), fill=color + (255,))
             land = Image.alpha_composite(land, layer.filter(ImageFilter.GaussianBlur(blur)))
         ground = gradient_stops((W, H - horizon), [(0, (132, 208, 98)), (1, (62, 150, 66))]).convert("RGBA")
@@ -277,7 +282,7 @@ class Backdrop:
                 trees.append((horizon + 6 + rng.randint(0, 6), x, rng.randint(18, 30),
                               rng.choice([(64, 156, 78), (80, 172, 88), (58, 144, 72)])))
             x += rng.randint(26, 44)
-        for ground_y, x, size, green in sorted(trees):  # los de más atrás primero
+        for ground_y, x, size, green in sorted(trees):  # primero los más lejanos
             tree(d, x, ground_y, size, green)
         block(d, (694, 98, 752, horizon + 4), (240, 240, 248, 255), 16, 10)
         block(d, (686, 82, 760, 100), (84, 152, 255, 255), 16, 10)
@@ -285,7 +290,7 @@ class Backdrop:
             d.rounded_rectangle((707, yy, 739, yy + 13), 3, fill=(122, 178, 242, 255))
         self.land = Image.alpha_composite(land, world)
 
-        # los dos avatares de adelante, con su sombra
+        # los dos avatares del frente, con su sombra
         people = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         for spec in (AVATAR_A, AVATAR_B):
             sprite = avatar(spec["size"], spec["shirt"], spec["pants"], face_dir=spec["dir"])
@@ -305,11 +310,11 @@ class Backdrop:
 
     @staticmethod
     def wave(t: float, laps: int) -> float:
-        """0 → 1 → 0, suave, `laps` veces por vuelta del GIF."""
+        """Onda suave 0 → 1 → 0, repetida `laps` veces por ciclo del GIF."""
         return (1 - math.cos(2 * math.pi * t * laps / TOTAL)) / 2
 
     def draw_sky(self, img: Image.Image, t: float) -> None:
-        drift = math.sin(2 * math.pi * t / TOTAL)  # el viento lleva las nubes y las trae (las grandes, más)
+        drift = math.sin(2 * math.pi * t / TOTAL)  # el viento desplaza las nubes y las devuelve (más las grandes)
         for sprite, x, y, amount in self.clouds:
             put(img, sprite, x + round(amount * drift), y)
         if 2.5 <= t < 15.5:  # una bandada que cruza el cielo
@@ -324,7 +329,7 @@ class Backdrop:
             k = self.wave(t, laps)
             x0, y0 = x + round(move_x * k), y + round(move_y * k)
             block(d, (x0, y0, x0 + w, y0 + h), color + (255,), 12, 8)
-        # alguien haciendo el obby (su vuelta dura un tercio del GIF)
+        # avatar que recorre el obby (su ciclo dura un tercio del GIF)
         u = t % (TOTAL / 3)
         feet, stretch = runner_pose(u)
         face = [f for since, f in RUNNER_TURNS if u >= since][-1]
@@ -373,8 +378,8 @@ MESSAGES = [
     Message(1.9, "xXShadowXx", "ngl this obby is kinda mid", "posta, este obby está medio flojo"),
     Message(3.1, "kenji", "lol", "jaja", 0.0, 0.2),
     Message(3.8, "rahul_07", "bhai kaha ho tum", "che, ¿dónde estás?"),
-    Message(5.2, "sofi_uy", "vamos juntos a la torre?"),  # ya está en tu idioma: no se toca
-    Message(11.75, "tomi_ar", "sure, wait for me at the tower"),  # lo que mandaste vos
+    Message(5.2, "sofi_uy", "vamos juntos a la torre?"),  # ya está en el idioma del jugador: no se modifica
+    Message(11.75, "tomi_ar", "sure, wait for me at the tower"),  # mensaje enviado por el jugador
 ]
 
 
@@ -417,7 +422,7 @@ def draw_chat(canvas: Image.Image, t: float) -> None:
         spot = PillSpot(left=int(text_left) - 5, top=int(y) - 1, bottom=int(y + ROW_H) + 1,
                         cover_right=int(text_left + CHAT_FONT.getlength(message.text)) + 4, max_right=PANEL[2] + 6)
         if waiting:
-            continue  # como en la app: la píldora aparece con la traducción terminada
+            continue  # como en la app: la píldora aparece cuando la traducción termina
         pills.append((InlineChatView._pill(spot, line, 15), spot.left, spot.top))
     canvas.alpha_composite(layer)
     for pill, px, py in pills:
@@ -449,7 +454,7 @@ def draw_bubble(canvas: Image.Image, t: float) -> None:
     original, box = roblox_bubble("oi, alguém quer trocar?")
     hx, hy = head_top(AVATAR_A)
     left = hx - original.width // 2
-    top = hy - original.height - 8 + int(3 * math.sin(t * 2.2))  # flota apenas, como en el juego
+    top = hy - original.height - 8 + int(3 * math.sin(t * 2.2))  # flota levemente, como en el juego
     fade = ease((t - BUBBLE_AT) / 0.25) * (1 - ease((t - (BUBBLE_END - 0.3)) / 0.3))
     bubble = original.copy()
     if t >= BUBBLE_DONE:
@@ -526,7 +531,7 @@ def draw_compose(canvas: Image.Image, t: float) -> None:
 
 
 def draw_keycap(canvas: Image.Image, t: float) -> None:
-    """La tecla ° apretada justo antes de que aparezca la barra."""
+    """Tecla ° presionada justo antes de que aparezca la barra."""
     start = BAR_OPEN - 0.55
     if not start <= t < BAR_OPEN + 0.35:
         return
@@ -586,7 +591,7 @@ SPOKEN = "anyone coming with me to the tower?"
 
 
 def mic_button(pressed: bool, fade: float) -> Image.Image:
-    """El botón para hablar (el lateral del mouse): una tecla con un micrófono."""
+    """Botón para hablar (el lateral del mouse): una tecla con un micrófono."""
     s, size = 3, 46
     img = Image.new("RGBA", (size * s, (size + 6) * s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -604,7 +609,7 @@ def mic_button(pressed: bool, fade: float) -> Image.Image:
 
 
 def voice_bubble(text: str, t: float) -> Image.Image:
-    """Lo que dice tu voz artificial, sobre tu avatar: ondas de sonido y la frase en el idioma del otro."""
+    """Lo que dice la voz artificial del jugador sobre su avatar: ondas de sonido y la frase en el idioma del otro."""
     f = font("seguisb.ttf", 15)
     small = font("segoeui.ttf", 11)
     s = 3
@@ -614,7 +619,7 @@ def voice_bubble(text: str, t: float) -> Image.Image:
     d.rounded_rectangle((0, 0, w * s - 1, h * s - 1), 14 * s, fill=(18, 21, 29, 232))
     d.polygon([(w * s / 2 - 8 * s, h * s - 2), (w * s / 2 + 8 * s, h * s - 2), (w * s / 2, (h + 9) * s)],
               fill=(18, 21, 29, 232))
-    for i in range(4):  # ondas que se mueven mientras suena
+    for i in range(4):  # ondas animadas mientras suena
         level = 0.35 + 0.65 * abs(math.sin(t * 10 + i * 1.4))
         bh = 18 * s * level
         bx = (14 + i * 6) * s
@@ -629,13 +634,13 @@ def voice_bubble(text: str, t: float) -> Image.Image:
 def draw_speak(canvas: Image.Image, t: float) -> None:
     if not SPEAK_PRESS - 0.2 <= t < SPEAK_END:
         return
-    # 1. tocás el botón para hablar
+    # 1. el jugador presiona el botón para hablar
     if t < SPEAK_TALK + 0.4:
         fade = ease((t - SPEAK_PRESS + 0.2) / 0.15) * (1 - ease((t - SPEAK_TALK - 0.1) / 0.3))
         button = mic_button(SPEAK_PRESS <= t < SPEAK_PRESS + 0.2, fade)
         canvas.alpha_composite(button, ((W - button.width) // 2, H - 150))
     hx, hy = head_top(AVATAR_A)
-    # 2. hablás en tu idioma (el indicador de voz de Roblox sobre tu avatar)
+    # 2. el jugador habla en su idioma (indicador de voz de Roblox sobre su avatar)
     if SPEAK_TALK <= t < SPEAK_SAY:
         fade = ease((t - SPEAK_TALK) / 0.2) * (1 - ease((t - SPEAK_SAY + 0.25) / 0.25))
         chip = Image.new("RGBA", (58 * 3, 28 * 3), (0, 0, 0, 0))
@@ -657,7 +662,7 @@ def draw_speak(canvas: Image.Image, t: float) -> None:
         rise = int(8 * (1 - ease((t - SPEAK_SAY) / 0.25)))
         bubble.putalpha(bubble.getchannel("A").point(lambda v: int(v * fade)))
         canvas.alpha_composite(bubble, (hx - bubble.width // 2, hy - bubble.height - 10 + rise))
-    # subtítulo: lo que dijiste y cómo sonó
+    # subtítulo: lo dicho por el jugador y cómo sonó
     if SPEAK_TALK + 0.4 <= t < SPEAK_END:
         said = t >= SPEAK_SAY
         line = Line(7, MINE, "es", MY_WORDS, SPOKEN if said else "", True, said)
@@ -666,7 +671,7 @@ def draw_speak(canvas: Image.Image, t: float) -> None:
         fade = ease((t - SPEAK_TALK - 0.4) / 0.25) * (1 - ease((t - (SPEAK_END - 0.35)) / 0.35))
         card.putalpha(card.getchannel("A").point(lambda v: int(v * fade)))
         canvas.alpha_composite(card, ((W - card.width) // 2, H - 58 - card.height))
-    # 4. el otro te contesta (y su burbuja también se traduce)
+    # 4. el otro jugador responde (su burbuja también se traduce)
     if SPEAK_REPLY <= t < SPEAK_END:
         original, box = roblox_bubble("omw!!")
         bx, by = head_top(AVATAR_B)
@@ -742,7 +747,7 @@ def main() -> None:
     base = Backdrop()
     times = [i * DT for i in range(int(TOTAL / DT))]
     frames = [frame_at(base, t) for t in times]
-    # vuelta suave al principio
+    # transición suave al inicio
     first = frames[0]
     fade_n = int(LOOP_FADE / DT)
     for k in range(fade_n):
@@ -764,8 +769,8 @@ def main() -> None:
         frame.save(folder / f"{index:04d}.png")
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
     path = OUT / "demo.gif"
-    # Paleta armada con el cuadro entero (con "diff" se armaba solo con lo que se mueve y al fondo le quedaban pocos
-    # colores: se veía sucio) y un tramado ordenado fino, que respeta los degradés del cielo.
+    # Paleta generada con el cuadro completo (con "diff" solo consideraba lo que se mueve y el fondo quedaba con pocos
+    # colores) y tramado ordenado fino, que respeta los degradés del cielo.
     graph = ("split[a][b];[a]palettegen=max_colors=256:stats_mode=full[p];"
              "[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle")
     subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", str(folder / "%04d.png"),

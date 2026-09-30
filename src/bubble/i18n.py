@@ -1,10 +1,11 @@
-"""Bubble en tu idioma: la ventana, el tutorial y los avisos del juego se muestran en el idioma de tu Windows.
+"""Bubble en el idioma del jugador: la ventana, el tutorial y los avisos del juego se muestran en el idioma de Windows.
 
 Los textos se escriben en español en el código. Cada idioma tiene su traducción en locales/<código>.json (los más
-comunes en Roblox vienen con Bubble; ver tools/ui_strings.py). Para los demás, Bubble la arma la primera vez con tu
-Claude y la guarda en %APPDATA%\\Bubble\\idiomas (se usa desde la próxima vez que lo abras). Sin traducción, en inglés.
+comunes en Roblox vienen incluidos con Bubble; ver tools/ui_strings.py). Para los demás, Bubble genera la traducción la
+primera vez con el Claude del jugador y la guarda en %APPDATA%\\Bubble\\idiomas (se usa desde el siguiente inicio). Sin
+traducción, se usa inglés.
 
-Para no marcar cada texto a mano, se traduce al dibujarlo: todo texto que se le da a una ventana (text=, label=, el
+Para no marcar cada texto a mano, la traducción se aplica al dibujar: todo texto que recibe una ventana (text=, label=,
 título) pasa por `t()`. Los textos con variables se reconocen por su plantilla ("Salió Bubble {0}…").
 """
 
@@ -19,7 +20,7 @@ from functools import lru_cache
 from pathlib import Path
 
 log = logging.getLogger(__name__)
-SOURCE = "es"  # el idioma en que están escritos los textos
+SOURCE = "es"  # idioma en el que están escritos los textos
 FALLBACK = "en"
 LOCALES = Path(__file__).resolve().parent / "locales"
 _lang = SOURCE
@@ -39,7 +40,7 @@ def user_folder() -> Path:
 
 
 def system_language() -> str:
-    """El idioma de la interfaz de Windows ("pt", "fr"…)."""
+    """Idioma de la interfaz de Windows ("pt", "fr"…)."""
     try:
         import ctypes
 
@@ -53,8 +54,8 @@ def system_language() -> str:
 
 
 def choose(setting: str = "auto") -> str:
-    """El idioma de la interfaz: el elegido en Ajustes o, en «auto», el de Windows (si Bubble lo conoce; si no,
-    inglés)."""
+    """Idioma de la interfaz: el elegido en Ajustes o, con «auto», el de Windows (si Bubble lo admite; si no, inglés).
+    """
     from .translate.languages import LANGUAGES
 
     code = system_language() if setting in ("", "auto") else setting.split("-")[0].lower()
@@ -62,7 +63,7 @@ def choose(setting: str = "auto") -> str:
 
 
 def catalog_path(code: str) -> Path | None:
-    """Dónde está la traducción de ese idioma (la armada en esta PC gana: es la más nueva)."""
+    """Ruta de la traducción de ese idioma; la generada en este equipo tiene prioridad por ser la más reciente."""
     for folder in (user_folder(), LOCALES):
         path = folder / f"{code}.json"
         if path.exists():
@@ -75,7 +76,7 @@ def has_catalog(code: str) -> bool:
 
 
 def use(code: str) -> str:
-    """Pasa la interfaz a ese idioma. Si no hay traducción, en inglés. Devuelve el idioma que quedó."""
+    """Cambia la interfaz a ese idioma; sin traducción usa inglés. Devuelve el idioma que quedó activo."""
     global _lang
     if code != SOURCE and not has_catalog(code):
         code = FALLBACK if has_catalog(FALLBACK) else SOURCE
@@ -121,7 +122,7 @@ def _pattern(source: str) -> re.Pattern | None:
 
 @lru_cache(maxsize=4096)
 def t(text: str) -> str:
-    """El texto en el idioma de la interfaz (si no se conoce, igual)."""
+    """Devuelve el texto en el idioma de la interfaz; si no hay traducción, lo deja igual."""
     if _lang == SOURCE or not text or not isinstance(text, str):
         return text
     found = _exact.get(text)
@@ -133,7 +134,7 @@ def t(text: str) -> str:
             values = {int(name[1:]): t(value) for name, value in match.groupdict().items()}
             return _SLOT.sub(lambda slot: values.get(int(slot.group(1)), slot.group(0)), translated) \
                 .replace("{{", "{").replace("}}", "}")
-    symbols = len(text) - len(text.lstrip("•✓⚠✦🔒→·- \u2003"))  # "• Texto", "✓ Listo…": el símbolo queda
+    symbols = len(text) - len(text.lstrip("•✓⚠✦🔒→·- \u2003"))  # "• Texto", "✓ Listo…": se conserva el símbolo inicial
     if 0 < symbols < len(text):
         inner = t(text[symbols:])
         if inner != text[symbols:]:
@@ -142,7 +143,7 @@ def t(text: str) -> str:
         found = _exact.get(text[:1].upper() + text[1:])
         if found is not None:
             return found.lower()
-    stripped = text.strip()  # "Texto\n" o "  Texto": con la traducción del texto de adentro
+    stripped = text.strip()  # "Texto\n" o " Texto": se traduce el texto interior
     if stripped != text and stripped:
         inner = t(stripped)
         if inner != stripped:
@@ -156,7 +157,7 @@ _OPTIONS = ("text", "label", "title")
 
 
 def install() -> None:
-    """Todo texto que se le da a la ventana (al crear un control o al cambiarlo) pasa por `t()`."""
+    """Todo texto que recibe la ventana (al crear un control o al modificarlo) pasa por `t()`."""
     global _installed
     if _installed:
         return
@@ -200,7 +201,9 @@ def sources() -> list[str]:
 
 
 def build_in_background(code: str, done=lambda _ok: None) -> threading.Thread | None:
-    """Arma la traducción de la interfaz a ese idioma con tu Claude (una sola vez: queda guardada). `done(ok)`."""
+    """Genera la traducción de la interfaz a ese idioma con el Claude del jugador (una sola vez; queda guardada). Llama
+    a `done(ok)` al terminar.
+    """
     from .translate.languages import LANGUAGES
 
     if code == SOURCE or code not in LANGUAGES or catalog_path(code) is not None:

@@ -1,4 +1,4 @@
-"""Guarda la barra para escribir (la real) en cada etapa: vacía, tipeando, traduciendo y lista."""
+"""Guarda la barra de escritura real en cada etapa: vacía, con texto, traduciendo y lista."""
 import json
 import sys
 import time
@@ -12,10 +12,10 @@ from bubble import win32
 from bubble.geometry import Rect
 from bubble.ui import motion, overlays
 
-motion.appear = lambda *args, **kwargs: None  # sin animación: queda invisible (transparente) mientras se captura
+motion.appear = lambda *args, **kwargs: None  # sin animación: permanece invisible (transparente) durante la captura
 
 out = sys.argv[1]
-if "pro" in sys.argv[3:]:  # la barra con Bubble Pro activo (chip dorado y "✦ PRO")
+if "pro" in sys.argv[3:]:  # barra con Bubble Pro activo (chip dorado y "✦ PRO")
     from bubble import pro
 
     pro.set_active(True)

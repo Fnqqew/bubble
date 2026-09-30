@@ -1,13 +1,13 @@
-"""La imagen de la ventana de Roblox SOLA, sin lo que tenga encima (las traducciones de Bubble, otras ventanas).
+"""Imagen de la ventana de Roblox por sí sola, sin lo que tenga encima (las traducciones de Bubble u otras ventanas).
 
-Bubble lee el chat y las burbujas de una foto de la pantalla. Si las traducciones salieran en esa foto, las leería a
-ellas en vez del chat original, así que estaban escondidas de TODAS las capturas: tampoco salían en tus capturas de
-pantalla ni en tus grabaciones (OBS, Xbox Game Bar, AMD/NVIDIA, la grabadora de Roblox).
+Bubble lee el chat y las burbujas a partir de una captura de la pantalla. Si las traducciones aparecieran en esa
+captura, se leerían a sí mismas en lugar del chat original, por lo que se ocultaban de todas las capturas, incluidas las
+capturas de pantalla y grabaciones del jugador (OBS, Xbox Game Bar, AMD/NVIDIA, la grabadora de Roblox).
 
-Con la foto de la ventana de Roblox sola (PrintWindow con PW_RENDERFULLCONTENT: Windows la arma desde lo que Roblox
-dibujó, aunque haya otras ventanas encima), las traducciones pueden verse en todas las capturas y grabaciones y el
-lector sigue viendo el chat original. Antes de usarla se comprueba que en esta PC salga bien (igual a lo que se ve
-en pantalla, no negra); si no, se sigue como antes.
+Con la imagen de la ventana de Roblox por sí sola (PrintWindow con PW_RENDERFULLCONTENT: Windows la compone a partir de
+lo que Roblox dibujó, aunque haya otras ventanas encima), las traducciones pueden verse en todas las capturas y
+grabaciones, y el lector sigue viendo el chat original. Antes de usarla se comprueba que en este equipo el resultado sea
+correcto (idéntico a lo que se ve en pantalla, no negro); si no lo es, se recurre a la captura de pantalla.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
 PW_CLIENTONLY, PW_RENDERFULLCONTENT = 0x1, 0x2
-FRAME_MAX_AGE_S = 0.04  # el chat y las burbujas comparten la misma foto si se piden casi juntos
+FRAME_MAX_AGE_S = 0.04  # el chat y las burbujas reutilizan la misma imagen si se piden juntos
 
 
 class _BITMAPINFOHEADER(ctypes.Structure):
@@ -38,7 +38,7 @@ class _BITMAPINFOHEADER(ctypes.Structure):
 
 
 def window_image(hwnd: int) -> np.ndarray | None:
-    """El interior de la ventana (BGRA, alto × ancho × 4), o None si Windows no la pudo armar."""
+    """Interior de la ventana (BGRA, alto × ancho × 4), o None si Windows no pudo componerlo."""
     rect = wintypes.RECT()
     if not user32.GetClientRect(hwnd, ctypes.byref(rect)):
         return None
@@ -66,13 +66,15 @@ def window_image(hwnd: int) -> np.ndarray | None:
 
 
 def looks_blank(pixels: np.ndarray) -> bool:
-    """Negra o de un solo color: Windows no pudo armar la imagen de esa ventana."""
+    """Indica si la imagen es negra o de un solo color, es decir, si Windows no pudo componer la ventana."""
     sample = pixels[::8, ::8, :3]
     return float(sample.std()) < 2.0
 
 
 def similar(a: Image.Image, b: Image.Image) -> bool:
-    """¿Son la misma imagen? (lo que Windows armó de la ventana y lo que se ve en pantalla, sin Bubble encima)"""
+    """Indica si ambas imágenes coinciden (lo que Windows compone de la ventana y lo que se ve en pantalla, sin Bubble
+    encima).
+    """
     if a.size != b.size:
         return False
     first = np.asarray(a.convert("L"), dtype=np.int16)[::4, ::4]
@@ -81,7 +83,7 @@ def similar(a: Image.Image, b: Image.Image) -> bool:
 
 
 class WindowCapture:
-    """Fotos de la ventana de Roblox, recortadas a la parte que se pide (en coordenadas de la pantalla)."""
+    """Capturas de la ventana de Roblox, recortadas a la región solicitada (en coordenadas de pantalla)."""
 
     def __init__(self, find_window=None) -> None:
         from .. import win32
@@ -101,7 +103,9 @@ class WindowCapture:
         return self._hwnd
 
     def grab(self, rect: Rect) -> Image.Image | None:
-        """La parte `rect` de la ventana de Roblox, o None (Roblox cerrado, minimizado, o Windows no la armó)."""
+        """Región `rect` de la ventana de Roblox, o None si Roblox está cerrado o minimizado, o si Windows no pudo
+        componer la imagen.
+        """
         from .. import win32
 
         with self._lock:
@@ -120,13 +124,13 @@ class WindowCapture:
         x0, y0 = rect.left - left, rect.top - top
         height, width = frame.shape[:2]
         if x0 < 0 or y0 < 0 or x0 + rect.width > width or y0 + rect.height > height:
-            return None  # lo pedido no está entero dentro de Roblox
+            return None  # la región pedida no está completa dentro de Roblox
         part = frame[y0:y0 + rect.height, x0:x0 + rect.width]
         return Image.frombuffer("RGBA", (rect.width, rect.height), np.ascontiguousarray(part), "raw", "BGRA", 0,
                                 1).convert("RGB")
 
     def whole(self) -> Image.Image | None:
-        """Toda la ventana de Roblox (para adjuntarla a un mensaje de Soporte), o None."""
+        """Ventana de Roblox completa (para adjuntarla a un mensaje de Soporte), o None."""
         from .. import win32
 
         hwnd = self.find_window()

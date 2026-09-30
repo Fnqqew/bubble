@@ -1,16 +1,16 @@
-"""Traducir sin Claude: con el agente de voz de Deepgram («Voice Agent»), que trae un modelo de lenguaje (Claude
-Haiku 4.5) y se paga con los mismos créditos de Bubble Pro. Para quien todavía no tiene Claude.
+"""Traducción sin Claude mediante el agente de voz de Deepgram («Voice Agent»), que incluye un modelo de lenguaje
+(Claude Haiku 4.5) y se paga con los mismos créditos de Bubble Pro. Está pensado para quien todavía no tiene Claude.
 
-Se usa solo con texto: se le manda lo que hay que traducir (InjectUserMessage), con las mismas instrucciones que usa
-Bubble con Claude, y responde la traducción (en el mismo formato: se lee con el mismo filtro).
+Se usa solo con texto: se envía lo que hay que traducir (InjectUserMessage), con las mismas instrucciones que usa
+Bubble con Claude, y el agente responde la traducción en el mismo formato, que se lee con el mismo filtro.
 
-Deepgram cobra por minuto de conexión abierta, no por mensaje (0,075 US$ el minuto): la conexión se abre recién cuando
-hay algo para traducir y se cierra sola a los 20 s sin mensajes. Así una partida tranquila gasta centavos por hora en
-vez de 4,50 US$.
+Deepgram cobra por minuto de conexión abierta, no por mensaje (0,075 US$ el minuto). Por eso la conexión se abre
+recién cuando hay algo para traducir y se cierra sola a los 20 s sin mensajes. Así, una partida tranquila cuesta
+centavos por hora en lugar de 4,50 US$.
 
-El agente además «dice» cada respuesta en voz (no se puede apagar): esa voz se ignora, pero hay que esperar a que
-termine (AgentAudioDone) antes de mandarle lo siguiente; si no, corta la conexión. Medido el 28/9/2026 con una cuenta
-real: ~1 s por traducción y ~1,3 s para abrir la conexión.
+El agente también «dice» cada respuesta en voz (no se puede desactivar). Esa voz se ignora, pero hay que esperar a
+que termine (AgentAudioDone) antes de enviar el siguiente pedido; de lo contrario, el agente cierra la conexión. Con
+una cuenta real se midió ~1 s por traducción y ~1,3 s para abrir la conexión.
 """
 
 from __future__ import annotations
@@ -29,12 +29,12 @@ from .errors import BadKey, CloudError, NoCredit, error_for
 
 log = logging.getLogger(__name__)
 URL = "wss://agent.deepgram.com/v1/agent/converse"
-MODEL = ("anthropic", "claude-haiku-4-5")  # (el más rápido de los probados que entiende bien la jerga)
-PRICE_PER_MIN = 0.075  # nivel Standard, deepgram.com/pricing (28/9/2026)
-IDLE_CLOSE_S = 20.0  # sin mensajes este tiempo, se cierra (se paga por minuto abierta)
-MAX_TURNS = 16  # el agente arrastra toda la conversación: después de tantos pedidos se empieza una nueva
-KEEPALIVE_S = 2.0  # sin «audio» unos segundos, el agente corta (CLIENT_MESSAGE_TIMEOUT): se le avisa que sigue ahí
-READY_S = 12.0  # tope para abrir la conexión o para que el agente termine de «hablar» la respuesta anterior
+MODEL = ("anthropic", "claude-haiku-4-5")  # el más rápido de los probados que entiende bien la jerga
+PRICE_PER_MIN = 0.075  # nivel Standard, deepgram.com/pricing
+IDLE_CLOSE_S = 20.0  # sin mensajes durante este tiempo, se cierra (se paga por minuto abierto)
+MAX_TURNS = 16  # el agente acumula la conversación: tras estos pedidos se inicia una nueva
+KEEPALIVE_S = 2.0  # sin «audio» unos segundos, el agente cierra (CLIENT_MESSAGE_TIMEOUT)
+READY_S = 12.0  # tope para abrir la conexión o esperar que el agente termine de «hablar»
 
 
 def settings(prompt: str) -> dict:
@@ -58,13 +58,13 @@ def agent_error(data: dict) -> CloudError:
 
 
 class _Connection:
-    """Una conexión con el agente: un pedido por vez."""
+    """Conexión con el agente: atiende un pedido por vez."""
 
     def __init__(self, key: str, prompt: str, connect=None) -> None:
         self.key, self.prompt = key, prompt
         self._connect = connect
         self.ws = None
-        self.ready = asyncio.Event()  # se le puede mandar otro pedido
+        self.ready = asyncio.Event()  # indica que se puede enviar otro pedido
         self.reply: asyncio.Future | None = None
         self.turns = 0
         self.opened_at = 0.0
@@ -104,7 +104,7 @@ class _Connection:
         try:
             async for message in self.ws:
                 if isinstance(message, bytes):
-                    continue  # la voz del agente diciendo la respuesta: no se usa
+                    continue  # voz de la respuesta del agente: no se usa
                 data = json.loads(message)
                 kind = data.get("type")
                 if kind in ("SettingsApplied", "AgentAudioDone"):
@@ -126,7 +126,7 @@ class _Connection:
             self._fail(CloudError(f"se cortó la conexión con Deepgram ({exc})"))
         finally:
             self.closed = True
-            self.ready.set()  # (que nadie quede esperando: el pedido ve que se cerró)
+            self.ready.set()  # evita dejar a nadie esperando: el pedido detecta que se cerró
             self._fail(self.error or CloudError("se cortó la conexión con Deepgram"))
 
     def _fail(self, error: CloudError) -> None:
@@ -134,7 +134,7 @@ class _Connection:
             self.reply.set_exception(error)
 
     async def send(self, text: str) -> asyncio.Future:
-        """Manda un pedido (cuando el agente terminó con el anterior). Devuelve la respuesta por venir."""
+        """Envía un pedido cuando el agente terminó con el anterior. Devuelve el futuro con la respuesta."""
         async with asyncio.timeout(READY_S):
             await self.ready.wait()
         if self.closed:
@@ -146,7 +146,7 @@ class _Connection:
         return self.reply
 
     async def _keep_alive(self) -> None:
-        """Todo el tiempo que está abierta (si no, el agente corta a los pocos segundos sin recibir voz)."""
+        """Mantiene la conexión abierta; sin voz entrante, el agente la cierra a los pocos segundos."""
         try:
             while not self.closed:
                 await asyncio.sleep(KEEPALIVE_S)
@@ -155,7 +155,7 @@ class _Connection:
             pass
 
     async def close(self) -> float:
-        """Cierra y devuelve cuántos segundos estuvo abierta (lo que se cobra)."""
+        """Cierra la conexión y devuelve los segundos que estuvo abierta (lo que se cobra)."""
         if self.ws is not None and not self.closed:
             try:
                 await self.ws.close()
@@ -171,14 +171,14 @@ class _Connection:
 class DeepgramAgentProvider:
     """Traduce con el agente de Deepgram (ver arriba). Mismo formato que ClaudeSubscriptionProvider."""
 
-    reports_sent = True  # avisa (SENT) cuando el pedido sale: abrir la conexión no cuenta como respuesta lenta
+    reports_sent = True  # avisa (SENT) al enviar el pedido: abrir la conexión no cuenta como demora
 
     def __init__(self, key: str, prompt: str, name: str = "deepgram", idle_close_s: float = IDLE_CLOSE_S,
                  on_fatal: Callable[[CloudError], None] | None = None, connect=None,
                  count: Callable[[float], None] | None = None) -> None:
         self.key, self.prompt, self.name = key, prompt, name
         self.idle_close_s = idle_close_s
-        self.on_fatal = on_fatal  # sin saldo o con la clave mala (se avisa en la ventana)
+        self.on_fatal = on_fatal  # se invoca sin saldo o con clave inválida (se avisa en la ventana)
         self._connect = connect
         self._count = count if count is not None else _count_seconds
         self._conn: _Connection | None = None
@@ -186,10 +186,10 @@ class DeepgramAgentProvider:
         self._idle: asyncio.Task | None = None
 
     async def start(self) -> None:
-        """No abre nada: la conexión se cobra por minuto, así que se abre recién con la primera traducción."""
+        """No abre nada: la conexión se cobra por minuto, por lo que se abre con la primera traducción."""
 
     async def warm_up(self) -> None:
-        """(A propósito no hace nada: precalentar sería pagar minutos sin traducir.)"""
+        """No hace nada a propósito: precalentar implicaría pagar minutos sin traducir."""
 
     async def close(self) -> None:
         if self._idle is not None:
@@ -216,7 +216,7 @@ class DeepgramAgentProvider:
         if self._idle is not None:
             self._idle.cancel()
         try:
-            async with self._lock:  # el agente responde de a un pedido
+            async with self._lock:  # el agente responde un pedido por vez
                 sent = False
                 for attempt in (1, 2):
                     try:
@@ -233,7 +233,7 @@ class DeepgramAgentProvider:
                             self.on_fatal(exc)
                         raise
                     except CloudError:
-                        await self._drop()  # se cortó: una conexión nueva y se manda de nuevo (una vez)
+                        await self._drop()  # conexión cortada: se abre una nueva y se reenvía (una sola vez)
                         if attempt == 2:
                             raise
                 output = OutputFilter(len(requests))
@@ -250,7 +250,7 @@ class DeepgramAgentProvider:
                 yield chunk
 
     async def _close_when_idle(self) -> None:
-        """Mantiene la conexión viva un rato (por si llega otro mensaje) y la cierra si no llega nada."""
+        """Mantiene la conexión abierta un tiempo por si llega otro mensaje y la cierra si no llega ninguno."""
         try:
             await asyncio.sleep(self.idle_close_s)
             if not self._lock.locked():

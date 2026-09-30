@@ -1,4 +1,4 @@
-"""Detección local de idioma (sin red) para no gastar traducciones innecesarias."""
+"""Detección local de idioma (sin red) para evitar traducciones innecesarias."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from .languages import LANGUAGES
 
-# Mensajes que se entienden en cualquier idioma: no hace falta traducirlos.
+# Mensajes comprensibles en cualquier idioma: no requieren traducción.
 UNIVERSAL_TOKENS = {
     "gg", "ggs", "ggwp", "gl", "hf", "glhf", "wp", "ez", "lol", "lmao", "xd", "xdd", "xddd",
     "ok", "okay", "k", "kk", "afk", "brb", "omg", "oof", "rip", "gg!", "w", "l",
@@ -16,9 +16,8 @@ UNIVERSAL_TOKENS = {
     "ah", "aa", "oh", "eh", "uh", "ay", "hm", "hmm", "mm", "mmm", "aja", "aha", "ajá", "nah", "nop", "nope", "yep",
     "wow", "uff", "uf", "bruh", "sh", "shh", "ups", "oops", "q",
 }
-# Palabras de juego que se usan igual en todos los idiomas ("vamos a hacer pvp", "tengo lag", "bora farmar"). No dicen
-# nada del idioma del mensaje: antes un "pvp" o un "lag" hacía que un mensaje en español pareciera inglés (y se
-# traducía).
+# Palabras de juego usadas igual en todos los idiomas ("pvp", "lag", "farmar"). No indican el idioma del mensaje: si
+# contaran, un "pvp" o un "lag" haría que un mensaje en español pareciera inglés y se tradujera.
 GAMING_WORDS = set("""
     pvp pve pvpear lag laggy lagueado lagueo lagea lageando noob noobs nub nubs newbie hacker hackers hack
     hacks hacking cheater cheaters cheat cheats bug bugs bugueado buguea bugeado glitch glitches op nerf nerfeo
@@ -44,8 +43,8 @@ def _fold(text: str) -> str:
     return "".join(c for c in text if not unicodedata.combining(c))
 
 
-# Palabras muy comunes (sin acentos) por idioma. Sirven para saltear al instante los mensajes cortos que ya
-# están en tu idioma ("hola", "dale, voy", "todo bien?"), donde el detector estadístico no está seguro.
+# Palabras muy comunes (sin acentos) por idioma. Permiten omitir de inmediato los mensajes cortos que ya están en el
+# idioma del jugador ("hola", "dale, voy", "todo bien?"), donde el detector estadístico no es fiable.
 COMMON_WORDS: dict[str, set[str]] = {
     "es": set("""
         el la los las un una unos unas de del al a y o u pero que quien quienes como cuando donde adonde por
@@ -89,7 +88,7 @@ COMMON_WORDS: dict[str, set[str]] = {
         friend friends team win won lose lost kill killed dead die died spawn buy sell free money give me carry
     """.split()),
 }
-# Palabras que delatan cada idioma: comunes en él pero que no existen en los otros de la lista.
+# Palabras características de cada idioma: comunes en él y ausentes en los demás de la lista.
 _DISTINCTIVE = {
     lang: words - set().union(*(other for other_lang, other in COMMON_WORDS.items() if other_lang != lang))
     for lang, words in COMMON_WORDS.items()
@@ -98,7 +97,9 @@ _WORD_TOKEN = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
 def _chat_forms(token: str) -> set[str]:
-    """Cómo puede estar escrita una palabra en el chat: "Siii" es "si", "Ahhhh" es "ah", "felicesxd" es "felices"."""
+    """Formas en que puede estar escrita una palabra en el chat: "Siii" es "si", "Ahhhh" es "ah", "felicesxd" es
+    "felices".
+    """
     folded = _fold(token)
     forms = {folded}
     collapsed = re.sub(r"(.)\1+", r"\1", folded)
@@ -115,22 +116,25 @@ def is_gaming(token: str) -> bool:
 
 def lexical_share(text: str, lang: str) -> float:
     """Fracción de las palabras del mensaje que son comunes en `lang` (0 si no hay lista para ese idioma). Las palabras
-    de juego ("pvp", "lag") no cuentan para ningún lado, siempre que quede con qué decidir: con una sola palabra más
-    ("trade me": "me" también es español) sí cuentan, como palabras de otro idioma (antes se tomaba como español)."""
+    de juego ("pvp", "lag") no cuentan en ningún sentido mientras queden otras con las que decidir. Si queda una
+    sola palabra más ("trade me": "me" también es español), sí cuentan, como palabras de otro idioma.
+    """
     words = COMMON_WORDS.get(lang)
     every = _WORD_TOKEN.findall(text)
     tokens = [t for t in every if not is_gaming(t) or _chat_forms(t) & (words or set())]
     if len(tokens) < 2 and len(tokens) < len(every) and not (tokens and _chat_forms(tokens[0]) & _DISTINCTIVE.get(
             lang, set())):
-        tokens = every  # queda muy poco (y nada exclusivo de ese idioma): las de juego cuentan
+        tokens = every  # queda muy poco (y nada exclusivo del idioma): cuentan las de juego
     if not words or not tokens:
         return 0.0
     return sum(bool(_chat_forms(t) & words) for t in tokens) / len(tokens)
 
 
 def native_by_words(text: str, lang: str, share: float = 0.6) -> bool:
-    """¿Las palabras dicen que ya está en `lang`? Casi todas comunes en ese idioma Y (alguna exclusiva de él, o ninguna
-    exclusiva de otro). Sin esto "carry me pls" parecía español ("me" y "pls" también se usan en español)."""
+    """Indica si las palabras muestran que el mensaje ya está en `lang`: casi todas son comunes en ese idioma y,
+    además, alguna es exclusiva de él o ninguna es exclusiva de otro. Así "carry me pls" no se toma por español
+    ("me" y "pls" también se usan en español).
+    """
     if lexical_share(text, lang) < share:
         return False
     forms = [_chat_forms(token) for token in _WORD_TOKEN.findall(text)]
@@ -141,8 +145,9 @@ def native_by_words(text: str, lang: str, share: float = 0.6) -> bool:
 
 
 def without_gaming(text: str) -> str:
-    """El mensaje sin las palabras de juego, para detectar el idioma de lo demás ("hagamos pvp en el lobby" → "hagamos
-    en el"). Si queda menos de dos palabras, el mensaje entero (con una sola, el detector adivina)."""
+    """Mensaje sin las palabras de juego, para detectar el idioma del resto ("hagamos pvp en el lobby" → "hagamos en
+    el"). Si quedan menos de dos palabras, devuelve el mensaje completo, porque con una sola el detector adivina.
+    """
     kept = [t for t in text.split() if not all(is_gaming(w) for w in _WORD_TOKEN.findall(t) or ["x"])]
     return " ".join(kept) if len(_WORD_TOKEN.findall(" ".join(kept))) >= 2 else text
 
@@ -151,9 +156,9 @@ def words_in(text: str) -> list[str]:
     return _WORD_TOKEN.findall(text)
 
 
-# Palabras sueltas muy comunes de los otros idiomas (gracias, hola, sí, por favor, esperá, ayuda…). Una palabra sola
-# que no está en ninguna lista se toma como un nombre o un error de tipeo y no se traduce: sin esto, "merci", "danke",
-# "grazie" o "salamat" quedaban sin traducir.
+# Palabras sueltas muy comunes de los otros idiomas (gracias, hola, sí, por favor, esperá, ayuda…). Una palabra sola que
+# no figura en ninguna lista se toma como un nombre o un error de tipeo y no se traduce; sin esta lista, "merci",
+# "danke", "grazie" o "salamat" no se traducirían.
 OTHER_WORDS: dict[str, set[str]] = {
     "fr": set("merci bonjour salut bonsoir oui non stp svp pardon desole attends viens aide ami bravo mdr ptdr wesh "
               "frere allez pourquoi comment quoi ouais".split()),
@@ -190,7 +195,8 @@ OTHER_WORDS: dict[str, set[str]] = {
 }
 
 
-# La escritura de cada idioma (los demás, letras latinas): una palabra sola en otra escritura que la tuya no es tuya.
+# Escritura de cada idioma (los demás usan letras latinas): una palabra sola en una escritura distinta de la del jugador
+# no pertenece a su idioma.
 SCRIPTS = {"ru": "cyrillic", "uk": "cyrillic", "bg": "cyrillic", "mk": "cyrillic", "be": "cyrillic", "kk": "cyrillic",
            "sr": "latin", "el": "greek", "he": "hebrew", "ar": "arabic", "fa": "arabic", "ur": "arabic", "hi": "indic",
            "mr": "indic", "bn": "indic", "te": "indic", "ta": "indic", "gu": "indic", "pa": "indic", "th": "thai",
@@ -202,7 +208,7 @@ _SCRIPT_RANGES = [("cyrillic", 0x0400, 0x052F), ("greek", 0x0370, 0x03FF), ("heb
 
 
 def script_of(text: str) -> str:
-    """La escritura en la que está `text` ("latin", "cyrillic"…): la de la mayoría de sus letras."""
+    """Escritura en la que está `text` ("latin", "cyrillic"…): la de la mayoría de sus letras."""
     counts: dict[str, int] = {}
     for char in text:
         if not char.isalpha():
@@ -214,14 +220,15 @@ def script_of(text: str) -> str:
 
 
 def known_anywhere(token: str) -> bool:
-    """La palabra está en alguna de las listas (o es universal)."""
+    """Indica si la palabra figura en alguna de las listas (o es universal)."""
     forms = _chat_forms(token)
     return bool(forms & UNIVERSAL_TOKENS) or any(forms & words for words in COMMON_WORDS.values()) or any(
         forms & words for words in OTHER_WORDS.values())
 
 
 def foreign_words(text: str, lang: str) -> list[str]:
-    """Palabras típicas de OTRO idioma que no existen en `lang` (ej. "você" o "the" en un mensaje en español)."""
+    """Palabras típicas de OTRO idioma que no existen en `lang` (por ejemplo, "você" o "the" en un mensaje en español).
+    """
     own = COMMON_WORDS.get(lang, set())
     tokens = {_fold(t) for t in _WORD_TOKEN.findall(text) if not is_gaming(t)}
     return sorted(
@@ -233,7 +240,9 @@ _FILTER_CHARS = set("*#")
 
 
 def is_filtered(text: str, threshold: float = 0.5) -> bool:
-    """True si Roblox tapó la mayor parte del mensaje con su filtro (**** o ####): está prácticamente borrado."""
+    """Indica si Roblox ocultó con su filtro (**** o ####) la mayor parte del mensaje, de modo que queda prácticamente
+    borrado.
+    """
     visible = [c for c in text if not c.isspace()]
     if not visible:
         return False
@@ -241,8 +250,9 @@ def is_filtered(text: str, threshold: float = 0.5) -> bool:
 
 
 def is_universal(text: str) -> bool:
-    """True si el mensaje no tiene palabras o solo tiene abreviaturas, interjecciones universales ("Ahhhh") y
-    palabras de juego que se entienden en cualquier idioma ("gg noob", "pvp?", "lag")."""
+    """Indica si el mensaje no tiene palabras o solo contiene abreviaturas, interjecciones universales ("Ahhhh") y
+    palabras de juego comprensibles en cualquier idioma ("gg noob", "pvp?", "lag").
+    """
     return all(_chat_forms(w) & (UNIVERSAL_TOKENS | GAMING_WORDS) for w in _WORD.findall(text))
 
 
@@ -250,22 +260,22 @@ def is_universal(text: str) -> bool:
 class Detection:
     lang: str
     confidence: float
-    # Confianza del segundo idioma más probable: sirve para medir qué tan claro es el ganador.
+    # Confianza del segundo idioma más probable; permite medir cuán claro es el ganador.
     runner_up: float = 0.0
-    # Los más probables con su confianza (para saber si un idioma dado quedó casi empatado arriba).
+    # Idiomas más probables con su confianza (para saber si un idioma dado quedó casi empatado en el primer puesto).
     scores: tuple[tuple[str, float], ...] = ()
 
     def score(self, lang: str) -> float:
         return next((value for code, value in self.scores if code == lang), 0.0)
 
     def is_confident(self, min_confidence: float, min_lead: float = 2.5, floor: float = 0.3) -> bool:
-        """Seguro si supera el umbral, o si le saca amplia ventaja al segundo idioma."""
+        """Devuelve True si la confianza supera el umbral o si hay amplia ventaja sobre el segundo idioma."""
         if self.confidence >= min_confidence:
             return True
         return self.confidence >= floor and self.confidence >= min_lead * self.runner_up
 
 
-# Códigos que lingua llama distinto (el noruego escrito es el bokmål).
+# Códigos que lingua nombra distinto (el noruego escrito es bokmål).
 _TO_LINGUA = {"no": "nb"}
 _FROM_LINGUA = {lingua: ours for ours, lingua in _TO_LINGUA.items()}
 

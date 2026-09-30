@@ -69,7 +69,7 @@ def test_settings_saved_from_window_override_config(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("leaves_char, expected", [(True, ["chat", "backspace"]), (False, ["chat"])])
 def test_opening_chat_erases_the_character_the_key_leaves(monkeypatch, leaves_char, expected):
-    # Con teclado en español la tecla del chat escribe "}" en la barra: salía "}lol" en vez de "lol".
+    # Con teclado en español, la tecla del chat escribe "}" en la barra y el texto resultaba "}lol" en lugar de "lol".
     pressed = []
     monkeypatch.setattr(win32, "press_chat_key", lambda: pressed.append("chat"))
     monkeypatch.setattr(win32, "press_backspace", lambda: pressed.append("backspace"))

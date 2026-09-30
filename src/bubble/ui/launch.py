@@ -1,6 +1,8 @@
-"""Abrir Bubble: primero un cartelito con el logo (aparece al instante) y, cuando la ventana está entera, la ventana.
+"""Abrir Bubble: primero se muestra un cartel con el logo (aparece al instante) y, cuando la ventana está completa, se
+muestra la ventana.
 
-Cargar todo (OCR, Claude, las piezas de la interfaz) toma un momento; antes se veía la ventana armarse por partes.
+Cargar todo (OCR, Claude, las piezas de la interfaz) toma un momento; el cartel evita que se vea la ventana armándose
+por partes.
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ class Splash:
         self.window.update()
 
     def status(self, text: str) -> None:
-        """En qué anda (así no parece colgado mientras prepara todo)."""
+        """Indica qué está haciendo la aplicación, para que no parezca bloqueada mientras se prepara."""
         try:
             self._status.configure(text=text)
             self.window.update_idletasks()
@@ -61,19 +63,20 @@ class Splash:
         self.window.destroy()
 
 
-# Los símbolos de la interfaz: no están en la letra de Windows (Segoe UI).
+# Símbolos de la interfaz que no están en la fuente de Windows (Segoe UI).
 SYMBOLS = "→│✦✓›●↑↓✗⚠🔒✕↔▾↻🎙🔊○◐▶‹！。、"
 FONTS = ("TkDefaultFont", "SunValleyCaptionFont", "SunValleyBodyStrongFont", "SunValleySubtitleFont",
          "SunValleyBodyFont", "SunValleyTitleFont")
 
 
 def warm_symbols(root: tk.Misc) -> None:
-    """La primera vez que se dibuja un símbolo que la letra no tiene, Windows busca en todas las letras cuál lo tiene:
-    el candado 🔒 tardaba ~0,5 s y la página que lo mostraba se trababa al abrirla. Se buscan acá, una sola vez, mientras
-    se ve el cartel de «Abriendo…»."""
+    """La primera vez que se dibuja un símbolo ausente de la fuente, Windows busca en todas las fuentes cuál lo tiene:
+    el candado 🔒 tardaba ~0,5 s y bloqueaba la página que lo mostraba al abrirla. Por eso se buscan acá, una sola
+    vez, mientras se muestra el cartel «Abriendo…».
+    """
     import tkinter.font as tkfont
 
-    for name in FONTS:  # (cada letra busca por su cuenta: las que usa la ventana, no las 25 que hay)
+    for name in FONTS:  # cada fuente busca por su cuenta: solo las que usa la ventana, no las 25
         try:
             tkfont.nametofont(name, root).measure(SYMBOLS)
         except tk.TclError:
@@ -81,18 +84,19 @@ def warm_symbols(root: tk.Misc) -> None:
 
 
 def preload() -> None:
-    """Lo más pesado de cargar, mientras se ve el cartel: después, con la ventana abierta, cada una de estas cargas la
-    congelaba (la conexión con Claude, 2 s; leer el chat, 0,7 s; la voz, ~0,3 s cada parte). Mientras Python carga un
-    módulo, la ventana no puede dibujarse."""
+    """Carga lo más pesado mientras se muestra el cartel: hacerlo con la ventana abierta la congelaba en cada carga
+    (conexión con Claude, 2 s; lectura del chat, 0,7 s; voz, ~0,3 s por parte). Mientras Python carga un módulo, la
+    ventana no puede dibujarse.
+    """
     import importlib
 
-    # (dxcam no: al cargarse prepara la placa de video con COM, y quedaría atado a este hilo)
+    # dxcam no se precarga: al importarse inicializa la placa de video con COM y quedaría atado a este hilo.
     for name in ("claude_agent_sdk", "scipy.ndimage", "onnxruntime", "faster_whisper", "websockets.asyncio.client"):
         try:
             importlib.import_module(name)
         except Exception:  # noqa: BLE001 - lo que no esté (la parte de voz sin instalar) se carga cuando haga falta
             pass
-    try:  # y los modelos chicos de la voz (¿hay alguien hablando? ¿quién?), que se comparten
+    try:  # y los modelos chicos de voz (detección de habla, identificación), compartidos
         from ..voice import speakers, vad
         from ..voice.models import models_dir
 
@@ -110,23 +114,23 @@ def launch(config) -> None:
     win32.enable_dpi_awareness()
     from .. import i18n
 
-    i18n.use(i18n.choose(config.user.ui_language))  # la ventana, en tu idioma (antes de armarla)
+    i18n.use(i18n.choose(config.user.ui_language))  # idioma de la ventana, antes de crearla
     i18n.install()
     root = tk.Tk()
     root.withdraw()
     splash = Splash(root)
     loading = threading.Thread(target=preload, name="bubble-precarga", daemon=True)
     loading.start()
-    from .main_window import BubbleWindow  # lo pesado se carga mientras se ve el cartel
+    from .main_window import BubbleWindow  # la carga pesada ocurre mientras se muestra el cartel
 
-    splash.status("Armando la ventana…")
+    splash.status("Preparando la ventana…")
     window = BubbleWindow(config, root=root)
     splash.status("Preparando la conexión y la voz…")
     warm_symbols(root)
 
     def ready() -> None:
-        # Mientras Tk acomoda y dibuja la ventana suelta a Python: la precarga siguió en paralelo y casi siempre ya
-        # terminó. Recién ahí se va el cartel y aparece la ventana, entera y sin trabarse.
+        # Mientras Tk acomoda y dibuja la ventana se libera a Python: la precarga continúa en paralelo y casi siempre ya
+        # terminó. Recién entonces se cierra el cartel y aparece la ventana, completa y sin bloqueos.
         loading.join(timeout=15)
         splash.close()
 

@@ -1,14 +1,17 @@
-"""Voz sintética local (Piper): voces naturales que corren en tu PC, sin internet una vez descargadas.
+"""Voz sintética local (Piper): voces naturales que se ejecutan en el equipo, sin conexión a internet una vez
+descargadas.
 
-La voz de cada idioma se elige sola del catálogo oficial de Piper (rhasspy/piper-voices) y se descarga la primera
-vez que hace falta (~60 MB por idioma). Se cargan y hablan en un proceso aparte (piper_worker.py): cargar una voz
-congelaba la ventana ~2 s.
+La voz de cada idioma se elige automáticamente del catálogo oficial de Piper (rhasspy/piper-voices) y se descarga la
+primera vez que hace falta (~60 MB por idioma). Las voces se cargan y hablan en un proceso aparte (piper_worker.py),
+porque cargar una voz bloqueaba la ventana ~2 s.
 
-Cada idioma tiene voz femenina y masculina donde se pueda: si Piper tiene solo una, la otra puede ser de Windows
-(si tenés ese idioma agregado en Windows). Si Windows no deja usar Piper (el «Control inteligente de aplicaciones»
-bloquea una parte suya que no tiene firma digital), se usan solo las de Windows (ver windows_voices.py).
+Cada idioma tiene voz femenina y masculina cuando es posible: si Piper ofrece solo una, la otra puede ser de Windows
+(si ese idioma está agregado en el sistema). Si Windows no permite usar Piper (el «Control inteligente de
+aplicaciones» bloquea un componente suyo sin firma digital), se usan solo las voces de Windows (ver
+windows_voices.py).
 
-Todas las frases pasan por prosody.py: mismo volumen y mismo tono de una frase a la otra, y con tu expresión.
+Todas las frases pasan por prosody.py: mismo volumen y mismo tono de una frase a la otra, y respetando la expresión
+del jugador.
 """
 
 from __future__ import annotations
@@ -26,24 +29,26 @@ from .prosody import POLISH, change_gender
 
 CATALOG_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json"
 FILE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/{path}"
-CATALOG_MAX_DAYS = 30  # el catálogo se vuelve a bajar cada tanto (así aparecen las voces nuevas)
-# Cómo acompaña la voz lo que sentiste: (velocidad, expresividad). El volumen y el tono los pone prosody.py.
+CATALOG_MAX_DAYS = 30  # el catálogo se vuelve a descargar periódicamente (incorpora voces nuevas)
+# Acompañamiento de la voz según la expresión del jugador: (velocidad, expresividad). El volumen y el tono los define
+# prosody.py.
 STYLES = {"": (1.0, 0.7), "shout": (1.1, 0.9), "exclaim": (1.05, 0.85), "soft": (0.95, 0.6)}
 QUALITY_ORDER = {"medium": 0, "high": 1, "low": 2, "x_low": 3}
-MAX_LOADED = 3  # voces sintéticas cargadas a la vez (la tuya, la femenina y la masculina, casi siempre)
-# Idiomas cuya voz de Piper necesita paquetes que no se instalan (pesados o sin versión para este Python): sin
-# ellos, la voz de Windows (si hay). Las voces chinas nuevas también (g2pW, transformers): se usa la clásica.
+MAX_LOADED = 3  # máximo de voces cargadas a la vez (normalmente la del jugador, la femenina y la masculina)
+# Idiomas cuya voz de Piper requiere paquetes que no se instalan (pesados o sin versión para este Python): sin ellos se
+# usa la voz de Windows, si existe. Lo mismo vale para las voces chinas nuevas (g2pW, transformers): se usa la clásica.
 NEEDS = {"ja": ("pyopenjtalk",), "th": ("tltk", "unicode_rbnf")}
-# Sin voz propia: la de un idioma que se lee casi igual (el tagalo se escribe como se dice, con las mismas vocales y
-# sílabas que el indonesio; el malayo es casi indonesio; croata y serbio (este, en letras latinas) se leen como el
-# esloveno; el macedonio como el búlgaro, el bielorruso como el ruso, el azerí como el turco y el afrikáans como el
-# neerlandés). La voz «serbia» de Piper en realidad es sorabo.
+# Idiomas sin voz propia, que usan la de otro idioma de lectura casi idéntica: el tagalo se escribe como se pronuncia,
+# con las mismas vocales y sílabas que el indonesio; el malayo es casi indonesio; croata y serbio (en letras latinas) se
+# leen como el esloveno; el macedonio como el búlgaro, el bielorruso como el ruso, el azerí como el turco y el afrikáans
+# como el neerlandés. La voz «serbia» de Piper en realidad es sorabo.
 BORROWED = {"tl": "id", "ms": "id", "hr": "sl", "sr": "sl", "mk": "bg", "be": "ru", "az": "tr", "af": "nl"}
-# Variante preferida por idioma (la más neutra / más hablada entre jugadores).
+# Variante preferida por idioma (la más neutra o más hablada entre los jugadores).
 PREFERRED_REGION = {"en": "en_US", "es": "es_MX", "pt": "pt_BR", "fr": "fr_FR", "de": "de_DE", "zh": "zh_CN",
                     "ar": "ar_JO", "hi": "hi_IN", "nl": "nl_NL"}
-# Voces elegidas a mano: (femenina, masculina). Suenan naturales y claras. "voz#hablante": una voz con varios
-# hablantes (la japonesa trae una mujer y un hombre). Si falta una, se busca en Windows y si no, se usa la otra.
+# Voces elegidas a mano: (femenina, masculina), por su sonido natural y claro. "voz#hablante" indica una voz con varios
+# hablantes (la japonesa incluye una mujer y un hombre). Si falta una, se busca en Windows y, si tampoco está, se usa la
+# del otro género.
 CURATED: dict[str, tuple[str | None, str | None]] = {
     "es": ("es_AR-daniela-high", "es_MX-ald-medium"),
     "en": ("en_US-amy-medium", "en_US-ryan-medium"),
@@ -63,7 +68,7 @@ CURATED: dict[str, tuple[str | None, str | None]] = {
     "id": ("id_ID-news_tts-medium", None),
     "vi": ("vi_VN-vais1000-medium", None),
     "th": ("th_TH-tsync2-medium", None),
-    # Los géneros de las que no lo dicen en el nombre se midieron por el tono (30/9/2026).
+    # El género de las voces cuyo nombre no lo indica se determinó midiendo el tono.
     "uk": ("uk_UA-ukrainian_tts-medium#2", "uk_UA-ukrainian_tts-medium#1"),  # Tetiana, Mykyta
     "sv": ("sv_SE-alma-medium", "sv_SE-nst-medium"),
     "no": ("no_NO-nvcc-medium#0", "no_NO-nvcc-medium#2"),  # K… mujer, M… hombre
@@ -95,16 +100,16 @@ CURATED: dict[str, tuple[str | None, str | None]] = {
     "sq": (None, "sq_AL-edon-medium"),
     "sw": (None, "sw_CD-lanfrica-medium"),
 }
-# Sin ninguna voz de Piper (tamil, guyaratí, panyabí): las de Windows, si agregaste ese idioma.
+# Idiomas sin ninguna voz de Piper (tamil, guyaratí, panyabí): se usan las de Windows, si ese idioma está agregado.
 NO_PIPER = {"ta", "gu", "pa"}
-WINDOWS = "windows:"  # prefijo de una voz de Windows (en vez de una de Piper)
-DERIVED = "~"  # "voz~masculina": la voz del otro género hecha a partir de esa (ver prosody.change_gender)
+WINDOWS = "windows:"  # prefijo de una voz de Windows (en lugar de una de Piper)
+DERIVED = "~"  # "voz~masculina": voz del otro género generada a partir de esa (ver prosody.change_gender)
 
 _piper_state: dict[str, str] = {}
 
 
 def piper_blocked() -> str:
-    """"" si las voces de Piper andan en esta PC; si no, por qué (se revisa una vez)."""
+    """Devuelve "" si las voces de Piper funcionan en este equipo; si no, el motivo (se comprueba una sola vez)."""
     if "error" not in _piper_state:
         try:
             import piper.espeakbridge  # noqa: F401 - la parte que Windows puede bloquear (una DLL sin firma)
@@ -119,7 +124,7 @@ def piper_blocked() -> str:
 
 
 def _base(name: str) -> str:
-    """"ja_JP-hi_fi_captain-medium#1" o "pt_BR-faber-medium~femenina" → el archivo de la voz."""
+    """"ja_JP-hi_fi_captain-medium#1" o "pt_BR-faber-medium~femenina" → archivo de la voz."""
     return name.split(DERIVED)[0].split("#")[0]
 
 
@@ -141,14 +146,14 @@ class Voices:
         self.speed = 1.0
         self.use_process = use_process
         self._catalog: dict | None = None
-        self._loaded: dict[str, object] = {}  # (si no se pudo usar el proceso aparte: las voces cargadas acá)
+        self._loaded: dict[str, object] = {}  # (sin proceso aparte: voces cargadas en este proceso)
         self._lock = threading.Lock()
         self._windows = None
         self._process = None
 
     # ------------------------------------------------------------ qué voz
     def windows(self):
-        """Las voces de Windows (None si no se pueden usar)."""
+        """Voces de Windows (None si no se pueden usar)."""
         if self._windows is None:
             try:
                 from .windows_voices import WindowsVoices
@@ -168,13 +173,13 @@ class Voices:
                     fresh = download(CATALOG_URL, path.with_suffix(".new"), "catálogo de voces", self.progress)
                     fresh.replace(path)
             except OSError:
-                pass  # sin internet: sirve el que ya estaba
+                pass  # sin internet: se usa el ya existente
             path = download(CATALOG_URL, path, "catálogo de voces", self.progress)
             self._catalog = json.loads(path.read_text(encoding="utf-8"))
         return self._catalog
 
     def _piper_voice(self, family: str, gender: str) -> tuple[str | None, bool]:
-        """(la voz de Piper, si es del género pedido) para ese idioma, o (None, False)."""
+        """Devuelve la voz de Piper para ese idioma si es del género pedido, o (None, False)."""
         if family in NO_PIPER or not _has_modules(family):
             return None, False
         female, male = CURATED.get(family, (None, None))
@@ -198,8 +203,10 @@ class Voices:
         return min(candidates, key=rank)[0], False
 
     def voice_for(self, language: str, gender: str = "femenina") -> str | None:
-        """La mejor voz para `language` ("en", "pt", "es-AR"...) con ese género ("femenina" o "masculina"): el nombre
-        de una de Piper ("es_AR-daniela-high"), "windows:<nombre>" para una de Windows, o None si no hay ninguna."""
+        """Devuelve la mejor voz para `language` ("en", "pt", "es-AR"...) con ese género ("femenina" o
+        "masculina"): el nombre de una de Piper ("es_AR-daniela-high"), "windows:<nombre>" para una de Windows,
+        o None si no hay ninguna.
+        """
         family = language.split("-")[0].lower()
         lookup = BORROWED[family] if family in BORROWED else language  # (en Windows, la región más parecida)
         family = BORROWED.get(family, family)
@@ -210,7 +217,8 @@ class Voices:
         piper, exact = self._piper_voice(family, gender)
         if piper and exact:
             return piper
-        # Piper no tiene ese género (o ese idioma): una de Windows que sí; si no, se hace a partir de la del otro género.
+        # Si Piper no tiene ese género (o ese idioma): una voz de Windows que sí lo tenga; si no, se genera a partir de
+        # la del otro género.
         chosen = windows.voice_for(lookup, gender) if windows else None
         if chosen is not None and (chosen.gender == gender or piper is None):
             return WINDOWS + chosen.name
@@ -218,7 +226,7 @@ class Voices:
 
     # ------------------------------------------------------------ bajar y cargar
     def _files(self, name: str) -> tuple[Path, Path]:
-        """Baja la voz si hace falta: (modelo, configuración)."""
+        """Descarga la voz si hace falta y devuelve (modelo, configuración)."""
         paths = {}
         for path in self.catalog()[name]["files"]:
             if path.endswith((".onnx", ".onnx.json")):
@@ -229,7 +237,7 @@ class Voices:
         return model, config
 
     def _worker(self):
-        """El proceso aparte de las voces (None si no se puede usar: entonces se cargan acá)."""
+        """Proceso aparte de las voces (None si no se puede usar: entonces se cargan en este proceso)."""
         if not self.use_process:
             return None
         if self._process is None:
@@ -251,12 +259,14 @@ class Voices:
         return self._loaded[name]
 
     def download(self, language: str, gender: str | None = None) -> bool:
-        """Baja la voz (sin cargarla), para tenerla lista de antemano. False si no hay voz para ese idioma."""
+        """Descarga la voz (sin cargarla) para dejarla lista de antemano. Devuelve False si no hay voz para ese
+        idioma.
+        """
         name = self.voice_for(language, gender or self.gender)
         if name is None:
             return False
         if not name.startswith(WINDOWS):
-            self._files(_base(name))  # (las de Windows ya están: no se baja nada)
+            self._files(_base(name))  # (las de Windows ya están instaladas: no se descarga nada)
         return True
 
     def is_loaded(self, language: str, gender: str | None = None) -> bool:
@@ -273,7 +283,9 @@ class Voices:
         return (self.folder / f"{_base(name)}.onnx").exists()
 
     def prepare(self, language: str, gender: str | None = None) -> bool:
-        """Descarga (si hace falta) y carga la voz, sin decir nada: así la primera frase sale enseguida."""
+        """Descarga (si hace falta) y carga la voz sin reproducir nada, de modo que la primera frase salga sin
+        demora.
+        """
         name = self.voice_for(language, gender or self.gender)
         if name is None:
             return False
@@ -283,8 +295,9 @@ class Voices:
     # ------------------------------------------------------------ decir
     def synthesize(self, text: str, language: str, gender: str | None = None, speed: float | None = None,
                    style: str = "") -> Speech | None:
-        """Dice `text` con una voz de `language`. None si no hay voz para ese idioma. `style`: cómo lo dijiste vos
-        ("shout", "exclaim", "soft", "question"…, ver voice/speech.py): la voz lo acompaña."""
+        """Dice `text` con una voz de `language`. Devuelve None si no hay voz para ese idioma. `style`: cómo lo
+        expresó el jugador ("shout", "exclaim", "soft", "question"…, ver voice/speech.py): la voz lo acompaña.
+        """
         return self._say(text, language, gender, speed, style)
 
     def _say(self, text: str, language: str, gender: str | None, speed: float | None, style: str,
@@ -318,7 +331,7 @@ class Voices:
         import logging
 
         base, _, speaker = name.partition("#")
-        # Un poco de variación natural (no monótona) y la velocidad elegida.
+        # Variación natural (no monótona) y velocidad elegida.
         settings = {"length_scale": 1.0 / max(0.6, min(1.6, pace)), "noise_scale": expressive, "noise_w": 0.85,
                     "speaker": int(speaker) if speaker else None}
         worker = self._worker()

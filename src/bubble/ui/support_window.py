@@ -1,5 +1,6 @@
-"""La ventana de Soporte: título, qué pasó y cómo, imágenes (de archivo, pegadas o una captura de Roblox) y enviar.
-Lo manda bubble/support.py."""
+"""Ventana de Soporte: título, descripción del problema y pasos para reproducirlo, imágenes (de archivo, pegadas o una
+captura de Roblox) y envío. El envío lo realiza bubble/support.py.
+"""
 
 from __future__ import annotations
 
@@ -14,12 +15,12 @@ from .. import support
 from . import motion, theme, widgets
 
 TITLE_HINT = "Ej.: la voz se corta cuando hablo"
-BODY_HINT = "Contá qué pasó y cómo llegaste a eso:\n1. Abrí…\n2. Apreté…\n3. Pasó…"
+BODY_HINT = "Describí qué pasó y cómo llegaste a eso:\n1. Abrí…\n2. Presioné…\n3. Pasó…"
 
 
 class SupportWindow:
     def __init__(self, root: tk.Misc, grab_roblox=None) -> None:
-        """`grab_roblox()`: una captura de la ventana de Roblox (o None), para adjuntarla con un botón."""
+        """`grab_roblox()` devuelve una captura de la ventana de Roblox (o None) para adjuntarla mediante un botón."""
         self.root = root
         self.grab_roblox = grab_roblox
         self.images: list[Path] = []
@@ -27,7 +28,8 @@ class SupportWindow:
         self.sent = False
         self.window, body = widgets.dialog(root, "Soporte")
         ttk.Label(body, text="Soporte", font="SunValleySubtitleFont").pack(anchor="w")
-        widgets.muted(body, "¿Algo no anda o tenés una idea? Contalo acá y le llega directo al creador de Bubble.", pady=(2, 12))
+        widgets.muted(body, "¿Algo no funciona o tenés una idea? Escribilo acá y le llega directo al creador de "
+                            "Bubble.", pady=(2, 12))
 
         self.kind = tk.StringVar(value="problema")
         row = widgets.label_row(body, "¿Qué nos contás?", pady=(0, 6))
@@ -55,7 +57,7 @@ class SupportWindow:
 
         self.with_system = tk.BooleanVar(value=True)
         self.with_log = tk.BooleanVar(value=True)
-        ttk.Checkbutton(body, text="Mandar datos de mi PC (Windows, procesador, memoria, nada personal)",
+        ttk.Checkbutton(body, text="Enviar datos de mi PC (Windows, procesador, memoria, nada personal)",
                         variable=self.with_system).pack(anchor="w", pady=(12, 0))
         ttk.Checkbutton(body, text="Adjuntar el registro de errores de Bubble", variable=self.with_log).pack(
             anchor="w", pady=(4, 0))
@@ -229,8 +231,8 @@ class SupportWindow:
                 self.window.after(2600, self.close)
                 return
             folder = support.fallback(report)
-            self.status.configure(text=f"No se pudo mandar desde acá ({message}). Te abrí el mail con el mensaje y la "
-                                       f"carpeta «{folder.name}» con las imágenes. Adjuntalas y mandalo.",
+            self.status.configure(text=f"No se pudo enviar desde acá ({message}). Te abrí el correo con el mensaje y "
+                                       f"la carpeta «{folder.name}» con las imágenes. Adjuntalas y envialo.",
                                   foreground=colors["warn"])
             self.send_button.state(["!disabled"])
 

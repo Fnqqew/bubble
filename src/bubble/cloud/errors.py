@@ -1,19 +1,20 @@
-"""Lo que puede salir mal con la nube. Siempre se sigue con lo de tu PC; sin saldo o con la clave mala, el Pro se
-apaga solo y avisa."""
+"""Errores posibles con la nube. En todos los casos se continúa con el procesamiento local; si falta saldo o la clave es
+inválida, el modo Pro se desactiva y se avisa al jugador.
+"""
 
 from __future__ import annotations
 
 
 class CloudError(RuntimeError):
-    """La nube no respondió bien: se sigue con tu PC."""
+    """La nube no respondió correctamente; se continúa con el procesamiento local."""
 
 
 class BadKey(CloudError):
-    """Deepgram no acepta la clave."""
+    """Deepgram rechazó la clave."""
 
 
 class NoCredit(CloudError):
-    """La cuenta de Deepgram se quedó sin saldo."""
+    """La cuenta de Deepgram no tiene saldo."""
 
 
 def error_for(status: int, detail: str = "") -> CloudError:
@@ -24,14 +25,16 @@ def error_for(status: int, detail: str = "") -> CloudError:
     if status == 408:
         return CloudError("Deepgram tardó en responder")
     if status == 429:
-        return CloudError("Deepgram está saturado: probá en un rato")
+        return CloudError("Deepgram está saturado: probá más tarde")
     if status >= 500:
         return CloudError(f"Deepgram tuvo un problema ({status})")
     return CloudError(f"Deepgram respondió {status} {readable(detail)}".strip())
 
 
 def readable(detail: str, limit: int = 80) -> str:
-    """El detalle de un error, sin código de página (<html>…) y cortito, para mostrarlo en la ventana."""
+    """Devuelve el detalle de un error, sin código de página (<html>…) y truncado a `limit` caracteres, para mostrarlo
+    en la ventana.
+    """
     import re
 
     text = " ".join(re.sub(r"<[^>]+>", " ", detail or "").split())

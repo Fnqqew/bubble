@@ -1,5 +1,6 @@
-"""Bubble 3.0: el radio de escucha y el filtro de ruido (Basic y Pro), las voces de la nube, el ahorro de crédito y lo
-que hace fluida la ventana (Tab, desplazamiento, animaciones). Sin conectarse de verdad."""
+"""Bubble 3.0: radio de escucha y filtro de ruido (Basic y Pro), voces de la nube, ahorro de crédito y fluidez de la
+ventana (Tab, desplazamiento, animaciones), sin conexión real.
+"""
 
 import threading
 import time
@@ -33,13 +34,13 @@ def test_speech_level_measures_the_voice_not_the_pauses():
 def test_far_voices_are_left_out_and_the_radius_decides_how_far():
     now = [0.0]
     ear = Earshot("normal", clock=lambda: now[0])
-    ear.learn(-20)  # alguien al lado
-    assert ear.hears(-25) and ear.hears(-38)  # cerca, aunque tenga el micrófono más bajo
-    assert not ear.hears(-45)  # la otra punta del mapa
+    ear.learn(-20)  # alguien cercano
+    assert ear.hears(-25) and ear.hears(-38)  # cerca, aunque el micrófono tenga poco nivel
+    assert not ear.hears(-45)  # lejos, en el otro extremo del mapa
     ear.radius = "lejos"
     assert ear.hears(-45)
     ear.radius = "todo"
-    assert ear.hears(-54) and not ear.hears(-60)  # ni con "todas": un murmullo no es una voz entendible
+    assert ear.hears(-54) and not ear.hears(-60)  # ni con "todas": un murmullo no es una voz inteligible
 
 
 def test_a_shout_does_not_close_the_radius_and_it_opens_again_when_nobody_is_near():
@@ -47,7 +48,7 @@ def test_a_shout_does_not_close_the_radius_and_it_opens_again_when_nobody_is_nea
     ear = Earshot("cerca", clock=lambda: now[0])
     ear.learn(-20)
     ear.learn(-4)  # un grito
-    assert ear.hears(-20)  # la voz normal de al lado sigue entrando
+    assert ear.hears(-20)  # la voz normal cercana sigue entrando
     assert not ear.hears(-38)
     now[0] += 300  # 5 minutos sin nadie cerca
     assert ear.hears(-38)
@@ -57,10 +58,10 @@ def test_noise_is_not_translated():
     assert looks_like_noise("♪♪", 0.1, -0.3, 0.9)  # sin letras
     assert looks_like_noise("ah ah", 0.1, -2.5, 0.9)  # no se entendió nada
     assert looks_like_noise("hmm", 0.95, -1.1, 0.9)  # casi seguro no era voz
-    assert looks_like_noise("bla", 0.2, -1.3, 0.2)  # ni siquiera se sabe qué idioma
-    assert looks_like_noise("hola", 0.1, -0.2, 0.9, speech_ratio=0.1)  # casi todo era otra cosa
+    assert looks_like_noise("bla", 0.2, -1.3, 0.2)  # ni siquiera se identifica el idioma
+    assert looks_like_noise("hola", 0.1, -0.2, 0.9, speech_ratio=0.1)  # casi todo era otro sonido
     assert not looks_like_noise("wait for me at the tower", 0.05, -0.45, 0.95)
-    # frases reales de una pelea grabada (música y voces pisadas): pasan
+    # frases reales de una pelea grabada (música y voces superpuestas): pasan
     assert not looks_like_noise("Bet you're sitting in my... Yeah, right?", 0.60, -0.89, 0.86, 0.98)
     assert not looks_like_noise("You won't go away because you need attention", 0.67, -0.71, 0.95, 1.0)
     assert not looks_like_noise("No, no", 0.43, -1.92, 0.95, 0.98)
@@ -89,7 +90,7 @@ def test_the_cloud_is_not_paid_for_far_voices():
         for i in range(0, len(audio), block):
             listener.feed(audio[i:i + block])
     assert sent_near > 1.0
-    assert listener._unbilled == pytest.approx(sent_near)  # la voz lejana no se mandó
+    assert listener._unbilled == pytest.approx(sent_near)  # la voz lejana no se envió
 
 
 # ---------------------------------------------------------------- voces de la nube
@@ -106,7 +107,7 @@ def test_each_language_gets_a_voice_with_personality():
     assert voice_name("es-MX", "femenina", "tranquila") == "aura-2-estrella-es"  # todas las de Deepgram, por zona
     assert voice_name("es-ES", "masculina", "tranquila") == "aura-2-nestor-es"
     assert voice_name("es", "masculina", "alegre") == "aura-2-luciano-es"
-    assert voice_name("pt-BR") is None  # la nube no tiene portugués: la voz de tu PC
+    assert voice_name("pt-BR") is None  # la nube no tiene portugués: se usa la voz del equipo
 
 
 class FakePool:
@@ -127,7 +128,7 @@ class FakePool:
     def stream(self, method, path, body, headers):
         self._check(path)
         data = (np.full(2400, 1000, dtype="<i2")).tobytes()
-        return iter([data[:1001], data[1001:]])  # un pedazo cortado a mitad de muestra
+        return iter([data[:1001], data[1001:]])  # un fragmento cortado a mitad de muestra
 
     def warm(self):
         pass
@@ -157,28 +158,28 @@ def test_cloud_voices_are_cached_and_fall_back_to_your_pc(monkeypatch):
     first = voices.synthesize("gg", "en")
     again = voices.synthesize("gg", "en")
     assert first.sample_rate == 24000 and len(first.audio) == 2400
-    assert len(fake.calls) == 1 and np.allclose(first.audio, again.audio)  # "gg" otra vez no se paga
+    assert len(fake.calls) == 1 and np.allclose(first.audio, again.audio)  # "gg" repetido no se cobra de nuevo
     assert "speed=" in fake.calls[0] and "flux-brooke-en" in fake.calls[0] and fake.calls[0].startswith("/v2/speak")
-    assert voices.synthesize("obrigado", "pt") == "local"  # sin voz en la nube: la de tu PC
-    assert voices.synthesize("ok", "en") is None and len(fake.calls) == 1  # prepararla no gasta
+    assert voices.synthesize("obrigado", "pt") == "local"  # sin voz en la nube: se usa la del equipo
+    assert voices.synthesize("ok", "en") is None and len(fake.calls) == 1  # prepararla no consume crédito
     fake.fail = True
     assert voices.synthesize("wait for me", "en") == "local" and failures
-    assert pro.month_characters() == 3  # "gg!": se manda con signo (la nube termina mejor las palabras sueltas)
+    assert pro.month_characters() == 3  # "gg!": se envía con signo (la nube termina mejor las palabras sueltas)
 
 
 def test_short_cloud_words_get_a_sign_and_a_soft_ending():
     from bubble.cloud.speak import SAMPLE_RATE, soften_end, speakable
 
-    assert speakable("nice") == "nice." and speakable("gg", "exclaim") == "gg!"  # el signo es el de cómo lo dijiste
+    assert speakable("nice") == "nice." and speakable("gg", "exclaim") == "gg!"  # el signo corresponde a cómo se dijo
     assert speakable("vamos", "question") == "vamos?"
     assert speakable("wait for me at the tower") == "wait for me at the tower."
     assert speakable("Good.") == "Good." and speakable("¿vamos?") == "¿vamos?"
     t = np.arange(SAMPLE_RATE // 2) / SAMPLE_RATE
-    cut = (0.5 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)  # termina sonando fuerte (cortada)
+    cut = (0.5 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)  # termina con volumen alto (cortada)
     soft = soften_end(cut)
     assert abs(soft[-1]) < 0.01 and np.allclose(soft[:-2000], cut[:-2000])  # solo cambia el final
     quiet = np.concatenate([cut, np.zeros(2400, np.float32)])
-    assert np.array_equal(soften_end(quiet), quiet)  # si ya terminaba en silencio, no se toca
+    assert np.array_equal(soften_end(quiet), quiet)  # si ya terminaba en silencio, no se modifica
 
 
 def test_cloud_voices_play_while_they_arrive(monkeypatch):
@@ -189,7 +190,7 @@ def test_cloud_voices_play_while_they_arrive(monkeypatch):
     voices = speak.CloudVoices("clave", Local())
     rate, pieces = voices.stream("nice one", "en")
     audio = np.concatenate(list(pieces))
-    assert rate == 24000 and len(audio) == 2400  # los pedazos se juntan sin perder muestras
+    assert rate == 24000 and len(audio) == 2400  # los fragmentos se unen sin perder muestras
     rate, pieces = voices.stream("nice one", "en")
     assert len(fake.calls) == 1 and len(np.concatenate(list(pieces))) == 2400  # guardada
     assert voices.stream("oi", "pt") is None
@@ -222,7 +223,7 @@ def test_voice_out_streams_and_keeps_muting_while_it_sounds(monkeypatch):
     out.listeners.append(heard.append)
     assert out.say("hello there", "en", on_ready=ready.append)
     assert played == [500, 700] and ready
-    assert heard[0] > 0.5 and len(heard) >= 3  # aviso al empezar y en cada pedazo
+    assert heard[0] > 0.5 and len(heard) >= 3  # aviso al empezar y en cada fragmento
 
 
 # ---------------------------------------------------------------- ahorro de crédito
@@ -313,7 +314,7 @@ def test_tab_through_many_languages_prepares_only_the_last_voice():
     deadline = time.monotonic() + 3
     while out._warming and time.monotonic() < deadline:
         time.sleep(0.01)
-    assert prepared == ["en", "tr"]  # la que estaba en curso y la última (antes: todas, dos veces)
+    assert prepared == ["en", "tr"]  # la que estaba en curso y la última
 
 
 def test_direct_voice_listens_only_while_you_play():
@@ -331,7 +332,7 @@ def test_direct_voice_listens_only_while_you_play():
                          listener=listener)
     direct.set_listening(False)
     assert listener.muted_until == float("inf")
-    direct._mute(2.0)  # sonó tu voz traducida: no destapa el micrófono fuera del juego
+    direct._mute(2.0)  # sonó la voz traducida: no se reactiva el micrófono fuera del juego
     assert listener.muted_until == float("inf")
     direct.set_listening(True)
     assert listener.muted_until == 0.0
@@ -359,7 +360,7 @@ def test_pages_glide_to_where_you_scrolled(root):
     for index in range(60):
         ttk.Label(page.body, text=f"fila {index}").pack()
     root.update()
-    page.bar.pack(side="right", fill="y")  # (escondida no mide bien: se fuerza)
+    page.bar.pack(side="right", fill="y")  # (oculta no se mide bien: se fuerza)
     page.scroll_by(150)
     deadline = time.monotonic() + 2
     while page._gliding is not None and time.monotonic() < deadline:
@@ -387,7 +388,7 @@ def test_animations_finish_and_can_be_cut(root):
     for _ in range(20):
         root.update()
         time.sleep(0.01)
-    assert len(cut) == 1  # se cortó sin seguir tocando nada
+    assert len(cut) == 1  # se cortó sin más acciones
 
 
 def test_new_subtitles_slide_in_and_the_toast_renders():
@@ -403,13 +404,14 @@ def test_new_subtitles_slide_in_and_the_toast_renders():
     appearing = render_subtitles([old, new], fresh=fresh)
     settled = render_subtitles([old, new])
     assert appearing.size == settled.size
-    assert np.asarray(appearing)[..., 3].sum() < np.asarray(settled)[..., 3].sum()  # la nueva todavía tenue
+    assert np.asarray(appearing)[..., 3].sum() < np.asarray(settled)[..., 3].sum()  # la nueva, todavía tenue
     assert render_toast("✦  Bubble Pro activado", True).size[1] > 30
 
 
 class _RealTimeSpeaker:
-    """Un parlante de mentira que se vacía en tiempo real, como el de Windows: cuenta las veces que se quedó sin
-    audio en el medio (eso es lo que se escucha entrecortado)."""
+    """Parlante simulado que se vacía en tiempo real, como el de Windows: cuenta las veces que se quedó sin audio a
+    mitad de reproducción (lo que se percibe como cortes).
+    """
 
     def __init__(self):
         self.gaps = 0
@@ -459,8 +461,8 @@ def test_cloud_voice_does_not_stutter_when_the_network_hiccups():
     rate = 24000
 
     def network():
-        for index in range(30):  # 3 s de voz, de a 0,1 s
-            time.sleep(0.15 if index % 6 == 5 else 0.03)  # cada tanto la red se demora
+        for index in range(30):  # 3 s de voz, en bloques de 0,1 s
+            time.sleep(0.15 if index % 6 == 5 else 0.03)  # la red se demora periódicamente
             yield np.zeros(rate // 10, np.float32)
 
     class Output:
@@ -468,12 +470,14 @@ def test_cloud_voice_does_not_stutter_when_the_network_hiccups():
 
     played = audio_io.play_stream(Output(), network(), rate)
     assert played == pytest.approx(3.0, abs=0.01)
-    assert Output.device.gaps == 0  # antes: se quedaba sin audio en cada demora (entrecortado)
+    assert Output.device.gaps == 0  # sin audio vacío en cada demora (sin cortes)
     assert Output.device.blocksizes == [int(rate * audio_io.STREAM_BUFFER_S)]
 
 
 def test_your_expression_reaches_the_english_voice_and_aura_takes_over_if_flux_fails(monkeypatch):
-    """Flux (inglés) tiene expresividad: gritando, animada; bajito, calma. Si Deepgram no la acepta, vuelve Aura."""
+    """Flux (inglés) admite expresividad: animada si se grita, calma si se habla bajo. Si Deepgram no la acepta, se usa
+    Aura.
+    """
     from bubble.cloud import speak
     from bubble.cloud.errors import CloudError
 

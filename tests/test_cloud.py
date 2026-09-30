@@ -1,4 +1,4 @@
-"""Bubble Pro: la voz entendida en la nube (Deepgram), sin conectarse de verdad."""
+"""Bubble Pro: reconocimiento de voz en la nube (Deepgram), sin conexión real."""
 
 import asyncio
 import json
@@ -17,7 +17,7 @@ from bubble.cloud.deepgram import (BadKey, CloudError, DeepgramListener, NoCredi
 
 @pytest.fixture(autouse=True)
 def _pro_off(monkeypatch, tmp_path):
-    monkeypatch.setenv("APPDATA", str(tmp_path))  # el uso del mes y la clave van a un state.json de prueba
+    monkeypatch.setenv("APPDATA", str(tmp_path))  # el uso del mes y la clave se guardan en un state.json de prueba
     yield
     pro.set_active(False)
 
@@ -26,7 +26,7 @@ def test_languages_mixed_in_a_phrase_use_multi():
     assert language_param("es-AR") == "multi"
     assert language_param("en") == "multi"
     assert language_param(None) == "multi"
-    assert language_param("zh-CN") == "zh"  # fuera de los que se mezclan: ese idioma solo
+    assert language_param("zh-CN") == "zh"  # salvo los idiomas que se mezclan, este se envía solo
 
 
 def test_errors_say_what_happened():
@@ -89,7 +89,7 @@ def test_live_phrases_grow_and_end_with_who_said_them():
     first = [c for c in captions if c.id == captions[0].id]
     assert [c.text for c in first] == ["trade me", "trade me your", "trade me your sword"]
     assert [c.final for c in first] == [False, False, True]
-    assert first[-1].speaker == 2 and first[-1].language == "en" and first[-1].sure  # Voz 2 (Deepgram cuenta desde 0)
+    assert first[-1].speaker == 2 and first[-1].language == "en" and first[-1].sure  # Voz 2 (Deepgram numera desde 0)
     second = captions[-1]
     assert second.id != first[-1].id and second.final and second.text == "hola"
     assert second.language == "es" and second.speaker == 1 and not second.sure
@@ -106,7 +106,7 @@ def test_only_voice_is_sent_and_the_phrase_is_closed_after_the_pause():
     listener = DeepgramListener("clave", lambda _c: None, source_factory=lambda: None, vad=vad)
     block = np.full(1600, 0.1, dtype=np.float32)  # 0,1 s
     for _ in range(10):
-        listener.feed(block)  # silencio: no se manda nada
+        listener.feed(block)  # silencio: no se envía nada
     assert listener._outbox.empty()
     vad.speaking = True
     for _ in range(5):
@@ -118,9 +118,9 @@ def test_only_voice_is_sent_and_the_phrase_is_closed_after_the_pause():
     while not listener._outbox.empty():
         sent.append(listener._outbox.get())
     audio = [item for item in sent if isinstance(item, bytes)]
-    assert sent[-1] is deepgram._FINALIZE  # terminó de hablar: Deepgram cierra la frase enseguida
+    assert sent[-1] is deepgram._FINALIZE  # fin del habla: Deepgram cierra la frase de inmediato
     seconds = sum(len(item) for item in audio) / 2 / 16000
-    # un poco de antes, la voz y un poquito de pausa (no los 2,9 s ni el resto del silencio: no se pagan)
+    # un poco de audio previo, la voz y una pausa breve; no se cobran los 2,9 s ni el resto del silencio
     assert 0.4 + 0.5 + 0.4 <= seconds <= 0.4 + 0.5 + 0.6
     listener._flush_usage()
     minutes, cost = pro.month_usage()
@@ -145,7 +145,7 @@ def test_turning_it_off_and_on_quickly_does_not_mix_the_old_threads():
     only_network = DeepgramListener("clave", lambda _c: None, source_factory=lambda: None)
     only_network._capture = lambda run: runs.append("no")
     only_network._network = lambda run, outbox: None
-    only_network.start(capture=False)  # tu voz con el botón: el audio lo pasa otro
+    only_network.start(capture=False)  # voz del jugador con el botón: el audio lo entrega otro componente
     assert len(only_network._threads) == 1 and "no" not in runs
     only_network.stop()
 
@@ -172,7 +172,7 @@ def test_audio_keepalive_finalize_and_close_are_sent_in_order():
         await asyncio.wait_for(task, 3)
 
     asyncio.run(main())
-    assert json.loads(socket.sent[0]) == {"type": "KeepAlive"}  # apenas se conecta
+    assert json.loads(socket.sent[0]) == {"type": "KeepAlive"}  # inmediatamente después de conectarse
     assert socket.sent[1] == b"\x01\x00"
     assert json.loads(socket.sent[2]) == {"type": "Finalize"}
     assert json.loads(socket.sent[-1]) == {"type": "CloseStream"}
@@ -231,7 +231,7 @@ def test_theme_images_turn_gold_and_come_back():
         assert theme.tint_accent(root, True) > 10
         changed = [n for n in names if bytes(root.tk.call(n, "data", "-format", "png")) != before[n]]
         assert changed
-        assert theme.tint_accent(root, True) == 0  # ya estaban doradas
+        assert theme.tint_accent(root, True) == 0  # ya tenían el color dorado
         theme.tint_accent(root, False)
         assert all(bytes(root.tk.call(n, "data", "-format", "png")) == before[n] for n in names)
     finally:
@@ -243,7 +243,7 @@ def test_theme_images_turn_gold_and_come_back():
 
 # ---------------------------------------------------------------- conexiones que quedan abiertas (keep-alive)
 class ImpatientServer:
-    """Como Deepgram: si a una conexión no le llega un pedido a tiempo, deja escrito un «408» y la cierra."""
+    """Imita a Deepgram: si a una conexión no le llega un pedido a tiempo, escribe un «408» y la cierra."""
 
     def __init__(self, patience: float = 0.3):
         import socket
@@ -309,12 +309,12 @@ def test_a_connection_the_server_gave_up_on_is_not_reused(monkeypatch):
 
     from bubble.cloud import connection
 
-    monkeypatch.setattr(connection, "IDLE_MAX_S", 60.0)  # (que la descarte por lo que mandó el servidor, no por vieja)
+    monkeypatch.setattr(connection, "IDLE_MAX_S", 60.0)  # (se descarta por lo que envió el servidor, no por antigüedad)
     server = ImpatientServer()
     pool = local_pool(server)
     pool.warm()
-    time.sleep(0.6)  # el servidor ya dejó su «408» y la cerró
-    assert pool.request("POST", "/v1/speak", b"hola", {}) == b"ok 2"  # antes: «Deepgram respondió 408 <html>…»
+    time.sleep(0.6)  # el servidor ya escribió su «408» y cerró la conexión
+    assert pool.request("POST", "/v1/speak", b"hola", {}) == b"ok 2"  # error anterior: «Deepgram respondió 408 <html>…»
 
 
 def test_a_stale_408_is_retried_with_a_fresh_connection(monkeypatch):
@@ -323,7 +323,7 @@ def test_a_stale_408_is_retried_with_a_fresh_connection(monkeypatch):
     from bubble.cloud import connection
 
     monkeypatch.setattr(connection, "IDLE_MAX_S", 60.0)
-    monkeypatch.setattr(connection, "usable", lambda conn: True)  # aunque no se note antes de mandar el pedido
+    monkeypatch.setattr(connection, "usable", lambda conn: True)  # aunque no se detecte antes de enviar el pedido
     server = ImpatientServer()
     pool = local_pool(server)
     pool.warm()
@@ -337,11 +337,11 @@ def test_a_stale_408_is_retried_with_a_fresh_connection(monkeypatch):
 def test_a_quiet_connection_is_dropped_before_deepgram_closes_it():
     from bubble.cloud import connection
 
-    assert connection.IDLE_MAX_S < 5.0  # Deepgram corta a los ~5 s (medido)
+    assert connection.IDLE_MAX_S < 5.0  # Deepgram cierra la conexión a los ~5 s (medido)
     server = ImpatientServer(patience=5.0)
     pool = local_pool(server)
     assert pool.request("GET", "/", b"", {}) == b"ok 1"
-    assert pool.request("GET", "/", b"", {}) == b"ok 1"  # enseguida: la misma conexión (más rápido)
+    assert pool.request("GET", "/", b"", {}) == b"ok 1"  # inmediatamente: misma conexión (más rápido)
 
 
 def test_errors_never_show_page_code():

@@ -1,8 +1,9 @@
-"""Quién habla: cada voz se resume en una "huella" (embedding) y las parecidas se agrupan como la misma persona.
+"""Identificación de hablantes: cada voz se resume en una huella (embedding) y las voces parecidas se agrupan como la
+misma persona.
 
-No sabe nombres: numera las voces en el orden en que aparecen ("Voz 1", "Voz 2"…) y las reconoce cuando vuelven a
-hablar. El modelo (CAM++, entrenado con miles de voces de VoxCeleb) es chico (~30 MB), corre en la CPU y tarda
-unos milisegundos por frase.
+No conoce nombres: numera las voces en el orden en que aparecen ("Voz 1", "Voz 2"...) y las reconoce cuando vuelven a
+hablar. El modelo (CAM++, entrenado con miles de voces de VoxCeleb) pesa unos 30 MB, corre en la CPU y tarda unos
+milisegundos por frase.
 """
 
 from __future__ import annotations
@@ -75,8 +76,9 @@ _sessions_lock = threading.Lock()
 
 
 def session(path: Path):
-    """El modelo de huellas de voz, uno solo para todo Bubble (crearlo congela la ventana ~0,2 s: onnxruntime no
-    suelta a Python mientras tanto)."""
+    """Modelo de huellas de voz, compartido por todo Bubble. Crearlo bloquea la ventana unos 0,2 s porque onnxruntime
+    no libera el intérprete de Python durante ese tiempo.
+    """
     with _sessions_lock:
         if str(path) not in _sessions:
             import onnxruntime
@@ -91,8 +93,9 @@ def session(path: Path):
 
 
 class SpeakerTracker:
-    """Asigna un número a cada voz. `same` y `maybe` son umbrales de parecido (coseno) que se ajustaron con el
-    laboratorio de voz (tools/voice_lab.py)."""
+    """Asigna un número a cada voz. `same` y `maybe` son umbrales de similitud (coseno) ajustados con el laboratorio de
+    voz (tools/voice_lab.py).
+    """
 
     def __init__(self, model_path: Path | None = None, same: float = 0.6, maybe: float = 0.5,
                  progress: Progress | None = None) -> None:
@@ -114,8 +117,9 @@ class SpeakerTracker:
         return vector / (np.linalg.norm(vector) + 1e-9)
 
     def peek(self, audio: np.ndarray) -> int:
-        """Si es una voz ya conocida (bastante parecida), su número; si no, 0. No crea voces ni las modifica: sirve
-        para mostrar quién habla mientras todavía está hablando."""
+        """Devuelve el número de una voz ya conocida (similitud alta) o 0 si no hay coincidencia. No crea ni
+        modifica voces: sirve para mostrar quién habla mientras todavía está hablando.
+        """
         vector = self.embed(audio)
         if vector is None:
             return 0
@@ -125,15 +129,16 @@ class SpeakerTracker:
         return number if score >= self.same else 0
 
     def identify(self, audio: np.ndarray, hint: int = 0) -> int:
-        """Número de la voz (1, 2…). 0 si el audio es muy corto para saberlo. `hint`: la voz que se supone (la de la
-        frase anterior sin pausa): se prefiere si se parece lo suficiente."""
+        """Devuelve el número de la voz (1, 2...) o 0 si el audio es demasiado corto para identificarla. `hint` es
+        la voz supuesta (la de la frase anterior, sin pausa): se prefiere si la similitud es suficiente.
+        """
         vector = self.embed(audio)
         if vector is None:
             return hint
         mixed = False
         if len(audio) >= 2.4 * SAMPLE_RATE:
-            # ¿Hablaron dos personas en la misma frase (se pisaron)? Si las dos mitades no se parecen, la huella
-            # está mezclada: se usa la de la primera mitad y no se crea una voz nueva con eso.
+            # Detecta si hablaron dos personas en la misma frase (superposición). Si las dos mitades no se parecen, la
+            # huella está mezclada: se usa la de la primera mitad y no se crea una voz nueva.
             half = len(audio) // 2
             first, second = self.embed(audio[:half]), self.embed(audio[half:])
             if first is not None and second is not None and float(first @ second) < 0.4:
@@ -150,7 +155,7 @@ class SpeakerTracker:
                 voice = _Voice(len(self.voices) + 1, vector)
                 self.voices.append(voice)
                 return voice.number
-            # La huella de cada voz se va afinando con cada frase (promedio que pesa más lo reciente).
+            # La huella de cada voz se refina con cada frase mediante un promedio que pondera más lo reciente.
             weight = 1.0 / min(best.count + 1, 8)
             centroid = best.centroid * (1 - weight) + vector * weight
             best.centroid = centroid / (np.linalg.norm(centroid) + 1e-9)

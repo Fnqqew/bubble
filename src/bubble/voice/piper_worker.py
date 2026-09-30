@@ -1,11 +1,12 @@
-"""Las voces de Piper en un proceso aparte.
+"""Voces de Piper en un proceso aparte.
 
-Cargar una voz tarda ~2 s y, mientras tanto, onnxruntime no suelta el candado de Python: la ventana, la barra para
-escribir y los subtítulos quedaban congelados todo ese rato (medido: 1,6 a 1,9 s sin responder al abrir Bubble y al
-cambiar de idioma con Tab, que prepara la voz del idioma nuevo). En otro proceso, cargar y decir no traba nada.
+Cargar una voz tarda unos 2 s y, durante ese tiempo, onnxruntime mantiene el bloqueo global de Python (GIL): la ventana,
+la barra de escritura y los subtítulos quedaban congelados (entre 1,6 y 1,9 s al abrir Bubble y al cambiar de idioma con
+Tab, que prepara la voz del idioma nuevo). En un proceso separado, la carga y la síntesis no bloquean la interfaz.
 
-Se habla por las tuberías del proceso: cada mensaje es su largo (4 bytes) y un JSON; la respuesta a "say" trae después
-el audio (float32). Si el proceso no arranca o se cae, `Voices` sigue como antes, en este proceso.
+La comunicación usa las tuberías del proceso (stdin/stdout): cada mensaje es su longitud (4 bytes) seguida de un JSON;
+la respuesta a "say" incluye a continuación el audio (float32). Si el proceso no arranca o se cae, `Voices` sigue
+funcionando en el proceso actual.
 """
 
 from __future__ import annotations
@@ -24,15 +25,17 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-MAX_LOADED = 3  # voces cargadas a la vez en el proceso (cada una ocupa 60-100 MB)
+MAX_LOADED = 3  # voces cargadas a la vez en el proceso (60-100 MB cada una)
 
 
 class VoiceError(Exception):
-    """Esa voz no pudo cargar o decir el texto (el proceso sigue andando)."""
+    """La voz no pudo cargarse o sintetizar el texto (el proceso sigue activo)."""
 
 
 def _python() -> str:
-    """python.exe (sin ventana) antes que pythonw.exe: con pythonw, las tuberías del proceso no siempre andan."""
+    """Usa python.exe (sin ventana) en lugar de pythonw.exe: con pythonw, las tuberías del proceso no siempre
+    funcionan.
+    """
     executable = Path(sys.executable)
     console = executable.with_name("python.exe")
     return str(console if executable.name.lower() == "pythonw.exe" and console.exists() else executable)
@@ -61,22 +64,24 @@ def _read(stream) -> dict:
 
 
 class PiperProcess:
-    """El proceso de voces, visto desde Bubble. Un pedido a la vez (cada voz dice una frase por vez igual)."""
+    """Proceso de voces visto desde Bubble. Atiende un pedido a la vez (cada voz sintetiza una frase por vez de todos
+    modos).
+    """
 
     def __init__(self) -> None:
         self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
-        self.loaded: list[str] = []  # (lo que el proceso tiene cargado, la más reciente al final)
-        self.failed = ""  # por qué no se pudo usar el proceso (entonces se usa este)
+        self.loaded: list[str] = []  # voces cargadas en el proceso, la más reciente al final
+        self.failed = ""  # motivo por el que no se pudo usar el proceso (se usa el actual)
 
     def _start(self) -> subprocess.Popen:
-        source = str(Path(__file__).resolve().parents[2])  # la carpeta con "bubble", aunque no esté instalado
+        source = str(Path(__file__).resolve().parents[2])  # carpeta que contiene "bubble", aunque no esté instalado
         env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [source, os.environ.get("PYTHONPATH")])),
                    PYTHONIOENCODING="utf-8")
         process = subprocess.Popen([_python(), "-m", "bubble.voice.piper_worker"],
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                    creationflags=NO_WINDOW, env=env)
-        reply = _read(process.stdout)  # el proceso avisa que está listo (o por qué no)
+        reply = _read(process.stdout)  # el proceso avisa que está listo (o el motivo por el que no)
         if not reply.get("ok"):
             process.kill()
             raise RuntimeError(reply.get("error") or "el proceso de voces no arrancó")
@@ -94,7 +99,7 @@ class PiperProcess:
                     payload = _read_exactly(self._process.stdout, 4 * reply["samples"]) if reply.get("samples") else b""
                     return reply, payload
                 except (EOFError, OSError, ValueError, struct.error) as exc:
-                    self.close()  # se cayó: se arranca de nuevo una vez
+                    self.close()  # se cayó: se reinicia una sola vez
                     if attempt:
                         raise RuntimeError(f"el proceso de voces se cerró: {exc}") from exc
         raise RuntimeError("el proceso de voces no responde")
@@ -134,7 +139,7 @@ class PiperProcess:
 # ---------------------------------------------------------------- el proceso de voces
 def _serve() -> None:
     stdin, stdout = sys.stdin.buffer, sys.stdout.buffer
-    sys.stdout = sys.stderr  # nada que se imprima puede mezclarse con los mensajes
+    sys.stdout = sys.stderr  # evita que cualquier impresión se mezcle con los mensajes
     try:
         from piper import PiperVoice
         from piper.config import SynthesisConfig

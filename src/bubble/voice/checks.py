@@ -1,9 +1,10 @@
-"""Pruebas de la página «Pruebas»: tu micrófono, tu PC y cuánto tarda cada paso de la voz.
+"""Pruebas de la página «Pruebas»: micrófono, equipo y tiempos de cada paso de la voz.
 
-- Micrófono: leés una frase y se mide el volumen de tu voz, el ruido de fondo, si satura y cuánto de la frase entendió
-  Whisper. Con eso se dice si va a andar bien, normal o mal para traducir, y qué cambiar.
-- Tu PC: procesador, memoria y placa de video, y cuánto tardan de verdad en esta PC entender una frase y armar la voz.
-  Con eso se estima cuánto tarda tu voz traducida desde que terminás de hablar.
+- Micrófono: el jugador lee una frase y se mide el volumen de su voz, el ruido de fondo, la saturación y la proporción
+  de la frase que Whisper entendió. Con eso se indica si el micrófono es adecuado para traducir (bien, normal o mal) y
+  qué conviene cambiar.
+- Equipo: procesador, memoria y placa de video, y el tiempo real que tarda este equipo en reconocer una frase y generar
+  la voz. Con eso se estima el tiempo que transcurre entre el fin de la frase hablada y la voz traducida.
 """
 
 from __future__ import annotations
@@ -17,11 +18,11 @@ from dataclasses import dataclass, field
 import numpy as np
 
 SAMPLE_RATE = 16000
-BLOCK = 512  # 32 ms: lo que procesa el detector de voz de una vez
+BLOCK = 512  # 32 ms: bloque que el detector de voz procesa por vez
 
-# Frase para leer en la prueba de micrófono (tiene pregunta, voseo y palabras de juego, como en una partida).
+# Frase que se lee en la prueba de micrófono (incluye pregunta, voseo y vocabulario de juego, como en una partida).
 SENTENCES = {
-    "es": "Che, ¿alguien viene conmigo a la torre? Dale, esperame que ya voy.",
+    "es": "Hola, ¿alguien viene conmigo a la torre? Esperame, que ya voy.",
     "en": "Hey, is anyone coming with me to the tower? Wait for me, I'm on my way.",
     "pt": "Mano, alguém vem comigo até a torre? Espera aí que eu já vou.",
     "fr": "Salut, quelqu'un vient avec moi à la tour ? Attends-moi, j'arrive.",
@@ -37,7 +38,7 @@ SENTENCES = {
     "ko": "야, 누구 나랑 탑에 같이 갈 사람? 기다려, 금방 갈게.",
     "hi": "अरे, कोई मेरे साथ टावर चलेगा? मेरा इंतज़ार करो, मैं आ रहा हूँ।",
     "ar": "مرحبًا، هل يأتي أحد معي إلى البرج؟ انتظروني، أنا قادم.",
-}  # (japonés, chino y tailandés no separan palabras con espacios: ahí se lee la de inglés)
+}  # (japonés, chino y tailandés no separan palabras con espacios: se usa la frase en inglés)
 RATINGS = ("mal", "normal", "bien")
 
 
@@ -46,7 +47,7 @@ def sentence_for(language: str) -> str:
 
 
 def words(text: str) -> list[str]:
-    """Las palabras, sin mayúsculas ni tildes: "Sí" y "si" cuentan igual (para traducir no cambian nada)."""
+    """Palabras del texto, sin mayúsculas ni tildes: "Sí" y "si" se consideran iguales (no afecta la traducción)."""
     import unicodedata
 
     folded = unicodedata.normalize("NFKD", text.casefold())
@@ -54,7 +55,7 @@ def words(text: str) -> list[str]:
 
 
 def word_error_rate(reference: str, heard: str) -> float:
-    """Palabras mal entendidas, de 0 (ninguna) a 1 (todas)."""
+    """Proporción de palabras mal reconocidas, de 0 (ninguna) a 1 (todas)."""
     ref, hyp = words(reference), words(heard)
     row = list(range(len(hyp) + 1))
     for i, expected in enumerate(ref, 1):
@@ -65,7 +66,9 @@ def word_error_rate(reference: str, heard: str) -> float:
 
 
 def record_phrase(mic, max_s: float = 10.0, quiet_s: float = 1.0, wait_s: float = 5.0, vad=None) -> np.ndarray:
-    """Graba hasta que dejás de hablar (o `max_s`). Si en `wait_s` no hablaste, termina igual."""
+    """Graba hasta que el jugador deja de hablar o se alcanza `max_s`. Si no habla en `wait_s`, la grabación termina
+    igualmente.
+    """
     from . import audio as audio_io
 
     if vad is None:
@@ -96,10 +99,10 @@ def record_phrase(mic, max_s: float = 10.0, quiet_s: float = 1.0, wait_s: float 
 @dataclass
 class MicReport:
     rating: str  # "bien" | "normal" | "mal"
-    voice_db: float  # volumen de tu voz (dBFS: 0 es el máximo)
-    noise_db: float  # ruido de fondo cuando no hablás
-    clipped: float  # parte del audio saturado
-    accuracy: float  # palabras bien entendidas (0 a 1)
+    voice_db: float  # volumen de la voz (dBFS: 0 es el máximo)
+    noise_db: float  # ruido de fondo sin hablar
+    clipped: float  # proporción de audio saturado
+    accuracy: float  # palabras bien reconocidas (0 a 1)
     heard: str
     tips: list[str] = field(default_factory=list)
 
@@ -113,12 +116,13 @@ def _worst(*ratings: str) -> str:
 
 
 def analyze_mic(audio: np.ndarray, heard: str, expected: str, speech_probs: np.ndarray | None = None) -> MicReport:
-    """Qué tan bien va a andar ese micrófono para traducir tu voz. `speech_probs`: el detector de voz cada 32 ms (sin
-    eso, se separa voz de silencio por volumen)."""
+    """Evalúa qué tan adecuado es el micrófono para traducir la voz. `speech_probs`: salida del detector de voz cada 32
+    ms (si falta, se separa voz de silencio por volumen).
+    """
     audio = np.asarray(audio, dtype=np.float32).ravel()
     frames = audio[: len(audio) // BLOCK * BLOCK].reshape(-1, BLOCK)
     if not len(frames):
-        return MicReport("mal", -120.0, -120.0, 0.0, 0.0, heard, [("No me llega nada del micrófono. Fijate que "
+        return MicReport("mal", -120.0, -120.0, 0.0, 0.0, heard, [("No me llega nada del micrófono. Verificá que "
                                                                    "esté conectado y elegido en la página Voz.")])
     rms = np.sqrt(np.mean(frames ** 2, axis=1)) + 1e-9
     if speech_probs is not None and len(speech_probs) >= len(rms):
@@ -206,16 +210,16 @@ class PcReport:
     threads: int
     memory_gb: float
     gpus: list[str]
-    whisper: str  # modelo con el que se entiende la voz en esta PC
-    understand_s: float  # entender una frase de ~3 s
-    voice_s: float  # armar la voz traducida
-    translate_s: float  # Claude (lo que se midió o lo típico)
+    whisper: str  # modelo de reconocimiento de voz usado en esta PC
+    understand_s: float  # reconocer una frase de ~3 s
+    voice_s: float  # generar la voz traducida
+    translate_s: float  # Claude (valor medido o típico)
     rating: str = ""
-    expected_s: float = 0.0  # desde que terminás de hablar hasta que suena
+    expected_s: float = 0.0  # desde que termina de hablar hasta que suena la voz
     tips: list[str] = field(default_factory=list)
 
 
-PAUSE_S = 0.3  # la pausa que hace falta para saber que terminaste (cuando la frase suena terminada)
+PAUSE_S = 0.3  # pausa necesaria para dar la frase por terminada
 
 
 def rate_pc(report: PcReport) -> PcReport:
@@ -230,7 +234,7 @@ def rate_pc(report: PcReport) -> PcReport:
         report.rating = "lenta"
     tips = report.tips
     if report.threads < 6:
-        tips.append("Tu procesador es algo justo, así que uso lo más liviano para que Roblox no se trabe. En "
+        tips.append("Tu procesador es algo justo, así que uso lo más liviano para no restarle fluidez a Roblox. En "
                     "Ajustes, en Rendimiento, podés elegir «Liviano».")
     if report.understand_s > 1.5:
         tips.append("En esta PC me cuesta entender tu voz rápido. Cerrá los programas pesados mientras jugás, "
@@ -243,7 +247,7 @@ def rate_pc(report: PcReport) -> PcReport:
     if report.translate_s > 2.5:
         tips.append("Claude tardó más de lo normal. Puede ser tu internet o que esté cargado.")
     if not tips:
-        tips.append("Tu PC está sobrada para Bubble.")
+        tips.append("Tu PC rinde de sobra con Bubble.")
     return report
 
 

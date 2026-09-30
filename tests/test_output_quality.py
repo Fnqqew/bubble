@@ -17,15 +17,16 @@ def run_filter(chunks: list[str], count: int = 1) -> dict[int, str]:
 def test_output_filter_single_and_split_tags():
     assert run_filter(["<t1>hola ", "che</t1>"]) == {0: "hola che"}
     assert run_filter(["Sure! <", "t1>gracias", ", bro<", "/t1> hope it helps"]) == {0: "gracias, bro"}
-    assert run_filter(["sin marcas"]) == {0: "sin marcas"}  # respaldo con un solo mensaje
+    assert run_filter(["sin marcas"]) == {0: "sin marcas"}  # respaldo con un único mensaje
 
 
 def test_output_filter_batch_streams_each_message_in_order():
     chunks = ["<t1>hola</t", "1>\n<t2>qué ", "onda</t2><t3", ">gracias</t3>"]
     assert run_filter(chunks, 3) == {0: "hola", 1: "qué onda", 2: "gracias"}
-    # Sin marcas en un lote no se puede saber qué es de quién: no se devuelve nada (se reintenta aparte).
+    # Sin marcas en un lote no se puede determinar a quién corresponde cada texto: no se devuelve nada (se reintenta por
+    # separado).
     assert run_filter(["hola qué onda"], 2) == {}
-    # Una marca fuera de rango se ignora.
+    # Se ignora una marca fuera de rango.
     assert run_filter(["<t9>x</t9><t1>ok</t1>"], 1) == {0: "ok"}
 
 

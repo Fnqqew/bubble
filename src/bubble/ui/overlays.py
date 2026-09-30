@@ -37,8 +37,8 @@ class _Row:
 class TranslationOverlay:
     """Lista de traducciones recientes que desaparecen solas. No recibe clics ni foco.
 
-    Solo se ve mientras `visible_when()` es True (Roblox en primer plano): si salís del juego se oculta
-    y vuelve a aparecer al volver.
+    Solo se ve mientras `visible_when()` es True (Roblox en primer plano): si el jugador sale del juego se oculta y
+    vuelve a aparecer al regresar.
     """
 
     MAX_LINES = 6
@@ -86,7 +86,7 @@ class TranslationOverlay:
         return row
 
     def set_text(self, row: _Row | None, text: str, muted: bool = False) -> bool:
-        """Cambia el texto de una fila (ej. el original por la traducción) sin moverla de lugar."""
+        """Cambia el texto de una fila (por ejemplo, el original por la traducción) sin moverla de lugar."""
         if row is None or row not in self._lines:
             return False
         row.label.configure(text=text, fg=MUTED if muted else FG)
@@ -121,33 +121,33 @@ class TranslationOverlay:
             row.frame.destroy()
             self._lines.remove(row)
         if self._lines:
-            self._show_window()  # se oculta si saliste de Roblox y reaparece al volver
+            self._show_window()  # se oculta al salir de Roblox y reaparece al volver
         else:
             self.win.withdraw()
         self.win.after(250, self._tick)
 
 
 class ComposeBar:
-    """Barra para escribir en tu idioma: una sola línea, minimalista, flotando abajo al centro del juego.
+    """Barra de una sola línea, minimalista, para escribir en el idioma del jugador; flota abajo al centro del juego.
 
-    Mientras escribís muestra cómo va a quedar la traducción; con Enter la traduce (si todavía no estaba lista) y la
-    manda al chat de Roblox. Tab cambia el idioma (el chip de la izquierda), ↑/↓ el tono (los puntos de la derecha)
-    y Esc cierra (lo que escribiste vuelve si la abrís enseguida).
+    Mientras se escribe muestra cómo quedará la traducción; con Enter se traduce (si aún no estaba lista) y se envía
+    al chat de Roblox. Tab cambia el idioma (el chip de la izquierda), ↑/↓ el tono (los puntos de la derecha) y Esc
+    cierra la barra (el texto escrito se conserva si se reabre enseguida).
     """
 
     WIDTH = 640
-    PREVIEW_DELAY_MS = 650  # se traduce para la vista previa cuando dejás de escribir un momento
-    # Con Tab o ↑/↓ se pide enseguida (antes esperaba lo mismo que al escribir: el idioma nuevo tardaba en aparecer).
-    # Un poquito igual, por si pasás por varios seguidos.
+    PREVIEW_DELAY_MS = 650  # se traduce para la vista previa tras una breve pausa al escribir
+    # Con Tab o ↑/↓ la traducción se pide casi de inmediato, para que el idioma nuevo aparezca sin demora. Se mantiene
+    # una pequeña espera por si se recorren varios seguidos.
     SWITCH_DELAY_MS = 150
     KEEP_DRAFT_S = 120
     BG = "#16171b"
-    FIELD = BG  # una sola superficie: sin cajas adentro de cajas
+    FIELD = BG  # una sola superficie, sin cajas anidadas
     LINE = "#25272d"
     TEXT = "#f1f3f5"
     HINT = "#5f656e"
     PREVIEW = "#8fb8ff"
-    PRO_PREVIEW = "#f5d58a"  # con Bubble Pro, la traducción que vas a mandar se ve dorada
+    PRO_PREVIEW = "#f5d58a"  # con Bubble Pro, la traducción a enviar se muestra en dorado
     CHIP_BG = (35, 50, 74)
     CHIP_FG = (159, 198, 255)
 
@@ -158,16 +158,18 @@ class ComposeBar:
         on_submit: Callable[..., None],
         on_close: Callable[[], None],
     ) -> None:
-        self.on_preview = on_preview  # pedir la traducción de (texto, idioma, tono) para mostrarla
+        self.on_preview = on_preview  # pide la traducción de (texto, idioma, tono) para mostrarla
         self.on_submit = on_submit  # traducir (si hace falta) y enviar: (texto, idioma, tono, voice=en voz)
         self.on_close = on_close  # se cerró sin enviar
-        # Cambiaste el idioma con Tab (o con un clic en el chip): es el mismo para tu voz y para chat a voz.
+        # Se cambió el idioma con Tab (o con un clic en el chip): es el mismo para la voz del jugador y para chat a voz.
         self.on_target: Callable[[str], None] | None = None
-        # Ctrl+P: pasar de Basic a Pro (o al revés) sin salir del juego.
+        # Ctrl+P: alterna entre Basic y Pro sin salir del juego.
         self.on_toggle_plan: Callable[[], None] | None = None
-        # Cambiaste el tono con ↑/↓: queda ese para la próxima (antes volvía al de Ajustes al reabrir la barra).
+        # Se cambió el tono con ↑/↓: se conserva para la próxima vez, en lugar de volver al de Ajustes al reabrir la
+        # barra.
         self.on_tone: Callable[[int], None] | None = None
-        # La voz con la que se dice (Ctrl+Enter, tu voz): mujer u hombre, y con Pro su personalidad.
+        # Voz con la que se reproduce el mensaje (Ctrl+Enter, voz del jugador): femenina o masculina y, con Pro, su
+        # personalidad.
         self.on_gender: Callable[[str], None] | None = None
         self.on_personality: Callable[[str], None] | None = None
         self.gender = "femenina"
@@ -176,17 +178,17 @@ class ComposeBar:
         self.labels: dict[str, str] = {}
         self.index = 0
         self.tone = 3
-        self.busy = False  # traduciendo para enviar: no se edita
-        # Abierta (se puede leer desde cualquier hilo; `visible` pregunta a Tk y eso solo vale en el de la ventana).
+        self.busy = False  # traduciendo para enviar: no se puede editar
+        # Abierta. Puede leerse desde cualquier hilo; `visible` consulta a Tk y solo es válido en el hilo de la ventana.
         self.showing = False
         self._after: str | None = None
         self._dots: str | None = None
         self._requested: tuple[str, str, int] | None = None
-        self._cycling = False  # ya usaste Tab: se adelanta la traducción del idioma siguiente
+        self._cycling = False  # ya se usó Tab: se adelanta la traducción del idioma siguiente
         self._draft = ""
         self._draft_at = 0.0
         self._x = self._bottom = 0
-        self._images: dict[str, object] = {}  # PhotoImage vivas (Tk no guarda la referencia)
+        self._images: dict[str, object] = {}  # PhotoImage vivas (Tk no conserva la referencia)
         self.win = tk.Toplevel(root)
         self.win.withdraw()
         self.win.overrideredirect(True)
@@ -216,18 +218,18 @@ class ComposeBar:
                                 wraplength=self.WIDTH - 40)
         self.divider = tk.Frame(body, bg=self.LINE, height=1)
         self.divider.pack(fill="x", pady=(12, 0))
-        # Los idiomas, al apretar Tab: el actual y los de al lado (un clic elige cualquiera).
+        # Idiomas que se muestran al pulsar Tab: el actual y los contiguos (un clic elige cualquiera).
         self.strip = tk.Frame(body, bg=self.BG)
         footer = tk.Frame(body, bg=self.BG)
         footer.pack(fill="x", pady=(8, 0))
-        # En qué plan estás: "✦ PRO" dorado o "BASIC". Ctrl+P (o un clic acá) cambia sin salir del juego.
+        # Plan activo: "✦ PRO" en dorado o "BASIC". Ctrl+P (o un clic aquí) lo cambia sin salir del juego.
         self.plan = tk.Label(footer, font=("Segoe UI Semibold", 9), bg=self.BG, cursor="hand2")
         self.plan.pack(side="right")
         self.plan.bind("<Button-1>", lambda _e: self._toggle_plan())
-        # Con Pro: cómo suena la voz (un clic pasa a la siguiente).
+        # Con Pro: personalidad de la voz (un clic pasa a la siguiente).
         self.mood = tk.Label(footer, font=("Segoe UI Semibold", 9), bg=self.BG, cursor="hand2")
         self.mood.bind("<Button-1>", lambda _e: self._next_personality())
-        # Voz de mujer u hombre (un clic o Ctrl+G).
+        # Voz femenina o masculina (un clic o Ctrl+G).
         self.voice_label = tk.Label(footer, font=("Segoe UI Semibold", 9), bg=self.BG, fg="#c9ced6", cursor="hand2")
         self.voice_label.pack(side="right", padx=(0, 12))
         self.voice_label.bind("<Button-1>", lambda _e: self._toggle_gender())
@@ -238,7 +240,7 @@ class ComposeBar:
 
         self.entry.bind("<Return>", self._submit)
         self.entry.bind("<KP_Enter>", self._submit)
-        self.entry.bind("<Control-Return>", lambda _e: self._submit(voice=True))  # decirlo en voz
+        self.entry.bind("<Control-Return>", lambda _e: self._submit(voice=True))  # reproducir en voz
         self.entry.bind("<Escape>", self._cancel)
         self.entry.bind("<Tab>", self._next_target)
         self.entry.bind("<Shift-Tab>", lambda _e: self._next_target(step=-1))
@@ -290,7 +292,7 @@ class ComposeBar:
 
         height = self.win.winfo_reqheight()
         motion.appear(self.win, self._x, self._bottom - height, rise=12, seconds=0.18,
-                      alive=lambda: self.showing)  # sube desvaneciéndose
+                      alive=lambda: self.showing)  # sube mientras se desvanece
         if not self._styled:
             self._styled = True
             _round_corners(self.win)
@@ -299,13 +301,13 @@ class ComposeBar:
             self._schedule_preview()
 
     def _fit(self) -> None:
-        """Alto justo para el contenido; si la traducción ocupa más líneas, la barra crece hacia arriba."""
+        """Alto ajustado al contenido; si la traducción ocupa más líneas, la barra crece hacia arriba."""
         self.win.update_idletasks()
         height = self.win.winfo_reqheight()
         self.win.geometry(f"{self.WIDTH}x{height}+{self._x}+{self._bottom - height}")
 
     def show_preview(self, key: tuple[str, str, int], text: str, state: str) -> None:
-        """Traducción de `key` para mostrar: state = "working" (llegando), "done" o "error"."""
+        """Traducción de `key` para mostrar: state = "working" (en curso), "done" o "error"."""
         if not self.visible or key != self.current():
             return
         if state == "error":
@@ -317,7 +319,7 @@ class ComposeBar:
             self._prefetch()
 
     def unlock(self) -> None:
-        """Falló la traducción al enviar: se puede corregir y volver a intentar."""
+        """Falló la traducción al enviar: se puede corregir y reintentar."""
         self.busy = False
         self.entry.configure(state="normal")
         self.entry.focus_set()
@@ -332,11 +334,11 @@ class ComposeBar:
         self.busy = False
         self.showing = False
         if sent:
-            self.win.withdraw()  # ya: el mensaje se escribe en el juego enseguida
+            self.win.withdraw()  # el mensaje se escribe en el juego de inmediato
             return
         from . import motion
 
-        # Se desvanece (si la volvés a abrir en el medio, queda abierta).
+        # Se desvanece; si se reabre mientras tanto, queda abierta.
         motion.vanish(self.win, self.win.withdraw, alive=lambda: not self.showing)
 
     def _preview_color(self) -> str:
@@ -399,14 +401,15 @@ class ComposeBar:
             self.mood.pack(side="right", padx=(0, 12), before=self.voice_label)
         else:
             self.mood.pack_forget()
-        # La ayuda usa lo que dejan los botones de la derecha; si no entra, baja a otra línea (nunca se encima).
+        # La ayuda ocupa el espacio que dejan los botones de la derecha; si no cabe, pasa a otra línea (nunca se
+        # superpone).
         self.win.update_idletasks()
         taken = sum(child.winfo_reqwidth() + 12 for child in self.hint.master.pack_slaves() if child is not self.hint)
         self.hint.configure(wraplength=max(120, self.WIDTH - 36 - taken - 8), justify="left")
         self._render_strip()
 
     def _render_strip(self) -> None:
-        """Los idiomas alrededor del elegido (se ve apenas apretás Tab): ES · EN · [PT] · FR · DE…  3/59."""
+        """Idiomas alrededor del elegido (se muestran al pulsar Tab): ES · EN · [PT] · FR · DE…  3/59."""
         for child in self.strip.winfo_children():
             child.destroy()
         if not self._cycling or len(self.targets) < 2:
@@ -454,11 +457,13 @@ class ComposeBar:
             self.on_preview(*key)
 
     def _prefetch(self) -> None:
-        """Recorriendo idiomas con Tab: la traducción del siguiente se pide ya, así aparece al instante."""
+        """Al recorrer idiomas con Tab, la traducción del siguiente se pide de antemano para que aparezca al
+        instante.
+        """
         text, _target, tone = self.current()
         if self._cycling and text and len(self.targets) > 1:
             following = self.targets[(self.index + 1) % len(self.targets)]
-            if following != MULTI_TARGET:  # ("todos los del chat" son varias traducciones: solo si llegás)
+            if following != MULTI_TARGET:  # ("todos los del chat" son varias traducciones: solo si se llega a ese)
                 self.on_preview(text, following, tone)
 
     def _next_target(self, _event=None, step: int = 1) -> str:
@@ -479,7 +484,7 @@ class ComposeBar:
         self.entry.focus_set()
 
     def _toggle_gender(self) -> str:
-        """Voz de mujer o de hombre (para Ctrl+Enter y tu voz)."""
+        """Voz femenina o masculina (para Ctrl+Enter y la voz del jugador)."""
         if not self.busy:
             self.gender = "masculina" if self.gender == "femenina" else "femenina"
             self._render_target()
@@ -495,7 +500,7 @@ class ComposeBar:
             self.on_personality(self.personality)
 
     def _click_tone(self, event) -> None:
-        """Un clic en los puntitos elige ese tono."""
+        """Un clic en los puntos elige ese tono."""
         width = max(1, self.tone_view.winfo_width())
         self._change_tone(min(5, max(1, int(event.x / width * 5) + 1)) - self.tone)
 
@@ -530,14 +535,14 @@ class ComposeBar:
         return "break"
 
     def _close_if_left(self) -> None:
-        # Si hiciste clic en el juego (u otra ventana), la barra se cierra; lo escrito vuelve si la reabrís.
+        # Si se hace clic en el juego (u otra ventana), la barra se cierra; el texto escrito se conserva si se reabre.
         if self.visible and not self.busy and self.win.focus_displayof() is None:
             self.close()
 
 
 MULTI_TARGET = "*"  # "todos los idiomas del chat" (ver main_window.MULTI)
 GENDER_LABELS = {"femenina": "♀ Mujer", "masculina": "♂ Hombre"}
-MOODS = {"alegre": "Alegre", "canchera": "Canchera", "tranquila": "Tranquila"}  # (las personalidades de Pro)
+MOODS = {"alegre": "Alegre", "canchera": "Expresiva", "tranquila": "Tranquila"}  # (personalidades de Pro)
 
 
 def _rgb(color: str) -> tuple[int, int, int]:
@@ -546,7 +551,7 @@ def _rgb(color: str) -> tuple[int, int, int]:
 
 @functools.lru_cache(maxsize=4)
 def _chip_font(size: int):
-    """Segoe UI Semibold (leerla del disco en cada Tab tardaba)."""
+    """Segoe UI Semibold (leerla del disco en cada Tab era lento)."""
     from PIL import ImageFont
 
     try:
@@ -556,7 +561,7 @@ def _chip_font(size: int):
 
 
 def _chip_image(text: str, background: tuple, foreground: tuple, surface: tuple):
-    """Chip redondeado con el idioma (dibujado suave, a 3x, y achicado)."""
+    """Chip redondeado con el idioma (dibujado a 3x y reducido para suavizar los bordes)."""
     from PIL import Image, ImageDraw, ImageTk
 
     scale = 3
@@ -571,7 +576,7 @@ def _chip_image(text: str, background: tuple, foreground: tuple, surface: tuple)
 
 
 def _tone_image(tone: int, surface: tuple, color: tuple | None = None):
-    """Cinco puntos: cuántos llenos = qué tan informal (1 neutro … 5 jerga)."""
+    """Cinco puntos: la cantidad de llenos indica el grado de informalidad (1 neutro … 5 jerga)."""
     from PIL import Image, ImageDraw, ImageTk
 
     scale = 3
@@ -586,7 +591,7 @@ def _tone_image(tone: int, surface: tuple, color: tuple | None = None):
 
 
 def _round_corners(window: tk.Misc) -> None:
-    """Esquinas redondeadas y borde sutil de Windows 11 (en Windows 10 queda recta, igual se ve bien)."""
+    """Esquinas redondeadas y borde sutil de Windows 11 (en Windows 10 las esquinas quedan rectas)."""
     import ctypes
 
     try:
@@ -600,7 +605,7 @@ def _round_corners(window: tk.Misc) -> None:
 
 
 class HotkeyCaptureDialog:
-    """Ventanita que espera la tecla o botón del mouse que el usuario quiere usar como atajo."""
+    """Ventana que espera la tecla o el botón del mouse que el usuario quiere usar como atajo."""
 
     def __init__(self, root: tk.Tk, on_done: Callable[[str | None], None]) -> None:
         self.on_done = on_done
@@ -613,7 +618,7 @@ class HotkeyCaptureDialog:
         self.win.attributes("-topmost", True)
         self.win.protocol("WM_DELETE_WINDOW", self._cancel)
         tk.Label(
-            self.win, text="Apretá la tecla o el botón del mouse\nque quieras usar para escribir en Roblox",
+            self.win, text="Presioná la tecla o el botón del mouse\nque quieras usar para escribir en Roblox",
             font=("Segoe UI", 13, "bold"), fg="#1f2328", bg="#ffffff", justify="center",
         ).pack(padx=28, pady=(22, 8))
         tk.Label(
@@ -629,7 +634,7 @@ class HotkeyCaptureDialog:
         y = root.winfo_rooty() + (root.winfo_height() - self.win.winfo_height()) // 3
         self.win.geometry(f"+{max(0, x)}+{max(0, y)}")
         self.win.focus_force()
-        self.win.grab_set()  # las teclas no llegan a la ventana principal mientras elegís
+        self.win.grab_set()  # las teclas no llegan a la ventana principal durante la selección
         threading.Thread(target=self._capture, name="bubble-capture", daemon=True).start()
         self.win.after(50, self._poll)
 
@@ -703,7 +708,7 @@ class CalibrationOverlay:
             return
         rect = Rect.from_points(*self.start, event.x, event.y)
         if rect.width < 40 or rect.height < 30:
-            return  # demasiado chico: probablemente un clic
+            return  # demasiado pequeño: probablemente un clic
         self._finish(rect.offset(self.area.left, self.area.top))
 
     def _finish(self, rect: Rect | None) -> None:

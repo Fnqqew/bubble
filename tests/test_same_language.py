@@ -43,7 +43,7 @@ async def test_messages_in_my_language_are_skipped_without_claude(detector, text
 @pytest.mark.parametrize("text", [
     "anyone wanna trade my dragon", "vc tá aí?", "obrigado mano", "the boss is too op", "bhai kidher hai tu",
     "wer will traden?",
-    # Una palabra sola que no estaba en ninguna lista se tomaba como un nombre y no se traducía.
+    # Una palabra sola ausente de todas las listas se interpretaba como un nombre propio y no se traducía.
     "merci", "danke", "grazie", "salamat", "makasih", "teşekkürler",
 ])
 async def test_messages_in_other_languages_are_translated(detector, text):
@@ -53,7 +53,7 @@ async def test_messages_in_other_languages_are_translated(detector, text):
     assert len(provider.requests) == 1
 
 
-# Mensajes reales de una grabación de Roblox (chat en español mezclado con un jugador que escribía en inglés).
+# Mensajes reales de una grabación de Roblox: chat en español mezclado con un jugador que escribía en inglés.
 @pytest.mark.parametrize("text", [
     "Sii", "ah", "nah", "aja", "Ahhhh", "nop", "Q", "Q PEDO", "tal vez see", "todo felicesxd", "NO HEMBRA",
     "SOY UN GATO", "MACHO PORFA", "entonces", "está muy devaluado el peso allá", "sofiiiiiii",

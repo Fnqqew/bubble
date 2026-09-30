@@ -1,9 +1,8 @@
 """Convierte las líneas del OCR en mensajes de chat y detecta cuáles son nuevos.
 
-El OCR sobre el chat de Roblox comete errores típicos que acá se toleran:
-- Íconos al principio de la línea (banderitas, insignias) leídos como basura: "-", "[\"]", "•".
-- Los dos puntos después del nombre leídos como ".'", "'.", "," o ";".
-- Nombres con letras cambiadas ("CCloverx3", "claverxg" en vez de "cloverx3").
+El OCR sobre el chat de Roblox comete errores típicos que aquí se toleran: - Íconos al principio de la línea (banderas,
+insignias) leídos como basura: "-", "["]", "•". - Los dos puntos posteriores al nombre leídos como ".'", "'.", "," o
+";". - Nombres con letras cambiadas ("CCloverx3", "claverxg" en vez de "cloverx3").
 """
 
 from __future__ import annotations
@@ -20,16 +19,16 @@ from typing import Callable
 from ..translate.base import ChatLine
 from .ocr import OcrRow
 
-# Basura inicial + etiquetas opcionales: "[Team]", "{To X}", "[🇮🇳]" leído como "[]" o "[\"]", o la banderita
-# leída sin el corchete de cierre ("[S Juan: ...").
+# Basura inicial y etiquetas opcionales: "[Team]", "{To X}", "[🇮🇳]" leído como "[]" o "[\"]", o la bandera leída sin el
+# corchete de cierre ("[S Juan: ...").
 _PREFIX = r"^[^\w\[{(]{0,4}(?:[\[{(][^\]})]{0,24}[\]})][^\w\[{(]{0,3}|[\[{(][^\s\]})]{0,3}\s+)*"
-# "Nombre: texto" con dos puntos (o punto y coma) bien leídos.
-_NAME = r"\w[\w.]{1,23}\w"  # 3 a 25 caracteres, sin terminar en punto (el punto suele ser ":" mal leído)
+# "Nombre: texto" con los dos puntos (o punto y coma) bien leídos.
+_NAME = r"\w[\w.]{1,23}\w"  # 3 a 25 caracteres, sin terminar en punto (suele ser un ":" mal leído)
 _STRONG = re.compile(_PREFIX + rf"\[?(?P<name>{_NAME}(?: \w[\w.]{{0,14}}\w)?)\]?\s*[:;]\s*(?P<text>\S.*)$")
-# Dos puntos mal leídos por el OCR (".'", "'.", ","): solo se acepta con nombres que parecen de usuario.
+# Dos puntos mal leídos por el OCR (".'", "'.", ","): solo se aceptan con nombres que parecen de usuario.
 _WEAK = re.compile(_PREFIX + rf"\[?(?P<name>{_NAME})\]?[.,'`’\"]{{1,2}}[:;.,'`’]?\s+(?P<text>\S.*)$")
 _SYSTEM_NAMES = ("system", "sistema", "server", "servidor", "announcement", "anuncio", "notice", "info")
-# Frases típicas de avisos automáticos de los juegos (aunque el OCR haya perdido la etiqueta [SYSTEM]).
+# Frases típicas de avisos automáticos de los juegos, aunque el OCR haya perdido la etiqueta [SYSTEM].
 _SYSTEM_CONTENT = re.compile(
     r"\(\+\d[\d,.]*\)"                                   # puntos ganados: (+25), (+3,750)
     r"|\bhas (?:added|joined|left|been|donated|earned|unlocked|received|won|reached|purchased)\b"
@@ -39,8 +38,8 @@ _SYSTEM_CONTENT = re.compile(
     re.IGNORECASE,
 )
 _TRAILING_JUNK = " •·—–-|_~"
-# El texto de la barra para escribir del chat de Roblox ("To chat click here or press / key"), en varios idiomas: no es
-# un mensaje. Si la zona del chat la incluye, se ignora (antes se pegaba al último mensaje como continuación).
+# Texto de la barra de escritura del chat de Roblox ("To chat click here or press / key") en varios idiomas. No es un
+# mensaje y se ignora si la zona del chat lo incluye.
 _INPUT_BAR = re.compile(
     r"to chat[, ]+click here|click here or press|press\s*\S{0,2}\s*key|para chatear|haz clic aqu[ií]|"
     r"presiona la tecla|pulsa la tecla|para conversar|clique aqui|pressione a tecla",
@@ -55,13 +54,13 @@ def _is_system_name(name: str) -> bool:
     if not key:
         return False
     if key in {"tem", "stem", "ystem"} or (key.startswith("sys") and len(key) <= 9):
-        return True  # pedazos de "[SYSTEM]" mal leído
+        return True  # fragmentos de "[SYSTEM]" mal leído
     return any(
         abs(len(key) - len(word)) <= 2 and SequenceMatcher(None, key, word).ratio() >= 0.75 for word in _SYSTEM_NAMES
     )
 
 
-_INNER_PUNCT = re.compile(r"[^\W\d_][.,;:!?$#%&*|/\\][^\W\d_]")  # "dom.te", "bg$d": signo pegado entre letras
+_INNER_PUNCT = re.compile(r"[^\W\d_][.,;:!?$#%&*|/\\][^\W\d_]")  # "dom.te", "bg$d": signo entre letras
 _CASE_FLIPS = re.compile(r"[a-zà-ÿ][A-ZÀ-Þ]")
 _VOWELS = set("aeiouyáéíóúàèìòùâêîôûäëïöüãõ")
 
@@ -72,7 +71,7 @@ def _odd_word(word: str) -> bool:
         return False
     if _INNER_PUNCT.search(core):
         return True
-    if len(_CASE_FLIPS.findall(core)) >= 2:  # "jiPCgmôtTt" (un "xXShadowXx" de nombre está en el nombre, no acá)
+    if len(_CASE_FLIPS.findall(core)) >= 2:  # "jiPCgmôtTt" (un "xXShadowXx" en el nombre no cuenta aquí)
         return True
     letters = [c for c in core.lower() if c.isalpha()]
     # Muchas letras distintas y ninguna vocal ("xkcdtrwq"); "kkkkk" o "wkwkwk" son risas, no basura.
@@ -80,8 +79,9 @@ def _odd_word(word: str) -> bool:
 
 
 def looks_garbled(text: str) -> bool:
-    """¿El OCR leyó mal este mensaje? (pasa sobre todo en su primer instante en pantalla, mientras aparece).
-    Palabras con signos en el medio o mayúsculas salteadas: la mitad o más de las palabras así es basura."""
+    """Indica si el OCR leyó mal el mensaje, algo frecuente en su primer instante en pantalla, mientras aparece. Se
+    considera basura si la mitad o más de las palabras tienen signos intermedios o mayúsculas alternadas.
+    """
     words = [word for word in text.split() if any(c.isalpha() for c in word)]
     if not words:
         return False
@@ -92,7 +92,7 @@ def looks_garbled(text: str) -> bool:
 def is_system_message(name: str, text: str, raw: str = "") -> bool:
     if _is_system_name(name) or _SYSTEM_CONTENT.search(text):
         return True
-    tag = re.match(r"^\W{0,3}\[([^\]]{2,12})\]", raw)  # "[SYSTEM]" al principio de la línea
+    tag = re.match(r"^\W{0,3}\[([^\]]{2,12})\]", raw)  # "[SYSTEM]" al inicio de la línea
     return bool(tag and _is_system_name(tag.group(1)))
 
 
@@ -115,16 +115,16 @@ def _looks_like_username(name: str) -> bool:
 
 @dataclass
 class ChatItem:
-    """Un mensaje del chat con su ubicación en la captura (para dibujar la traducción encima)."""
+    """Mensaje del chat con su ubicación en la captura (para dibujar la traducción encima)."""
 
     speaker: str
     text: str
     rows: list[OcrRow] = field(default_factory=list)
-    text_left: float = 0.0  # x donde empieza el mensaje (después de "Nombre:") en la primera línea
+    text_left: float = 0.0  # x donde empieza el texto (después de "Nombre:") en la primera línea
     kind: str = "player"  # "player" | "system" (avisos automáticos del juego: no se traducen)
-    # El mensaje tal como se leyó la primera vez (el que se tradujo), aunque ahora el OCR lo lea un poco distinto.
+    # Mensaje tal como se leyó la primera vez (el que se tradujo), aunque ahora el OCR lo lea distinto.
     origin: ChatLine | None = None
-    # Salió solo en la lectura de respaldo (fondo del chat desvanecido): puede ser texto mal leído; un mensaje nuevo
+    # Apareció solo en la lectura de respaldo (fondo del chat desvanecido) y puede ser texto mal leído. Un mensaje nuevo
     # así se confirma con otra lectura antes de traducirlo.
     uncertain: bool = False
     uid: int = 0  # identidad estable del mensaje en el seguidor del chat
@@ -159,7 +159,7 @@ def _x_at(row: OcrRow, char_index: int) -> float:
 
 
 def _text_start(row: OcrRow, name: str, body: str) -> float:
-    """Dónde empieza el mensaje en la fila: se tapa solo el texto, el nombre queda visible."""
+    """Posición donde empieza el mensaje en la fila: solo se cubre el texto y el nombre queda visible."""
     joined = " ".join(w.text for w in row.words) if row.words else row.text
     folded = joined.casefold()
     name_at = folded.find(name.casefold())
@@ -179,13 +179,14 @@ def parse_chat(
     return [item.line for item in parse_chat_items(rows, is_known_name, frame_width) if item.kind == "player"]
 
 
-CONTINUATION_INDENT = 14  # px: una continuación empieza en el borde (la banderita de un mensaje corre ~35 px)
-FAR_FROM_COLUMN = 150  # px: lo que empieza más a la derecha que esto del borde izquierdo del chat no es chat
+CONTINUATION_INDENT = 14  # px: una continuación empieza en el borde (la bandera de un mensaje desplaza ~35 px)
+FAR_FROM_COLUMN = 150  # px: lo que empieza más a la derecha que esto respecto del borde izquierdo no es chat
 
 
 def column_rows(rows: list[OcrRow]) -> list[OcrRow]:
-    """Solo las líneas de la columna del chat. Lo que empieza lejos a la derecha (la burbuja de otro jugador, un
-    nombre sobre una cabeza, un cartel del juego) se pegaba al mensaje o se tomaba como su continuación."""
+    """Solo las líneas de la columna del chat. Lo que empieza lejos a la derecha (la burbuja de otro jugador, un nombre
+    sobre una cabeza, un cartel del juego) se pegaría al mensaje o se tomaría como su continuación.
+    """
     starts = [row.left for row in rows if _STRONG.match(row.text.strip())]
     if not starts:
         return rows
@@ -197,7 +198,7 @@ _ICON_JUNK = re.compile(r"^\d{1,4}$")
 
 
 def _drop_icon_junk(name: str, body: str) -> tuple[str, str]:
-    """La banderita o el ícono antes del nombre, leído como números: "1151 melofruits" o "313: smegladon40: hola"."""
+    """La bandera o el ícono previo al nombre, leído como números: "1151 melofruits" o "313: smegladon40: hola"."""
     first, _, rest = name.partition(" ")
     if rest and _ICON_JUNK.match(first):
         name = rest
@@ -217,14 +218,14 @@ def parse_chat_items(
 ) -> list[ChatItem]:
     """Arma los mensajes 'Nombre: texto' con su ubicación.
 
-    Una línea sin nombre solo continúa al mensaje anterior si ese mensaje llegaba al borde derecho
-    del chat (`frame_width`, o sea, Roblox lo partió en dos líneas). Si no, es basura del OCR y se
-    descarta: pegarla al mensaje anterior producía mensajes mezclados y traducciones sin sentido.
+    Una línea sin nombre solo continúa el mensaje anterior si este llegaba al borde derecho del chat
+    (`frame_width`), es decir, si Roblox lo partió en dos líneas. En caso contrario es basura del OCR y se descarta,
+    porque pegarla al mensaje anterior producía mensajes mezclados y traducciones sin sentido.
     """
     is_known_name = is_known_name or (lambda _name: False)
     rows = column_rows(rows)
     # La continuación de un mensaje largo empieza en el borde izquierdo del chat; un mensaje nuevo, después de la
-    # banderita. Una línea corrida hacia la derecha es un mensaje al que el OCR le perdió los ":", no una continuación.
+    # bandera. Una línea desplazada hacia la derecha es un mensaje al que el OCR le perdió los ":", no una continuación.
     edge = min((row.left for row in rows if _LETTER.search(row.text)), default=0.0)
     # Una línea "llena" llega casi al borde donde Roblox corta el texto. Ese borde (`wrap_right`) se aprende
     # de los mensajes largos vistos; sin ese dato se usa el ancho calibrado.
@@ -235,13 +236,13 @@ def parse_chat_items(
         text = row.text.strip()
         bar = _INPUT_BAR.search(text)
         if bar:
-            # La barra para escribir: se corta ahí (y nada de lo que siga continúa un mensaje).
+            # Barra de escritura: se corta ahí y nada de lo que siga continúa un mensaje.
             text = text[:bar.start()].strip()
             if not text:
                 last_row = None
                 continue
         if len(_LETTER.findall(text)) < 1 or row.top <= 1:
-            # Sin letras, o cortada contra el borde de arriba (el OCR la leería distinta en cada captura).
+            # Sin letras, o cortada contra el borde superior (el OCR la leería distinto en cada captura).
             last_row = None
             continue
         match = _STRONG.match(text)
@@ -272,21 +273,22 @@ def parse_chat_items(
     if items and widest and frame_height:
         last = items[-1].rows[-1]
         if last.right >= 0.85 * widest and last.bottom >= frame_height - 1.3 * last.height:
-            # Llega al borde de abajo y ocupa todo el ancho: su segundo renglón puede estar justo afuera. Se confirma
-            # en otra captura (el chat sube o se lee entero) en vez de traducir la mitad.
+            # Llega al borde inferior y ocupa todo el ancho: su segunda línea puede haber quedado fuera. Se confirma en
+            # otra captura (el chat sube o se lee completo) en lugar de traducir solo la mitad.
             items[-1].uncertain = True
     return items
 
 
 class SpamFilter:
-    """Detecta spam para no traducirlo: letras repetidas, el mismo jugador repitiendo casi lo mismo,
-    o un jugador mandando muchos mensajes seguidos."""
+    """Detecta spam para no traducirlo: letras repetidas, el mismo jugador repitiendo casi el mismo texto o un jugador
+    enviando muchos mensajes seguidos.
+    """
 
     def __init__(self, window_s: float = 12.0, max_messages: int = 4, clock: Callable[[], float] = time.monotonic):
         self.window_s = window_s
         self.max_messages = max_messages
         self.clock = clock
-        self._recent: deque[tuple[str, str, float]] = deque(maxlen=200)  # (nombre, texto, momento)
+        self._recent: deque[tuple[str, str, float]] = deque(maxlen=200)  # (nombre, texto, instante)
 
     def check(self, line: ChatLine) -> str | None:
         """Motivo del spam ("repetición de letras", "mensaje repetido", "demasiados mensajes") o None."""
@@ -344,7 +346,7 @@ class NameBook:
         return max(cluster.items(), key=lambda item: item[1])[0]
 
     def recent(self, limit: int = 20) -> list[str]:
-        """Los nombres de los jugadores del chat, del que habló más recién al más viejo."""
+        """Nombres de los jugadores del chat, del que habló más recientemente al más antiguo."""
         return [max(cluster.items(), key=lambda item: item[1])[0] for cluster in reversed(self._clusters)][:limit]
 
     def is_known(self, name: str) -> bool:
@@ -357,7 +359,7 @@ _ENTRY_IDS = itertools.count(1)
 
 @dataclass(eq=False)
 class _Entry:
-    """Un mensaje del historial del chat (en el orden del chat)."""
+    """Mensaje del historial del chat (en el orden del chat)."""
 
     line: ChatLine
     first_seen: float
@@ -367,34 +369,34 @@ class _Entry:
     frames: int = 1
     announce: bool = False  # mensaje nuevo: se avisa apenas se confirma
     announced: bool = False
-    needed: int = 1  # capturas que tiene que aparecer antes de avisarlo (2 si salió de una lectura dudosa)
+    needed: int = 1  # capturas en que debe aparecer antes de avisarlo (2 si viene de una lectura dudosa)
     uid: int = field(default_factory=lambda: next(_ENTRY_IDS))  # identidad estable (aunque el texto se repita)
 
 
-LONG_TEXT = 10  # letras desde las que un texto casi igual identifica al mensaje aunque el nombre salga distinto
-MISREAD_NAME = 0.3  # parecido mínimo entre un nombre y su mala lectura ("Ana" y "Bruno" son 0.25: otra persona)
+LONG_TEXT = 10  # letras a partir de las cuales un texto casi igual identifica al mensaje aunque el nombre cambie
+MISREAD_NAME = 0.3  # parecido mínimo entre un nombre y su mala lectura ("Ana" y "Bruno" dan 0.25: otra persona)
 
 
 class ChatTracker:
     """Decide qué mensajes son nuevos.
 
     Guarda el historial del chat en orden y ubica cada captura dentro de ese historial alineando la
-    secuencia de mensajes visibles (no buscando cada texto suelto). Así:
+    secuencia de mensajes visibles, en lugar de buscar cada texto por separado. Así:
     - Lo que aparece debajo del último mensaje ubicado es nuevo, aunque repita un texto ya visto
       ("Plss donate" dos veces, o el mismo "gg" de hace un rato).
-    - Lo que aparece arriba de lo conocido es historial (subiste en el chat): no se traduce.
-    - Un mensaje que aparece ENTRE dos conocidos es uno que el OCR no había leído: si es reciente se
-      traduce igual (en las ráfagas se perdían).
+    - Lo que aparece arriba de lo conocido es historial (el jugador subió en el chat): no se traduce.
+    - Un mensaje ENTRE dos conocidos es uno que el OCR no había leído: si es reciente se traduce
+      igualmente, porque en las ráfagas se perdían.
     - Una línea que ocupa el lugar de un mensaje conocido y se le parece es ese mismo mensaje mal leído.
-    - Lo ya visto no se repite aunque el OCR lo lea un poco distinto, y no se olvida mientras siga visible.
+    - Lo ya visto no se repite aunque el OCR lo lea distinto, y no se olvida mientras siga visible.
     - Un mensaje se confirma apenas aparece (`confirm_frames=1`) o tras varias capturas seguidas.
     - Al empezar, lo que ya estaba en el chat no se traduce, salvo los últimos `keep_on_start` mensajes.
-    - Tus propios mensajes (por nombre o por lo que se acaba de enviar) se ignoran.
+    - Los mensajes propios (por nombre o por lo recién enviado) se ignoran.
     """
 
-    GAP_RECENT_S = 20.0  # un mensaje salteado por el OCR se traduce si lo de abajo llegó hace menos que esto
+    GAP_RECENT_S = 20.0  # un mensaje omitido por el OCR se traduce si lo de abajo llegó hace menos que esto
     MAX_HISTORY = 500
-    WINDOW = 60  # mensajes del historial, arriba de lo visto en la captura anterior, donde se busca la nueva
+    WINDOW = 60  # mensajes del historial, arriba de lo visto en la captura anterior, donde se busca el nuevo
 
     def __init__(
         self,
@@ -469,7 +471,7 @@ class ChatTracker:
         if not self._text_match(entry.text_key, key[1]):
             return False
         # Con el chat sin fondo, el nombre (de color, sobre el juego) se lee muy distinto en cada captura
-        # ("Silleqlac101140" por "smegladon40"): un texto largo casi idéntico y un nombre algo parecido alcanzan.
+        # ("Silleqlac101140" por "smegladon40"): bastan un texto largo casi idéntico y un nombre algo parecido.
         return self._name_match(entry.name_key, key[0]) or (
             SequenceMatcher(None, entry.name_key, key[0]).ratio() >= MISREAD_NAME
             and self._same_long_text(entry.text_key, key[1]))
@@ -480,11 +482,11 @@ class ChatTracker:
 
     @staticmethod
     def _resembles(entry: _Entry, key: tuple[str, str]) -> bool:
-        """Parecido suficiente para ser el mismo mensaje leído bastante mal, en su mismo lugar del chat."""
+        """Parecido suficiente para ser el mismo mensaje leído bastante mal, en el mismo lugar del chat."""
         name = SequenceMatcher(None, entry.name_key, key[0]).ratio()
         text = SequenceMatcher(None, entry.text_key, key[1]).ratio()
         if name < 0.45:
-            # Otro jugador (aunque diga lo mismo)... salvo un texto largo casi igual: es el nombre mal leído.
+            # Otro jugador (aunque diga lo mismo), salvo un texto largo casi igual: en ese caso es el nombre mal leído.
             return name >= MISREAD_NAME and min(len(entry.text_key), len(key[1])) >= LONG_TEXT and text >= 0.85
         return text >= 0.6 or (name >= 0.7 and text >= 0.4)
 
@@ -492,7 +494,7 @@ class ChatTracker:
     def _align(entries: list[_Entry], keys: list[tuple[str, str]], same: Callable) -> list[tuple[int, int]]:
         """Pares (historial, visible) en el mismo orden, con la mayor cantidad posible de coincidencias.
 
-        Con empates quedan sin ubicar las líneas de más abajo (un texto repetido abajo de todo es un mensaje
+        En los empates quedan sin ubicar las líneas de más abajo (un texto repetido al final es un mensaje
         nuevo) y cada línea se asocia al mensaje más reciente posible.
         """
         n, m = len(entries), len(keys)
@@ -520,9 +522,11 @@ class ChatTracker:
     ECHO_S = 90.0  # un mensaje leído mal se reconoce si se vio hace menos que esto
 
     def _recent_echo(self, key: tuple[str, str], now: float, taken: set[int], repeat_ok: bool = True) -> _Entry | None:
-        """Un mensaje ya traducido del que esta línea es una lectura rota ("its soltoxic101Vt_here" por "its so toxic
-        on there"). Un texto idéntico abajo de todo (`repeat_ok`) no: la gente repite mensajes ("could u donate pls" dos
-        veces) y llegan abajo. Idéntico en el medio del chat es el mismo mensaje, que esta captura ubicó mal."""
+        """Mensaje ya traducido del que esta línea es una lectura rota ("its soltoxic101Vt_here" por "its so toxic
+        on there"). Un texto idéntico al final del chat (`repeat_ok`) no lo es: los jugadores repiten mensajes
+        ("could u donate pls" dos veces) y llegan abajo. Un texto idéntico en el medio del chat es el mismo
+        mensaje, que esta captura ubicó mal.
+        """
         name_key, text_key = key
         if len(text_key) < 8:
             return None
@@ -530,7 +534,7 @@ class ChatTracker:
             if id(entry) in taken or not entry.announced or now - entry.last_seen > self.ECHO_S:
                 continue
             if entry.text_key == text_key and repeat_ok:
-                continue  # idéntico y abajo de todo: lo repitió
+                continue  # repetido; se descarta
             text = SequenceMatcher(None, entry.text_key, text_key).ratio()
             if text < 0.6:
                 continue
@@ -550,7 +554,9 @@ class ChatTracker:
 
     # ------------------------------------------------------------ captura nueva
     def update(self, lines: list[ChatLine], uncertain: list[bool] | None = None) -> list[ChatLine]:
-        """`uncertain[i]`: la línea i salió de una lectura dudosa; si es un mensaje nuevo, se confirma en otra captura."""
+        """`uncertain[i]`: la línea i proviene de una lectura dudosa; si es un mensaje nuevo, se confirma en otra
+        captura.
+        """
         now = self.clock()
         doubtful = uncertain or [False] * len(lines)
         while self._sent and now - self._sent[0][1] > self.memory_s:
@@ -558,7 +564,7 @@ class ChatTracker:
         canonical = [ChatLine(self.names.canonical(raw.speaker), raw.text) for raw in lines]
         self.visible = canonical
 
-        # Lo más común: el chat no cambió desde la captura anterior.
+        # Caso más frecuente: el chat no cambió desde la captura anterior.
         if canonical == self._last_lines and all(e.announced or not e.announce for e in self._last_entries):
             for entry in self._last_entries:
                 entry.last_seen = now
@@ -568,8 +574,8 @@ class ChatTracker:
         if not self._started:
             if not canonical:
                 return []
-            # Primera lectura: lo viejo que ya estaba en el chat queda como historial, sin traducir
-            # (salvo los últimos `keep_on_start`, que se traducen enseguida).
+            # Primera lectura: el contenido previo del chat queda como historial sin traducir, salvo los últimos
+            # `keep_on_start`, que se traducen de inmediato.
             self._started = True
             fresh_from = len(canonical) - self.keep_on_start if self.keep_on_start else len(canonical)
             entries = [self._entry(line, now, i >= fresh_from and not self._is_mine(line), doubtful[i])
@@ -597,8 +603,8 @@ class ChatTracker:
                 j += 1
             above = assigned[first - 1] if first > 0 else None
             below = assigned[j] if j < len(canonical) else None
-            # Mensajes conocidos que en esta captura no se reconocieron, en el lugar de este tramo: las líneas
-            # que se les parezcan son esos mismos mensajes mal leídos.
+            # Mensajes conocidos que no se reconocieron en esta captura dentro de este tramo: las líneas parecidas a
+            # ellos se consideran esos mismos mensajes mal leídos.
             if above is not None and below is not None:
                 candidates = self._history[index[id(above)] + 1:index[id(below)]]
             elif above is not None:
@@ -615,12 +621,12 @@ class ChatTracker:
                 echo = self._recent_echo(keys[k], now, {id(e) for e in assigned if e is not None},
                                          repeat_ok=above is not None and below is None)
                 if echo is not None:
-                    assigned[k] = echo  # un mensaje reciente leído mal (sin fondo, sobre el juego): no es nuevo
+                    assigned[k] = echo  # mensaje reciente mal leído (sin fondo, sobre el juego): no es nuevo
                     continue
                 if above is not None and below is None:
-                    announce = True  # debajo de lo último conocido: mensaje nuevo
+                    announce = True  # debajo del último mensaje conocido: mensaje nuevo
                 elif above is not None:
-                    announce = now - below.first_seen <= self.GAP_RECENT_S  # salteado por el OCR
+                    announce = now - below.first_seen <= self.GAP_RECENT_S  # omitido por el OCR
                 else:
                     announce = False  # arriba de lo conocido: historial
                 line = canonical[k]
@@ -635,7 +641,7 @@ class ChatTracker:
         return self._finish(canonical, assigned)
 
     def _insert(self, assigned: list[_Entry], created: set[int]) -> None:
-        """Agrega los mensajes nuevos al historial en su lugar (después del anterior visible que ya existía)."""
+        """Agrega los mensajes nuevos al historial en su posición (después del anterior visible que ya existía)."""
         if not created:
             return
         after: dict[int, list[_Entry]] = {}
@@ -653,7 +659,7 @@ class ChatTracker:
                     before.setdefault(id(entry), []).extend(waiting)
                     waiting = []
                 previous = entry
-        # Sin nada conocido a la vista: es historial viejo (o un chat que no se conocía), va al principio.
+        # Sin ningún mensaje conocido a la vista: es historial antiguo (o un chat desconocido) y va al principio.
         rebuilt = list(waiting)
         for entry in self._history:
             rebuilt.extend(before.get(id(entry), ()))
@@ -666,12 +672,12 @@ class ChatTracker:
         for line, entry in zip(canonical, assigned):
             if entry.announce and not entry.announced and entry.frames >= max(self.confirm_frames, entry.needed):
                 if looks_garbled(line.text):
-                    continue  # lectura rota: se espera a leerlo bien (si no, se traducía basura)
+                    continue  # lectura defectuosa: se espera una lectura correcta para no traducir texto basura
                 entry.announced = True
-                # Queda como se leyó al confirmarse (si la primera lectura fue dudosa, esta suele ser mejor).
+                # Se conserva la lectura de la confirmación (si la primera fue dudosa, esta suele ser mejor).
                 entry.line, entry.name_key, entry.text_key = line, _name_key(line.speaker), _text_key(line.text)
                 new.append(line)
-        # Mensajes nuevos sin confirmar que ya no se ven: eran basura del OCR.
+        # Mensajes nuevos sin confirmar que dejaron de verse: eran ruido del OCR.
         visible = {id(e) for e in assigned}
         if any(e.announce and not e.announced for e in self._history):
             self._history = [e for e in self._history if e.announced or not e.announce or id(e) in visible]

@@ -1,8 +1,8 @@
 """Evita que los procesos de Claude Code abran ventanas de consola.
 
-Bubble corre sin consola (pythonw), así que Windows le crea una ventana negra a cada claude.exe
-que lanza el Agent SDK. El SDK no expone opciones de creación de procesos, pero usa
-`anyio.open_process`, que sí acepta `creationflags`: se le agrega CREATE_NO_WINDOW por defecto.
+Bubble se ejecuta sin consola (pythonw), por lo que Windows crea una ventana negra por cada claude.exe que lanza el
+Agent SDK. El SDK no expone opciones de creación de procesos, pero usa `anyio.open_process`, que acepta `creationflags`:
+se le añade CREATE_NO_WINDOW por defecto.
 """
 
 from __future__ import annotations

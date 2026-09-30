@@ -1,7 +1,7 @@
 """Compara modelos de Claude en calidad, velocidad y costo con casos difíciles de chat de Roblox.
 
-Uso:  python -m bubble.tools.compare_models --models opus sonnet haiku
-Guarda los resultados en %LOCALAPPDATA%\\Bubble\\compare_models.json para revisarlos.
+Uso:  python -m bubble.tools.compare_models --models opus sonnet haiku Guarda los resultados en
+%LOCALAPPDATA%\\Bubble\\compare_models.json para su revisión.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from ..translate.prompt import build_system_prompt
 
 CONTEXT = (ChatLine("Pedro_BR", "alguém quer trocar pet?"), ChatLine("Jake", "i have a shadow dragon"))
 
-# (texto, idioma destino, región destino, dirección, tono, qué se espera)
+# (texto, idioma destino, región destino, dirección, tono, resultado esperado)
 CASES: list[tuple[str, str, str, str, int, str]] = [
     ("vlw mano, tmj! slk esse pet é muito top kkkk", "es", "AR", "incoming", 3, "gracias bro + pet buenísimo + jaja"),
     ("mds que lag, vc tá travando tb?", "es", "AR", "incoming", 3, "dios qué lag, ¿a vos también se te traba?"),

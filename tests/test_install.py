@@ -1,4 +1,5 @@
-"""Instalar lo que falta y desinstalar todo (siempre sobre carpetas de prueba: nunca toca lo tuyo ni el audio)."""
+"""Instala lo que falta y desinstala todo, siempre sobre carpetas de prueba: nunca toca datos del usuario ni el audio.
+"""
 
 import tkinter as tk
 
@@ -24,7 +25,7 @@ def sandbox(monkeypatch, tmp_path):
     monkeypatch.setattr(install, "_cable_ready", lambda: False)
     import bubble.voice.devices
 
-    monkeypatch.setattr(bubble.voice.devices, "restore_real_defaults", lambda: [])  # el audio de Windows, ni tocarlo
+    monkeypatch.setattr(bubble.voice.devices, "restore_real_defaults", lambda: [])  # sin tocar el audio de Windows
     later = []
     monkeypatch.setattr(uninstall, "_delete_after_exit", later.extend)
     return tmp_path, roaming / "Bubble", local / "Bubble", link, later
@@ -45,13 +46,13 @@ def test_uninstall_lists_everything_and_protects_development_folders(sandbox):
     assert set(dev) == {"datos", "modelos", "accesos", "cable", "programa"}
     assert dev["datos"].paths and dev["modelos"].paths and dev["accesos"].paths
     assert "2,0 KB" in dev["modelos"].detail
-    assert not dev["programa"].available and not dev["programa"].paths  # carpeta de desarrollo (git): nunca
-    assert not dev["cable"].selected  # el micrófono virtual es de Windows: solo si lo elegís
+    assert not dev["programa"].available and not dev["programa"].paths  # carpeta de desarrollo (git): nunca se elimina
+    assert not dev["cable"].selected  # el micrófono virtual es de Windows: solo si se elige
     installed = {part.key: part for part in uninstall.parts(fake_project(tmp / "app"))}
     assert installed["programa"].available and installed["programa"].paths == [tmp / "app"]
     stray = tmp / "otra"
     stray.mkdir()
-    assert not {part.key: part for part in uninstall.parts(stray)}["programa"].available  # no es de Bubble
+    assert not {part.key: part for part in uninstall.parts(stray)}["programa"].available  # no pertenece a Bubble
 
 
 def test_uninstall_deletes_what_you_choose(sandbox):
@@ -59,9 +60,9 @@ def test_uninstall_deletes_what_you_choose(sandbox):
     project = fake_project(tmp / "app")
     done = uninstall.run({"datos", "accesos", "programa"}, project)
     assert not roaming.exists() and not (local / "perfil_voz.json").exists() and not (local / "tu_voz").exists()
-    assert (local / "models" / "whisper" / "model.bin").exists()  # los modelos no se eligieron
+    assert (local / "models" / "whisper" / "model.bin").exists()  # los modelos no fueron seleccionados
     assert not link.exists()
-    assert later == [project] and project.exists()  # el programa se borra cuando Bubble se cierra
+    assert later == [project] and project.exists()  # el programa se borra al cerrarse Bubble
     assert any("carpeta" in line for line in done)
     uninstall.run({"modelos"}, project)
     assert not (local / "models").exists()
@@ -73,7 +74,7 @@ def test_missing_only_reports_what_is_needed(monkeypatch):
             install.Step("c", "C", "", lambda: False, lambda p: "", required=False),
             install.Step("d", "D", "", lambda: 1 / 0, lambda p: "")]
     monkeypatch.setattr(install, "steps", lambda: fake)
-    assert [s.key for s in install.missing()] == ["b", "d"]  # si no se puede revisar, se da por faltante
+    assert [s.key for s in install.missing()] == ["b", "d"]  # si no se puede verificar, se considera faltante
     assert [s.key for s in install.missing(only_required=False)] == ["b", "c", "d"]
     assert install.automatic(fake[0]) and not install.automatic(install.Step("e", "", "", bool, bool, action="Sí"))
 
@@ -113,7 +114,7 @@ def test_setup_installs_in_order_and_skips_what_depends_on_a_failure(monkeypatch
                 calls.pop(0)()
             root.update()
             time.sleep(0.01)
-        assert ran == ["voz", "roto"]  # lo que depende de algo que falló no se intenta; lo manual espera tu botón
+        assert ran == ["voz", "roto"]  # lo dependiente de un fallo no se intenta; lo manual espera al botón
         icons = {key: str(icon.cget("text")) for key, (icon, _detail) in window.rows.items()}
         assert icons["voz"] == "✓" and icons["roto"] == "!" and icons["depende"] == "!" and icons["manual"] == "○"
         assert "No se pudo" in str(window.status.cget("text")) or "Algo" in str(window.status.cget("text"))

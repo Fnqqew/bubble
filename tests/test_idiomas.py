@@ -1,6 +1,7 @@
-"""Bubble 4.0: 59 idiomas (con voz de mujer y de hombre donde se puede), la ventana en tu idioma, la barra del juego con
-todos los idiomas a la vista y la voz a mano, textos de derecha a izquierda en el juego, subtítulos largos enteros y
-actualizaciones solas. Sin conectarse de verdad."""
+"""Bubble 4.0: 59 idiomas (con voz femenina y masculina donde existe), ventana en el idioma del usuario, barra del juego
+con todos los idiomas visibles y la voz al alcance, textos de derecha a izquierda en el juego, subtítulos largos
+completos y actualizaciones automáticas. Sin conexión real.
+"""
 
 import json
 import time
@@ -30,16 +31,17 @@ def test_there_are_many_more_languages_and_each_has_a_voice_where_possible(monke
     voices._windows = None
     assert voices.voice_for("uk", "femenina") == "uk_UA-ukrainian_tts-medium#2"  # Tetiana
     assert voices.voice_for("et", "masculina") == "et_EE-news-medium#0"  # Albert
-    assert voices.voice_for("hr", "masculina") == "sl_SI-artur-medium"  # el croata, con la voz eslovena
-    assert voices.voice_for("fa", "femenina") == "fa_IR-amir-medium~femenina"  # solo hay hombre: se arma la mujer
-    assert voices.voice_for("ta") is None  # (sin voz de Piper: la de Windows, si está)
+    assert voices.voice_for("hr", "masculina") == "sl_SI-artur-medium"  # croata, con la voz eslovena
+    # solo hay voz masculina: se deriva la femenina
+    assert voices.voice_for("fa", "femenina") == "fa_IR-amir-medium~femenina"
+    assert voices.voice_for("ta") is None  # sin voz de Piper: se usa la de Windows, si existe
 
 
 def test_the_detector_knows_the_new_languages_and_still_keeps_your_spanish():
     from bubble.translate.langdetect import LanguageDetector, script_of
 
     detector = LanguageDetector()
-    assert detector.detect("hvem vil bytte med meg").lang in ("no", "da")  # (lingua le dice "nb": acá es "no")
+    assert detector.detect("hvem vil bytte med meg").lang in ("no", "da")  # lingua devuelve "nb"; aquí es "no"
     assert detector.detect("хто хоче обмінятися").lang == "uk"
     assert script_of("дякую") == "cyrillic" and script_of("hola") == "latin" and script_of("תודה") == "hebrew"
 
@@ -85,9 +87,9 @@ def test_the_window_speaks_your_language(tmp_path, monkeypatch):
     monkeypatch.setattr(i18n, "user_folder", lambda: tmp_path)
     assert i18n.use("en") == "en"
     assert i18n.t("Tamaño") == "Size"
-    downloaded = i18n.t("Ya bajé Bubble 4.0. Lo instalo cuando no estés jugando.\n")  # con variables
-    assert "4.0" in downloaded and "bajé" not in downloaded
-    assert i18n.t("• Las voces lejanas y los ruidos no se mandan.").startswith("• ")  # con viñeta adelante
+    downloaded = i18n.t("Descargué Bubble 4.0. Lo instalo cuando no estés jugando.\n")  # con variables
+    assert "4.0" in downloaded and "Descargué" not in downloaded
+    assert i18n.t("• Las voces lejanas y los ruidos no se mandan.").startswith("• ")  # con viñeta inicial
     assert i18n.t("algo que no es de la interfaz") == "algo que no es de la interfaz"
     i18n.install()
     root = tk.Tk()
@@ -103,7 +105,7 @@ def test_the_window_speaks_your_language(tmp_path, monkeypatch):
 
 def test_a_language_without_translation_falls_back_to_english_and_can_be_built(tmp_path, monkeypatch):
     monkeypatch.setattr(i18n, "user_folder", lambda: tmp_path)
-    monkeypatch.setattr(i18n, "system_language", lambda: "sw")  # suajili: no viene con Bubble
+    monkeypatch.setattr(i18n, "system_language", lambda: "sw")  # suajili: no se incluye con Bubble
     assert i18n.choose("auto") == "sw" and not i18n.has_catalog("sw")
     assert i18n.use("sw") == "en"
     import bubble.tools.ui_strings as ui_strings
@@ -133,7 +135,8 @@ def bar(monkeypatch, tmp_path):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     from bubble.ui.overlays import ComposeBar
 
-    monkeypatch.setattr(ComposeBar, "visible", property(lambda self: True))  # (sin mostrarla ni sacarte del juego)
+    # sin mostrarla ni sacar al jugador del juego
+    monkeypatch.setattr(ComposeBar, "visible", property(lambda self: True))
     root = tk.Tk()
     root.withdraw()
     events = []
@@ -265,4 +268,4 @@ def test_with_auto_update_a_new_version_downloads_and_installs_when_you_are_not_
     assert window._update_ready and not launched and window.after  # jugando: espera
     window.playing = False
     window._install_when_free()
-    assert launched == [(tmp_path, True)] and closed  # ya no: se instala y Bubble se reabre
+    assert launched == [(tmp_path, True)] and closed  # sin partida: se instala y Bubble se reabre

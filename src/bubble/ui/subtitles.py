@@ -1,8 +1,8 @@
-"""Subtítulos de voz sobre el juego: abajo al centro, como en una película.
+"""Subtítulos de voz sobre el juego, en la parte inferior central, como en una película.
 
-Cada frase dice quién habla (Voz 1, Voz 2…, cada una con su color) y en qué idioma. Mientras la persona habla se
-ve lo que va diciendo, en gris; apenas llega la traducción la reemplaza, en blanco. Quedan las últimas frases y se
-van solas. Como las demás traducciones, no salen en capturas de pantalla ni reciben clics.
+Cada frase indica quién habla (Voz 1, Voz 2…, cada una con su color) y en qué idioma. Mientras la persona habla se
+muestra lo que va diciendo, en gris; al llegar la traducción, la reemplaza, en blanco. Se conservan las últimas frases y
+desaparecen solas. Como las demás traducciones, no aparecen en capturas de pantalla ni reciben clics.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ LINE_H = 30
 
 
 class Settings:
-    """Ajustes de los subtítulos (se cambian desde la ventana)."""
+    """Ajustes de los subtítulos (se modifican desde la ventana)."""
 
     scale = 1.0
     position = "abajo"  # "abajo" | "arriba"
@@ -66,11 +66,11 @@ def _body(line: Line) -> tuple[str, tuple]:
     return (line.original + ("" if line.final else " …")).strip(), PENDING
 
 
-FRESH_S = 0.28  # una frase nueva aparece deslizándose y desvaneciéndose durante este tiempo
+FRESH_S = 0.28  # duración de la animación de entrada (deslizamiento y desvanecimiento)
 
 
 def freshness(lines: list[Line], now: float) -> dict[int, float]:
-    """Frases que recién aparecen → cuánto de su animación ya pasó (0 a 1, suavizado)."""
+    """Frases recién aparecidas → fracción ya transcurrida de su animación (0 a 1, suavizada)."""
     fresh = {}
     for line in lines:
         if line.heard_at and now - line.heard_at < FRESH_S:
@@ -83,9 +83,10 @@ _corners: dict[tuple, Image.Image] = {}
 
 
 def card(width: int, height: int, radius: int, fill: tuple) -> Image.Image:
-    """Tarjeta redondeada de cualquier tamaño. Las esquinas suaves se dibujan una sola vez (grandes y achicadas) y el
-    resto se pinta directo: ~1 ms. Antes se dibujaba toda la tarjeta al triple y se achicaba en cada cuadro (~45 ms),
-    y con subtítulos que cambian seguido eso trababa a Bubble y le sacaba procesador al juego."""
+    """Tarjeta redondeada de cualquier tamaño. Las esquinas suavizadas se dibujan una sola vez (grandes y luego
+    reducidas) y el resto se pinta directamente: ~1 ms. Dibujar toda la tarjeta al triple y reducirla en cada cuadro
+    costaba ~45 ms y, con subtítulos que cambian seguido, bloqueaba Bubble y restaba procesador al juego.
+    """
     radius = max(1, min(radius, width // 2, height // 2))
     key = (radius, fill)
     if key not in _corners:
@@ -104,13 +105,14 @@ def card(width: int, height: int, radius: int, fill: tuple) -> Image.Image:
     return image
 
 
-MAX_LINES = 6  # renglones por frase: antes eran 2 y lo que no entraba se cortaba con "…" (charlas largas)
-MAX_HEIGHT = 0.42  # parte del alto del juego que pueden ocupar los subtítulos
+MAX_LINES = 6  # máximo de renglones por frase; el resto se corta con "…"
+MAX_HEIGHT = 0.42  # fracción del alto del juego que pueden ocupar los subtítulos
 
 
 def fit_lines(text: str, width: int, line_h: int, size: int) -> tuple[int, list[str]]:
-    """El texto en los renglones que hagan falta (hasta MAX_LINES), con la letra casi del mismo tamaño: primero se
-    agregan renglones y recién al final se achica la letra."""
+    """El texto en los renglones necesarios (hasta MAX_LINES), con un tamaño de letra lo más constante posible: primero
+    se agregan renglones y solo al final se reduce la letra.
+    """
     for count in range(2, MAX_LINES + 1):
         font_size, wrapped = layout_text(text, [Slot(0, 0, width, line_h)] * count, size)
         if font_size >= int(size * 0.9) and not (wrapped and wrapped[-1].endswith("…")):
@@ -120,7 +122,7 @@ def fit_lines(text: str, width: int, line_h: int, size: int) -> tuple[int, list[
 
 def render_subtitles(lines: list[Line], scale: float | None = None, show_original: bool | None = None,
                      fresh: dict[int, float] | None = None) -> Image.Image:
-    """Tarjeta con las frases (la más nueva abajo). `fresh`: frases que están apareciendo (ver `freshness`)."""
+    """Tarjeta con las frases (la más reciente abajo). `fresh`: frases en animación de entrada (ver `freshness`)."""
     fresh = fresh or {}
     k = SETTINGS.scale if scale is None else scale
     original_too = SETTINGS.show_original if show_original is None else show_original
@@ -140,7 +142,7 @@ def render_subtitles(lines: list[Line], scale: float | None = None, show_origina
         appearing = fresh.get(line.id, 1.0)
         top = y
         if appearing < 1.0:
-            # La frase nueva se dibuja aparte y entra subiendo un poco y desvaneciéndose.
+            # La frase nueva se dibuja aparte y entra subiendo levemente mientras se desvanece.
             image = Image.new("RGBA", base.size, (0, 0, 0, 0))
             draw = ImageDraw.Draw(image)
             y += int(10 * k * (1 - appearing))
@@ -156,7 +158,7 @@ def render_subtitles(lines: list[Line], scale: float | None = None, show_origina
             details += f"   {line.original}"
         details_font = _font(int(13 * k), details)
         room = width - x - int(22 * k)
-        if details_font.getlength(details) > room:  # el original, entero si entra; si no, hasta donde entra, con "…"
+        if details_font.getlength(details) > room:  # original completo si entra; si no, recortado con "…"
             while details and details_font.getlength(details + "…") > room:
                 details = details[:-1]
             details = details.rstrip() + "…"
@@ -182,10 +184,10 @@ class SubtitleView:
         self.window = LayeredWindow()
         self._key: tuple | None = None
         self._image: Image.Image | None = None
-        self.animating = False  # hay una frase apareciendo: conviene llamar más seguido
+        self.animating = False  # hay una frase en animación: conviene llamar con más frecuencia
 
     def update(self, lines: list[Line], area, visible: bool) -> None:
-        """Llamar seguido (desde el bucle de la ventana) con las frases a la vista."""
+        """Se llama con frecuencia (desde el bucle de la ventana) con las frases visibles."""
         if not visible or area is None or not lines:
             self.window.hide()
             self._key = None
@@ -197,7 +199,7 @@ class SubtitleView:
                  for line in lines))
         if key != self._key:
             self._image = render_subtitles(lines, fresh=fresh)
-            # Frases largas: la tarjeta no tapa más que MAX_HEIGHT del juego (se van primero las más viejas).
+            # Frases largas: la tarjeta no ocupa más de MAX_HEIGHT del juego (se descartan primero las más antiguas).
             shown = list(lines)
             while len(shown) > 1 and self._image.height > area.height * MAX_HEIGHT:
                 shown = shown[1:]

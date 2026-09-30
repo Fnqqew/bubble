@@ -17,7 +17,7 @@ def test_merge_rows_joins_name_and_message_on_same_line():
 
 
 def words_row(*parts: tuple[str, float]) -> OcrRow:
-    """Una línea del OCR con sus palabras (texto, dónde empieza): cada letra ~9 px, alto 18."""
+    """Línea del OCR con sus palabras (texto, posición inicial); cada letra ocupa ~9 px y el alto es 18."""
     from bubble.capture.ocr import OcrWord
 
     words = tuple(OcrWord(text, left, 100, len(text) * 9, 18) for text, left in parts)
@@ -26,8 +26,9 @@ def words_row(*parts: tuple[str, float]) -> OcrRow:
 
 
 def test_merge_rows_keeps_far_game_text_apart():
-    """El OCR juntaba el mensaje con la burbuja de otro jugador a la misma altura: la zona del chat salía enorme y
-    el mensaje traía texto que no era suyo."""
+    """El OCR unía el mensaje con la burbuja de otro jugador a la misma altura: la zona del chat resultaba enorme y el
+    mensaje incluía texto ajeno.
+    """
     merged = merge_rows([words_row(("Soph:", 5), ("NO", 55), ("spent", 700), ("all", 750), ("day", 782))])
     assert [(r.text, r.left) for r in merged] == [("Soph: NO", 5), ("spent all day", 700)]
     near = merge_rows([words_row(("Soph:", 5), ("no", 55), ("way", 80))])
@@ -40,8 +41,8 @@ def test_game_text_beside_the_chat_is_not_part_of_it():
     items = parse_chat_items([
         OcrRow("VeloxX: both of you are getting 1k from me", top=10, height=18, left=5, width=480),
         OcrRow("spent all day bragging about how fast", top=12, height=18, left=700, width=300),  # una burbuja
-        OcrRow("tomorrow", top=32, height=18, left=5, width=90),  # sigue el mensaje de arriba
-        OcrRow("@juanot014", top=60, height=18, left=900, width=110),  # un nombre sobre una cabeza
+        OcrRow("tomorrow", top=32, height=18, left=5, width=90),  # continúa el mensaje anterior
+        OcrRow("@juanot014", top=60, height=18, left=900, width=110),  # un nombre sobre un personaje
     ], frame_width=500)
     assert [(item.speaker, item.text) for item in items] == [("VeloxX", "both of you are getting 1k from me tomorrow")]
 
@@ -51,9 +52,9 @@ def test_message_that_lost_its_colon_is_not_a_continuation():
 
     items = parse_chat_items([
         OcrRow("melofruits: could u donate pls i wanna buy a priv", top=10, height=18, left=42, width=470),
-        OcrRow("smegJadon40i i wasin a debate", top=32, height=18, left=42, width=260),  # después de la banderita
+        OcrRow("smegJadon40i i wasin a debate", top=32, height=18, left=42, width=260),  # después del ícono
         OcrRow("SYSTEM: RobloxBestGamerOne has added a comment to", top=54, height=18, left=5, width=490),
-        OcrRow("Lovine! (+25)", top=76, height=18, left=5, width=120),  # esta sí sigue al de arriba
+        OcrRow("Lovine! (+25)", top=76, height=18, left=5, width=120),  # sí continúa la línea anterior
     ], frame_width=500)
     assert [item.text for item in items] == ["could u donate pls i wanna buy a priv",
                                              "RobloxBestGamerOne has added a comment to Lovine! (+25)"]
@@ -64,7 +65,7 @@ def test_long_message_cut_at_the_bottom_waits_to_be_read_whole():
 
     rows = [OcrRow("Ibarra: entonces", top=10, height=18, left=5, width=150),
             OcrRow("Andres: Once upon a time, there was a beautiful young", top=32, height=18, left=5, width=480)]
-    cut = parse_chat_items(rows, frame_width=500, frame_height=52)  # el segundo renglón quedó afuera
+    cut = parse_chat_items(rows, frame_width=500, frame_height=52)  # la segunda línea quedó fuera
     assert cut[-1].uncertain and not cut[0].uncertain
     whole = parse_chat_items(rows + [OcrRow("princess named Snow White.", top=54, height=18, left=5, width=230)],
                              frame_width=500, frame_height=120)
@@ -95,9 +96,9 @@ def test_broken_read_of_a_recent_message_is_not_new_but_a_repeat_is():
     tracker.update([ChatLine("Ana", "hola")])
     toxic = ChatLine("smegladon40", "its so toxic on there")
     assert tracker.update([ChatLine("Ana", "hola"), toxic]) == [toxic]
-    # Sin fondo, sobre el agua: la misma línea leída rota (y la de arriba no salió) no es un mensaje nuevo.
+    # Sin fondo, sobre el agua: la misma línea leída con errores (sin la línea superior) no es un mensaje nuevo.
     assert tracker.update([ChatLine("smegladon40", "its soltoxic101Vt_here")]) == []
-    # El mismo jugador repite exactamente lo mismo, debajo: eso sí es nuevo.
+    # El mismo jugador repite exactamente el mensaje, más abajo: es un mensaje nuevo.
     again = ChatLine("smegladon40", "its so toxic on there")
     assert tracker.update([ChatLine("Ana", "hola"), toxic, again]) == [again]
 
@@ -109,10 +110,10 @@ def row(text: str, i: int, width: float = 200) -> OcrRow:
 def test_parse_chat_formats_and_continuations():
     lines = parse_chat([
         row("que se cortó arriba", 0),                       # resto de un mensaje fuera de la región
-        row("xXDragonXx: gg ez noob, wanna trade", 1, 400),  # ocupa todo el ancho: sigue abajo
+        row("xXDragonXx: gg ez noob, wanna trade", 1, 400),  # ocupa todo el ancho: continúa abajo
         row("my dragon?", 2, 120),
         row("[Pedro_BR]: mano me ajuda", 3, 220),
-        row("dddd basura del ocr", 4, 150),                  # el anterior no llenaba el ancho: se descarta
+        row("dddd basura del ocr", 4, 150),  # la anterior no llenaba el ancho: se descarta
         row("[Team] {To Kira} Kira2011: vamos", 5),
         row("[System] Your friend joined", 6),
         row("Noob Master: hola che", 7),
@@ -126,7 +127,7 @@ def test_parse_chat_formats_and_continuations():
 
 
 def test_parse_chat_tolerates_ocr_errors_from_real_roblox():
-    # Líneas tal como las leyó el OCR de una captura real (banderitas y dos puntos mal leídos).
+    # Líneas tal como las leyó el OCR en una captura real (íconos y dos puntos mal leídos).
     real = [
         row("[\"] Pav_bháji'. asterino isse baat kro", 0),   # nombre con "_": se acepta aunque falte ":"
         row("-anohadhi.' bruhhh", 1),                        # nombre desconocido sin ":": se descarta
@@ -157,17 +158,17 @@ def test_tracker_does_not_repeat_truncated_reads():
     full = [ChatLine("cloverx3", "news nahi dekh rhi")]
     tracker.update(full)
     assert tracker.update(full) == full
-    assert tracker.update([ChatLine("clbverx3", "news nahi dekh")]) == []  # misma línea leída cortada
+    assert tracker.update([ChatLine("clbverx3", "news nahi dekh")]) == []  # misma línea leída parcialmente
 
 
 def test_tracker_needs_two_frames_and_does_not_repeat():
     now = [0.0]
     tracker = ChatTracker(clock=lambda: now[0], confirm_frames=2)
     frame = [ChatLine("Bob", "wanna trade?")]
-    assert tracker.update(frame) == []  # primera vez: candidato
+    assert tracker.update(frame) == []  # primera aparición: candidato
     assert tracker.update(frame) == frame  # confirmado
     assert tracker.update(frame) == []  # ya visto
-    # El OCR lo lee un poco distinto: sigue siendo el mismo mensaje.
+    # El OCR lo lee con una variación leve: sigue siendo el mismo mensaje.
     assert tracker.update([ChatLine("B0b", "wanna trade ?")]) == []
 
 
@@ -175,14 +176,14 @@ def test_tracker_drops_flicker_and_expires_memory():
     now = [0.0]
     tracker = ChatTracker(memory_s=10, clock=lambda: now[0], confirm_frames=2)
     tracker.update([ChatLine("Ann", "glitch txt")])
-    assert tracker.update([]) == []  # desapareció: era basura del OCR
-    assert tracker.update([ChatLine("Ann", "glitch txt")]) == []  # vuelve a empezar como candidato
+    assert tracker.update([]) == []  # desapareció: era ruido del OCR
+    assert tracker.update([ChatLine("Ann", "glitch txt")]) == []  # vuelve a ser candidato
     anchor = ChatLine("Bob", "ya conocido")
     tracker.update([anchor])  # sin mensajes conocidos a la vista todo es historial: queda como ancla
     msg = ChatLine("Ann", "hi")
     tracker.update([anchor, msg])
     assert tracker.update([anchor, msg]) == [msg]  # debajo del ancla: es nuevo
-    now[0] = 30  # pasó el tiempo de memoria y ya no hay nada conocido a la vista: es historial
+    now[0] = 30  # venció el tiempo de memoria y ya no hay mensajes conocidos a la vista: es historial
     assert tracker.update([msg]) == []
     assert tracker.update([msg]) == []
 
@@ -193,8 +194,8 @@ def L(text: str) -> ChatLine:
 
 
 def test_repeated_text_in_a_burst_does_not_hide_the_messages_before_it():
-    # Caso real de la prueba de ráfagas: Luc repite su mensaje abajo de todo. Antes se tomaba como el mensaje
-    # viejo y Mia y Memo (que quedaban arriba de él) se daban por historial.
+    # Caso real de la prueba de ráfagas: Luc repite su mensaje al final. Se lo tomaba como el mensaje anterior y Mia y
+    # Memo (ubicados encima) se consideraban historial.
     tracker = ChatTracker(keep_on_start=0)
     tracker.update([L("Juan: buenas gente"), L("Luana: me ajuda no obby pfv"), L("Luc: mdr jsp comment on fait")])
     assert tracker.update([L("Juan: buenas gente"), L("Luana: me ajuda no obby pfv"), L("Luc: mdr jsp comment on fait"),
@@ -204,7 +205,7 @@ def test_repeated_text_in_a_burst_does_not_hide_the_messages_before_it():
     frame = [L("Luana: me ajuda no obby pfv"), L("Luc: mdr jsp comment on fait"), L("Juan: alguien juega obby?"), *burst]
     assert tracker.update(frame) == burst
     assert tracker.update(frame) == []
-    # Y una tercera vez, ya con el primero fuera de la vista.
+    # Y una tercera vez, con el primer mensaje ya fuera de la vista.
     again = L("Luc: mdr jsp comment on fait")
     assert tracker.update([*frame[2:], again]) == [again]
 
@@ -229,7 +230,7 @@ def test_message_skipped_by_the_ocr_is_recovered_between_known_ones():
     jake = L("Jake: ngl this game is mid")
     assert tracker.update([L("Juan: hola che, todo bien?"), L("cloverx3: news nahi dekh rhi"), jake,
                            L("Mia: omg i got a legendary!!")]) == [jake]
-    # Si lo salteado es viejo (lo de abajo llegó hace mucho), ya no se traduce.
+    # Si el mensaje omitido es antiguo (los de abajo llegaron hace tiempo), no se traduce.
     now[0] = 60
     late = L("Luc: tkt frr")
     assert tracker.update([L("Juan: hola che, todo bien?"), L("cloverx3: news nahi dekh rhi"), jake, late,
@@ -240,9 +241,9 @@ def test_misread_line_in_its_place_is_not_a_new_message():
     tracker = ChatTracker(keep_on_start=0)
     frame = [L("Jake: ngl this game is mid"), L("Luana: vlw mano, tmj"), L("Mia: i have a shadow dragon ft")]
     tracker.update(frame)
-    # La del medio leída muy mal (nombre y texto), en el mismo lugar: es la misma.
+    # El mensaje del medio, muy mal leído (nombre y texto) pero en la misma posición: es el mismo.
     assert tracker.update([frame[0], L("Luena: vIw mamo tnj"), frame[2]]) == []
-    # La última leída mal, abajo de todo: también es la misma.
+    # El último mensaje, mal leído y al final de todo: también es el mismo.
     assert tracker.update([frame[0], frame[1], L("Mia: i hove a shad0w dragn ft")]) == []
 
 
@@ -260,7 +261,7 @@ def test_scrolling_back_down_does_not_translate_again():
     tracker.update(history[:6])
     for end in range(7, 13):  # llegan de a uno
         assert tracker.update(history[end - 6:end]) == [history[end - 1]]
-    # Subís hasta arriba y volvés a bajar despacio: nada es nuevo.
+    # Se sube hasta el inicio y se baja de nuevo lentamente: ningún mensaje es nuevo.
     for start in [4, 2, 0, 1, 3, 5, 6]:
         assert tracker.update(history[start:start + 6]) == []
     new = L("Kai: recien llego")
@@ -271,12 +272,12 @@ def test_doubtful_new_message_needs_a_second_read():
     tracker = ChatTracker(keep_on_start=0)
     tracker.update([L("Juan: hola che")])
     garbage = L("Lue: rn4r.jãP<omment bri fait")
-    # Salió solo en la lectura de respaldo: no se traduce todavía.
+    # Apareció solo en la lectura de respaldo: todavía no se traduce.
     assert tracker.update([L("Juan: hola che"), garbage], [False, True]) == []
-    # La siguiente lectura lo lee bien (y es parecido): se confirma, con la lectura buena.
+    # La lectura siguiente lo lee bien (y es similar): se confirma con la lectura correcta.
     good = L("Luc: mdr jsp comment on fait")
     assert tracker.update([L("Juan: hola che"), good], [False, False]) == [good]
-    # Basura que no se repite: nunca se traduce.
+    # Ruido que no se repite: nunca se traduce.
     tracker.update([L("Juan: hola che"), good, L("xX: qqq zzz")], [False, False, True])
     assert tracker.update([L("Juan: hola che"), good], [False, False]) == []
 

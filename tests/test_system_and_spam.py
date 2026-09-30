@@ -16,7 +16,7 @@ def test_long_message_across_three_lines_is_complete():
         row("[■] Andres: I made it for her. The girl wore it so often that", 3, 512),
         row("everyone called her Little Red Riding Hood.", 4, 380),
     ]
-    # Región calibrada mucho más ancha (720) que el texto: el borde de corte aprendido (528) es el que vale.
+    # La región calibrada (720) es mucho más ancha que el texto: rige el borde de corte aprendido (528).
     lines = [i.line for i in parse_chat_items(rows, frame_width=720, wrap_right=528)]
     assert lines == [
         ChatLine("Andres", "Once upon a time there was a little girl who wore a beautiful red cloak. "
@@ -36,7 +36,7 @@ def test_system_messages_are_detected_even_when_misread():
     ]
     items = parse_chat_items(rows, frame_width=600)
     assert [i.kind for i in items] == ["system", "system", "system", "system", "player"]
-    assert items[0].text.endswith('"good morning"')  # la continuación queda dentro del aviso, no suelta
+    assert items[0].text.endswith('"good morning"')  # la continuación queda dentro del aviso
     assert parse_chat(rows, frame_width=600) == [ChatLine("n7r0pyy", "Jydin")]
 
 

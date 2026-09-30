@@ -1,7 +1,7 @@
-"""Qué programas están sonando (lo que muestra el Mezclador de volumen de Windows), con su nivel de ahora.
+"""Programas que están emitiendo audio (los que muestra el Mezclador de volumen de Windows), con su nivel actual.
 
-Sirve para encontrar de qué proceso sale el sonido de Roblox: no siempre es RobloxPlayerBeta.exe (el chat de voz, por
-ejemplo, puede sonar desde otro proceso). Se usa COM a mano con ctypes, como en process_audio.py.
+Permite identificar el proceso del que proviene el sonido de Roblox, que no siempre es RobloxPlayerBeta.exe (por
+ejemplo, el chat de voz puede sonar desde otro proceso). Usa COM directamente con ctypes, como en process_audio.py.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ class Session:
     pid: int
     name: str
     active: bool  # AudioSessionStateActive
-    peak: float  # nivel de ahora (0 a 1)
+    peak: float  # nivel actual (0 a 1)
 
 
 def _process_name(pid: int) -> str:
@@ -35,7 +35,7 @@ def _process_name(pid: int) -> str:
 
 
 def sessions(device_id: str | None = None) -> list[Session]:
-    """Todas las sesiones de audio del parlante predeterminado (o del dispositivo `device_id`)."""
+    """Devuelve todas las sesiones de audio del altavoz predeterminado o del dispositivo `device_id`."""
     from .audio import com_ready
 
     com_ready()

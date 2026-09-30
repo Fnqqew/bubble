@@ -1,11 +1,10 @@
-"""Laboratorio del chat, sin pantalla y sin Claude: el ciclo real de lectura de Bubble (captura → OCR → seguidor del
-chat → píldoras) contra el simulador de Roblox dibujado en memoria, con traducciones falsas que llegan solas.
+"""Laboratorio del chat sin pantalla y sin Claude: ejecuta el ciclo real de lectura de Bubble (captura → OCR → seguidor
+del chat → píldoras) contra el simulador de Roblox dibujado en memoria, con traducciones falsas que llegan
+automáticamente.
 
-Como se sabe dónde está cada mensaje en cada momento, mide lo que ve el jugador:
-- parpadeos (una traducción que se apaga y se vuelve a prender enseguida);
-- píldoras fuera de lugar (tapando otro renglón);
-- mensajes en otro idioma que nunca se taparon;
-- basura (traducciones de cosas que no eran mensajes).
+Como se conoce la posición de cada mensaje en todo momento, mide lo que ve el jugador: - parpadeos (una traducción
+que se apaga y se vuelve a encender enseguida); - píldoras fuera de lugar (que tapan otro renglón); - mensajes en
+otro idioma que nunca fueron cubiertos; - basura (traducciones de texto que no era un mensaje).
 
 Uso:  python -m bubble.tools.chat_lab [medio_transparente rafagas_transparente medio …] [--segundos N]
 """
@@ -30,7 +29,7 @@ from ..translate.base import ChatLine
 from ..ui import inline
 from . import chat_simulator as sim
 
-TRANSLATE_S = 1.2  # lo que "tarda" la traducción falsa
+TRANSLATE_S = 1.2  # tiempo simulado de la traducción falsa
 MY_LANGUAGE = "es"
 
 
@@ -43,7 +42,7 @@ class _NullLog:
 
 
 class OfflineSimulator(sim.Simulator):
-    """El simulador sin ventana: cada captura dibuja la escena en el momento actual."""
+    """Simulador sin ventana: cada captura dibuja la escena en el instante actual."""
 
     def __init__(self, scenario: str) -> None:  # noqa: D107 - no llama al de la ventana
         self.always_faded = scenario.endswith("_transparente")
@@ -58,11 +57,13 @@ class OfflineSimulator(sim.Simulator):
         self.typing = None
         self.start = time.time() + 1.0
         self.next_event = 0
-        self.appeared: dict[int, float] = {}  # id del mensaje → cuándo apareció
+        self.appeared: dict[int, float] = {}  # id del mensaje → instante en que apareció
         self._lock = threading.Lock()
 
     def capture(self) -> tuple[Image.Image, list[tuple[sim.Message, int, int]]]:
-        """(recorte del chat, renglones visibles: (mensaje, número de renglón, arriba en el recorte))."""
+        """Devuelve el recorte del chat y los renglones visibles como (mensaje, número de renglón, posición
+        superior en el recorte).
+        """
         with self._lock:
             now = time.time()
             while self.next_event < len(self.events) and now - self.start >= self.events[self.next_event][0]:
@@ -88,7 +89,7 @@ class OfflineSimulator(sim.Simulator):
 
 
 class FakeLayer:
-    """En vez de ventanas, anota dónde está cada píldora y cuándo se prende y se apaga."""
+    """Registra, en lugar de crear ventanas, la posición de cada píldora y cuándo se enciende y se apaga."""
 
     def __init__(self, lab: Lab) -> None:
         self.lab = lab
@@ -114,7 +115,7 @@ class Lab:
     flickers: int = 0
     misplaced: int = 0
     placed_checks: int = 0
-    first_cover: dict[int, float] = field(default_factory=dict)  # id del mensaje → cuándo se tapó por primera vez
+    first_cover: dict[int, float] = field(default_factory=dict)  # id del mensaje → instante de la primera cobertura
     garbage: list[str] = field(default_factory=list)
     misplaced_examples: list[str] = field(default_factory=list)
     detected: list[str] = field(default_factory=list)
@@ -137,7 +138,7 @@ def run(scenario: str) -> Lab:
     lab = Lab(scenario)
     simulator = OfflineSimulator(scenario)
     tracker = ChatTracker()
-    view = _make_view(tracker, lab)  # las píldoras de verdad, pero sin ventanas
+    view = _make_view(tracker, lab)  # píldoras reales, sin ventanas
     truth_by_capture: dict[int, list] = {}
     region = Rect(0, 0, sim.CHAT_REGION["w"], sim.CHAT_REGION["h"])
     ids = iter(range(1, 1 << 30))
@@ -149,7 +150,7 @@ def run(scenario: str) -> Lab:
         return image
 
     def translate_later(msg_id: int, line: ChatLine) -> None:
-        # Mensaje en tu idioma: no se tapa; si no, llega una traducción falsa.
+        # Un mensaje en el idioma del jugador no se cubre; en caso contrario, llega una traducción falsa.
         best = max(simulator.messages, key=lambda m: _similar(f"{m.speaker}: {m.text}", f"{line.speaker}: {line.text}"),
                    default=None)
         real = best if best and _similar(best.text, line.text) >= 0.6 else None
@@ -199,7 +200,7 @@ def _make_view(tracker: ChatTracker, lab: Lab) -> inline.InlineChatView:
 
 
 def _check(lab: Lab, view, frame, placed, simulator: OfflineSimulator) -> None:
-    """¿Cada píldora está sobre el renglón de su mensaje?"""
+    """Comprueba que cada píldora esté sobre el renglón de su mensaje."""
     layer: FakeLayer = view.layer
     now = time.time()
     for key, (_x, y, height) in layer.shown.items():
@@ -207,7 +208,7 @@ def _check(lab: Lab, view, frame, placed, simulator: OfflineSimulator) -> None:
         entry = view.by_id.get(entry_key)
         if entry is None:
             continue
-        # El renglón de ese mensaje más cercano a la píldora (el mismo texto puede estar dos veces en el chat).
+        # Renglón de ese mensaje más cercano a la píldora (el mismo texto puede aparecer dos veces en el chat).
         candidates = [(message, row, top) for message, row, top in placed
                       if row == index and _similar(message.text, entry.original) >= 0.6]
         if not candidates:

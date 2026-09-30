@@ -1,13 +1,14 @@
-"""Que las traducciones salgan en tus capturas de pantalla (para mandar ejemplos).
+"""Hace que las traducciones aparezcan en las capturas de pantalla (por ejemplo, para enviar ejemplos).
 
-Las traducciones son ventanas invisibles para las capturas: así el OCR lee el chat original que queda debajo. Cuando
-sacás una captura con Windows (Impr Pant, Win + Shift + S o Win + Impr Pant), se vuelven visibles para las capturas
-un momento y, mientras tanto, el OCR no lee (leería las traducciones en vez del chat).
+Las traducciones son ventanas invisibles para las capturas, de modo que el OCR lee el chat original que queda debajo.
+Cuando se toma una captura con Windows (Impr Pant, Win + Shift + S o Win + Impr Pant), las traducciones se vuelven
+visibles para las capturas durante un momento y, mientras tanto, el OCR no lee (leería las traducciones en lugar del
+chat).
 
-Las teclas llegan por "raw input": Windows avisa de cada tecla sin esperar a Bubble (un gancho de teclado sí la
-haría esperar y sumaría demora a lo que apretás en el juego). La tecla Win se aprieta antes que la otra, así que con
-ella las traducciones ya se ven cuando Windows saca la captura; Impr Pant sola abre la Herramienta Recortes, que tarda
-más que eso en sacarla.
+Las teclas se reciben por "raw input": Windows notifica cada tecla sin esperar a Bubble (un gancho de teclado sí la
+haría esperar y agregaría demora a lo que el jugador presiona en el juego). La tecla Win se presiona antes que la otra,
+así que con ella las traducciones ya están visibles cuando Windows toma la captura; Impr Pant sola abre la Herramienta
+Recortes, que tarda más que eso en tomarla.
 """
 
 from __future__ import annotations
@@ -27,10 +28,10 @@ user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 VK_SHIFT, VK_S, VK_SNAPSHOT, VK_LWIN, VK_RWIN = 0x10, 0x53, 0x2C, 0x5B, 0x5C
-WIN_HOLD_S = 0.5  # después de soltar Win
-SHOT_HOLD_S = 3.0  # después de Impr Pant o Win + Shift + S: la Herramienta Recortes tarda en abrirse
-SNIP_HOLD_S = 0.4  # después de cerrar la Herramienta Recortes
-SETTLE_S = 0.06  # Windows aplica el cambio en el próximo cuadro de la pantalla
+WIN_HOLD_S = 0.5  # tras soltar Win
+SHOT_HOLD_S = 3.0  # tras Impr Pant o Win + Shift + S: la Herramienta Recortes tarda en abrir
+SNIP_HOLD_S = 0.4  # tras cerrar la Herramienta Recortes
+SETTLE_S = 0.06  # Windows aplica el cambio en el siguiente cuadro de pantalla
 TICK_MS = 50
 # La Herramienta Recortes (Windows 11) y el recorte de Windows 10.
 SNIPPING = {"snippingtool.exe", "screenclippinghost.exe", "screensketch.exe"}
@@ -44,7 +45,9 @@ _KEY_NAMES = {VK_SNAPSHOT: "Impr Pant", VK_LWIN: "Win", VK_RWIN: "Win"}
 
 
 def hold_for(vk: int, down: bool, win: bool, shift: bool) -> float:
-    """Cuántos segundos mostrar las traducciones en capturas por esta tecla (0: no es para sacar una captura)."""
+    """Segundos durante los cuales se muestran las traducciones en capturas para esta tecla (0: no corresponde a una
+    captura).
+    """
     if not down:
         return 0.0
     if vk in (VK_LWIN, VK_RWIN):
@@ -97,15 +100,16 @@ def _held(*vks: int) -> bool:
 
 
 class ScreenshotKeys(threading.Thread):
-    """Mira las teclas de captura y hace visibles las traducciones para las capturas mientras hace falta.
+    """Observa las teclas de captura y hace visibles las traducciones para las capturas mientras sea necesario.
 
-    `active()` dice si ahora hay traducciones en pantalla (Roblox al frente): si no, no hace nada."""
+    `active()` indica si hay traducciones en pantalla (Roblox al frente); si no, no hace nada.
+    """
 
     def __init__(self, active: Callable[[], bool]) -> None:
         super().__init__(name="bubble-capturas", daemon=True)
         self.active = active
         self.error = ""
-        self.showing = False  # las traducciones se ven en las capturas
+        self.showing = False  # las traducciones son visibles en las capturas
         self._until = 0.0
         self._timer = 0
         self._snipping = False
@@ -146,8 +150,8 @@ class ScreenshotKeys(threading.Thread):
     def stop(self) -> None:
         if self._thread_id:
             user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
-            # Se espera a que suelte el teclado: si no, al volver a prenderlo, el hilo viejo le sacaría el teclado
-            # al nuevo (Windows lo registra uno por programa).
+            # Se espera a que el hilo libere el teclado: de lo contrario, al reactivarlo, el hilo anterior se lo
+            # quitaría al nuevo (Windows registra uno por programa).
             self.join(1)
 
     # ---------------------------------------------------------------- teclas
@@ -179,7 +183,7 @@ class ScreenshotKeys(threading.Thread):
             if not self._snipping:
                 log.info("Se abrió la herramienta de recorte (%s)", front)
             self._snipping = True
-            self._until = max(self._until, now + SNIP_HOLD_S)  # sacando el recorte (o recién sacado)
+            self._until = max(self._until, now + SNIP_HOLD_S)  # captura en curso (o recién tomada)
         self._update()
 
     def _update(self) -> None:
@@ -191,16 +195,16 @@ class ScreenshotKeys(threading.Thread):
         if visible == self.showing:
             return
         if screen.window_mode():
-            return  # se lee la ventana de Roblox sola: las traducciones ya salen en todas las capturas
+            return  # se lee solo la ventana de Roblox: las traducciones ya salen en las capturas
         log.info("Traducciones %s en las capturas", "visibles" if visible else "ocultas otra vez")
         self._snipping = False
         if visible:
-            screen.pause_reading(True)  # primero se deja de leer, después se hacen visibles
+            screen.pause_reading(True)  # primero se deja de leer y luego se hacen visibles
             layered.set_capturable(True)
             self._timer = user32.SetTimer(None, 0, TICK_MS, None)
         else:
             layered.set_capturable(False)
-            time.sleep(SETTLE_S)  # que el próximo cuadro ya no las tenga antes de volver a leer
+            time.sleep(SETTLE_S)  # que el siguiente cuadro ya no las incluya antes de volver a leer
             screen.pause_reading(False)
             if self._timer:
                 user32.KillTimer(None, self._timer)

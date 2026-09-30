@@ -1,7 +1,10 @@
-"""«Para traducir, Bubble necesita Claude»: si no tenés Claude (o no tiene suscripción), dos caminos.
+"""«Para traducir, Bubble necesita Claude»: aparece cuando el jugador no tiene Claude o su cuenta no tiene suscripción.
+Ofrece dos caminos.
 
-1. Bubble Pro con los créditos gratis de Deepgram: traduce sin Claude (ver cloud/agent.py). Se avisa cuánto gasta.
-2. Conectar Claude (Pro o Max): iniciar sesión, o ver cómo conseguirlo. Con Claude la traducción no gasta créditos.
+1. Bubble Pro con los créditos gratuitos de Deepgram: traduce sin Claude (ver cloud/agent.py) e informa cuánto se
+   consume.
+2. Conectar Claude (Pro o Max): iniciar sesión u obtener instrucciones para conseguirlo. Con Claude la traducción no
+   consume créditos.
 """
 
 from __future__ import annotations
@@ -45,9 +48,9 @@ class NoClaudeWindow:
                           foreground=pro.gold())
         label.gold = True
         label.pack(anchor="w")
-        widgets.muted(box, "Traduce en la nube sin Claude, con el crédito que te regala Deepgram al abrir una "
-                           f"cuenta ({pro.FREE_CREDIT_USD} US$, sin tarjeta). También entiende y dice las voces en la nube. Hasta "
-                           "que conectes Claude, Pro queda prendido.", wrap=500,
+        widgets.muted(box, "Traduce en la nube sin Claude, con el crédito que te ofrece Deepgram al abrir una "
+                           f"cuenta ({pro.FREE_CREDIT_USD} US$, sin tarjeta). También entiende y dice las voces en "
+                           "la nube. Hasta que conectes Claude, Pro queda activado.", wrap=500,
                       pady=(2, 8))
         row = ttk.Frame(box)
         row.pack(fill="x")
@@ -69,8 +72,8 @@ class NoClaudeWindow:
 
         # ---- 2. Conectar Claude
         box = widgets.card(body, "Conectá Claude",
-                           "Con Claude Pro o Max traduzco con tu suscripción y no se gastan créditos. Si no "
-                           "tenés, alcanza con Claude Pro, aunque sea un mes.")
+                           "Con Claude Pro o Max traduzco con tu suscripción y no se gastan créditos. Si no tenés, "
+                           "basta con Claude Pro, incluso por un mes.")
         row = ttk.Frame(box)
         row.pack(fill="x")
         installed = reason != "sin_claude"
@@ -117,7 +120,7 @@ class NoClaudeWindow:
             self.key_state.configure(text=f"✗ {message}", foreground=colors["bad"])
             return
         self.key_var.set("")
-        self.key_state.configure(text="✓ ¡Listo! Bubble Pro activado: ya traduce sin Claude.",
+        self.key_state.configure(text="✓ Bubble Pro activado: ya traduce sin Claude.",
                                  foreground=colors["good"])
         self.app.use_cloud_translation()
         self.window.after(1600, self.close)
@@ -140,8 +143,8 @@ class NoClaudeWindow:
             self.login_state.configure(text=f"No se pudo abrir Claude Code ({exc}).")
             return
         self.login_state.configure(text="Se abrió Claude en el navegador. Entrá con tu cuenta y después tocá "
-                                        "«Listo, revisar».")
-        self.login.configure(text="Listo, revisar", command=self._recheck, style="Accent.TButton")
+                                        "«Revisar ahora».")
+        self.login.configure(text="Revisar ahora", command=self._recheck, style="Accent.TButton")
 
     def _recheck(self) -> None:
         self.login.state(["disabled"])
@@ -159,7 +162,7 @@ class NoClaudeWindow:
             self.login_state.configure(text=system.CLAUDE_ADVICE[problem][1].split(" Mientras")[0],
                                        foreground=widgets.palette()["warn"])
             return
-        self.login_state.configure(text="✓ ¡Claude conectado! La traducción ya no gasta créditos.",
+        self.login_state.configure(text="✓ Claude conectado. La traducción ya no gasta créditos.",
                                    foreground=widgets.palette()["good"])
         self.app.claude_connected()
         self.window.after(1600, self.close)

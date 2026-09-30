@@ -1,7 +1,6 @@
-"""Genera el ícono de Bubble: burbuja de diálogo 3D inclinada al estilo Roblox con una letra romana.
+"""Genera el ícono de Bubble: una burbuja de diálogo 3D inclinada, al estilo de Roblox, con una letra romana.
 
-Uso:  python -m bubble.tools.make_icon [--letter B]
-Requiere Pillow (pip install Pillow).
+Uso:  python -m bubble.tools.make_icon [--letter B] Requiere Pillow (pip install Pillow).
 """
 
 from __future__ import annotations
@@ -12,7 +11,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
-SIZE = 1024  # se dibuja grande y se reduce para que los bordes queden suaves
+SIZE = 1024  # se dibuja grande y se reduce para suavizar los bordes
 TILT_DEG = 15  # inclinación característica del logo de Roblox
 DEPTH = 46  # grosor del volumen 3D (px a 1024)
 OUTLINE = 26  # grosor del borde blanco
@@ -30,18 +29,18 @@ def _font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def _bubble_mask() -> Image.Image:
-    """Burbuja + pata como UNA sola figura, así el borde la rodea sin cortes."""
+    """Burbuja y pata como una única figura, para que el borde la rodee sin cortes."""
     mask = Image.new("L", (SIZE, SIZE), 0)
     draw = ImageDraw.Draw(mask)
     left, top, right, bottom = 250, 170, 774, 694
     draw.rounded_rectangle((left, top, right, bottom), radius=64, fill=255)
-    # La pata nace bien adentro de la burbuja para que la unión no deje escalones.
+    # La pata nace dentro de la burbuja para que la unión no deje escalones.
     draw.polygon([(left + 70, bottom - 40), (left + 250, bottom - 40), (left + 10, bottom + 190)], fill=255)
     return mask.rotate(TILT_DEG, resample=Image.Resampling.BICUBIC, center=(512, 512))
 
 
 def _grow(mask: Image.Image, px: int) -> Image.Image:
-    """Dilata la máscara `px` píxeles (borde uniforme alrededor de la figura)."""
+    """Dilata la máscara `px` píxeles, generando un borde uniforme alrededor de la figura."""
     return mask.filter(ImageFilter.GaussianBlur(px / 2)).point(lambda v: 255 if v > 8 else 0).filter(
         ImageFilter.GaussianBlur(1.5)
     )
@@ -74,12 +73,12 @@ def render(letter: str = "B") -> Image.Image:
     shadow = _shift(outline, 18, DEPTH + 26).filter(ImageFilter.GaussianBlur(22)).point(lambda v: v * 0.55)
     _fill(canvas, (0, 0, 0, 255), shadow)
 
-    # Volumen: el borde se "extruye" hacia abajo, más oscuro cuanto más profundo.
+    # Volumen: el borde se extruye hacia abajo y se oscurece con la profundidad.
     for d in range(DEPTH, 0, -2):
         shade = round(150 - 70 * d / DEPTH)
         _fill(canvas, (shade, shade, shade + 6, 255), _shift(outline, round(d * 0.35), d))
 
-    # Borde blanco con leve degradé y la cara oscura de la burbuja.
+    # Borde blanco con leve degradé y cara oscura de la burbuja.
     _fill(canvas, _vertical_gradient((255, 255, 255), (214, 218, 224)), outline)
     _fill(canvas, _vertical_gradient((64, 68, 74), (22, 23, 26)), face)
 
@@ -102,7 +101,7 @@ def render(letter: str = "B") -> Image.Image:
 
 
 def _square(img: Image.Image) -> Image.Image:
-    """Recorta al contenido, centra en un cuadrado con margen y reduce a 256 px."""
+    """Recorta al contenido, lo centra en un cuadrado con margen y reduce a 256 px."""
     content = img.crop(img.getbbox())
     side = int(max(content.size) * 1.04)
     canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))

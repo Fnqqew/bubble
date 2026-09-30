@@ -29,8 +29,8 @@ def test_patch_starts_after_the_name():
     spot = chat_spots(item, frame_width=400)[0]
     narrow = chat_spots(item, frame_width=400, text_right=300)[0]  # el chat real termina antes que la zona
     assert narrow.max_right < spot.max_right and narrow.max_right >= 300
-    assert spot.left == int(item.text_left) - 5  # tapa desde el espacio después de "Nombre:"
-    assert spot.cover_right >= int(row.right) and spot.max_right == 406  # puede pasar un poco el borde calibrado
+    assert spot.left == int(item.text_left) - 5  # tapa desde el espacio posterior a "Nombre:"
+    assert spot.cover_right >= int(row.right) and spot.max_right == 406  # puede exceder levemente el borde calibrado
     assert chat_slots(item, frame_width=400)[0].right < 400  # el texto deja margen dentro de la píldora
 
 
@@ -46,14 +46,14 @@ def test_translated_bubble_grows_instead_of_cutting_the_text():
     # Burbuja original de una línea ("brb gotta eat"); la traducción es bastante más larga.
     size, lines, width, height = fit_bubble_text("ya vuelvo, tengo que comer algo rápido", 116, 36, 1)
     assert not any("…" in line for line in lines)  # entra completa
-    assert width >= 116 and height >= 36  # tapa toda la original
-    assert size >= 13  # se lee (no la achicó hasta lo ilegible)
+    assert width >= 116 and height >= 36  # cubre toda la original
+    assert size >= 13  # legible (no se redujo hasta volverse ilegible)
     short = fit_bubble_text("gg", 116, 36, 1)
-    assert short[2:] == (116, 36)  # si entra, queda del tamaño de la original
+    assert short[2:] == (116, 36)  # si entra, conserva el tamaño de la original
 
 
 def test_long_bubble_translation_is_never_cut():
-    """Una burbuja de 4 renglones (la de Blancanieves): la traducción al español salía cortada a media frase."""
+    """Burbuja de 4 renglones: la traducción al español se cortaba a media frase."""
     text = ("Había una vez una joven y hermosa princesa llamada Blancanieves. Vivía en un reino muy lejano "
             "con su padre y su madrastra, que era muy celosa.")
     for rows, width in ((4, 300), (3, 260), (2, 200), (1, 120)):
@@ -77,10 +77,10 @@ def test_pill_has_rounded_transparent_corners_accent_and_text():
     image = render_pill(200, 24, "hola che", 16, fill=CHAT_FILL, text_color=(246, 247, 250), accent=ACCENT)
     assert image.mode == "RGBA" and image.size == (200, 24)
     assert image.getpixel((0, 0))[3] < 60  # esquina redondeada: transparente
-    assert image.getpixel((100, 2))[3] > 200  # fondo casi opaco: tapa el original
+    assert image.getpixel((100, 2))[3] > 200  # fondo casi opaco: cubre el original
     r, g, b, _a = image.getpixel((4, 12))
-    assert b > 200 and r < 140  # rayita azul de "traducido"
-    assert max(image.convert("L").getextrema()) > 200  # hay letra blanca
+    assert b > 200 and r < 140  # marca azul de "traducido"
+    assert max(image.convert("L").getextrema()) > 200  # hay texto blanco
 
 
 def test_inline_view_tracks_entries_by_message():
@@ -88,10 +88,10 @@ def test_inline_view_tracks_entries_by_message():
     view = InlineChatView(None, tracker.same_message)
     view.pending(1, ChatLine("jody jo", "a lil off key"))
     view.delta(1, "un poco ")
-    assert view.find(ChatLine("jody j0", "a lil off key")).text == "un poco "  # el OCR leyó distinto el nombre
+    assert view.find(ChatLine("jody j0", "a lil off key")).text == "un poco "  # el OCR leyó el nombre de otra forma
     view.final(1, ChatLine("jody jo", "a lil off key"), "un poco desafinado")
     assert view.find(ChatLine("jody jo", "a lil off key")).status == "done"
-    view.final(2, ChatLine("Juan", "hola che"), None)  # ya estaba en tu idioma: no se tapa
+    view.final(2, ChatLine("Juan", "hola che"), None)  # ya está en el idioma del jugador: no se cubre
     assert view.find(ChatLine("Juan", "hola che")).status == "hidden"
     assert view.find_text("a lil off key").key == 1  # las burbujas reutilizan la traducción del chat
 
@@ -136,10 +136,10 @@ def test_line_missed_by_the_ocr_keeps_its_translation():
     view = translated_view(("Jake", "ngl this game is mid"), ("Luc", "mdr jsp comment on fait"))
     view.render(chat_frame(both), True)
     assert len(view.layer.visible) == 2
-    # En esta captura el OCR no leyó la línea de Jake (el chat no se movió y su texto sigue ahí): no parpadea.
+    # En esta captura el OCR no leyó la línea de Jake (el chat no se movió y su texto sigue visible): no parpadea.
     view.render(chat_frame(both[1:], on_screen=both), True)
     assert len(view.layer.visible) == 2
-    # Si su texto ya no está (se cerró el chat, se borró el mensaje), su traducción se va.
+    # Si su texto ya no está (se cerró el chat o se borró el mensaje), su traducción se descarta.
     view.render(chat_frame(both[1:], on_screen=both[1:]), True)
     assert len(view.layer.visible) == 1
 
@@ -179,9 +179,9 @@ def test_translations_move_with_the_chat_right_away():
     view = translated_view(("Jake", "ngl this game is mid"))
     view.render(chat_frame([("Jake", "ngl this game is mid", 200)]), True)
     (x, y), = view.layer.visible.values()
-    view.shift(-22)  # el chat subió una línea: la traducción va con el mensaje, sin esperar el OCR
+    view.shift(-22)  # el chat subió una línea: la traducción acompaña al mensaje sin esperar al OCR
     assert list(view.layer.visible.values()) == [(x, y - 22)]
-    view.shift(-300)  # se fue del chat
+    view.shift(-300)  # salió del chat
     assert view.layer.visible == {}
 
 
@@ -221,7 +221,7 @@ def test_short_translation_is_spread_over_every_row_of_the_message():
     size, lines = layout_text("alguém sabe onde fica o boss", slots, 16, balance=True)
     assert all(lines) and " ".join(lines) == "alguém sabe onde fica o boss"  # ninguna línea vacía
     size, lines = layout_text("alguém sabe onde fica o boss", slots, 16)
-    assert lines[1] == ""  # sin repartir (los subtítulos): una sola línea
+    assert lines[1] == ""  # sin repartir (subtítulos): una sola línea
 
 
 def test_ocr_garbage_is_never_announced():

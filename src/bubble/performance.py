@@ -1,9 +1,9 @@
 """Bubble se adapta a la PC del jugador.
 
 - Detecta el procesador (hilos) y la placa de video. Con GPU se captura la pantalla por GPU (ver capture/screen).
-- Mide cuánto le cuesta de verdad cada lectura en esta PC y ajusta cada cuánto lee el chat y busca burbujas, para
-  usar como máximo una parte de un núcleo: en una PC potente lee más seguido (más fluido); en una modesta, espacia
-  las lecturas para no quitarle rendimiento a Roblox.
+- Mide el costo real de cada lectura en esta PC y ajusta la frecuencia con que lee el chat y busca burbujas, de modo que
+  use como máximo una fracción de un núcleo: en una PC potente lee con mayor frecuencia (más fluido); en una modesta,
+  espacia las lecturas para no quitarle rendimiento a Roblox.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import time
 import winreg
 from dataclasses import dataclass, field
 
-# Parte de UN núcleo que puede usar cada tarea, según la PC (el resto queda para Roblox).
+# Fracción de UN núcleo que puede usar cada tarea según la PC; el resto queda para Roblox.
 SHARES = {
     "alta": {"chat": 0.25, "bubbles": 0.55},
     "media": {"chat": 0.15, "bubbles": 0.30},
@@ -39,7 +39,7 @@ def _gpus_from_registry() -> list[str]:
     return names
 
 
-# Con más margen de CPU se lee más seguido (más rápido y fluido); con menos, se espacia.
+# Con más margen de CPU se lee con mayor frecuencia (más fluido); con menos, se espacia.
 MIN_INTERVAL_FACTOR = {"alta": 0.7, "media": 1.0, "baja": 1.5}
 
 
@@ -49,7 +49,7 @@ class Hardware:
     threads: int
     gpus: list[str] = field(default_factory=list)
     gpu_capture: bool = False
-    forced_tier: str = ""  # el jugador eligió el modo a mano
+    forced_tier: str = ""  # el jugador eligió el modo manualmente
 
     @property
     def tier(self) -> str:
@@ -72,7 +72,7 @@ class Hardware:
 
 
 def detect_hardware(gpu_capture: bool = True, forced_tier: str = "auto") -> Hardware:
-    """Procesador y placas de video. Con `gpu_capture` se prueba (una vez) la captura por GPU."""
+    """Detecta el procesador y las placas de video. Con `gpu_capture` se prueba (una vez) la captura por GPU."""
     from .capture import screen
 
     screen.set_gpu_capture(gpu_capture)
@@ -87,8 +87,9 @@ def detect_hardware(gpu_capture: bool = True, forced_tier: str = "auto") -> Hard
 
 
 class Pacer:
-    """Ritmo adaptativo de una tarea que se repite: mide lo que cuesta cada vuelta y calcula la espera para que la
-    tarea use como máximo `share` de un núcleo, entre `min_s` y `max_s` de espera."""
+    """Ritmo adaptativo de una tarea repetitiva: mide el costo de cada iteración y calcula la espera para que la tarea
+    use como máximo `share` de un núcleo, acotada entre `min_s` y `max_s`.
+    """
 
     def __init__(self, share: float, min_s: float, max_s: float) -> None:
         self.share = share
@@ -97,7 +98,7 @@ class Pacer:
         self._cost: float | None = None
 
     def record(self, seconds: float) -> None:
-        # Promedio suave: una lectura cara aislada (el OCR de un mensaje nuevo) no frena todo.
+        # Promedio suavizado: una lectura costosa aislada (el OCR de un mensaje nuevo) no frena todo el ciclo.
         self._cost = seconds if self._cost is None else 0.8 * self._cost + 0.2 * seconds
 
     @property
@@ -111,8 +112,9 @@ class Pacer:
 
 
 class Stopwatch:
-    """Tiempo de CPU del hilo actual (lo que cuesta de verdad, sin contar esperas) más tiempo real de lo que corre
-    en otros hilos del sistema (el OCR de Windows)."""
+    """Tiempo de CPU del hilo actual (costo real, sin contar esperas) más el tiempo real que se ejecuta en otros hilos
+    del sistema (el OCR de Windows).
+    """
 
     def __init__(self) -> None:
         self.seconds = 0.0

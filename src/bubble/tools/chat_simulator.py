@@ -1,15 +1,14 @@
-"""Simulador realista de Roblox para probar Bubble sin el juego.
+"""Simulador de Roblox para probar Bubble sin el juego.
 
-Dibuja con PIL (a ~20 cuadros por segundo) una escena que se mueve como una cámara que gira, un chat
-semitransparente al estilo de TextChatService (banderitas, nombres de colores, texto blanco con borde,
-mensajes largos en varias líneas, avisos [SYSTEM], spam y la barra "To chat click here…") y jugadores con
-burbujas de chat que se apilan (la nueva abajo, la vieja sube).
+Dibuja con PIL (a unos 20 cuadros por segundo) una escena con cámara giratoria, un chat semitransparente al estilo de
+TextChatService (banderas, nombres de colores, texto blanco con borde, mensajes largos en varias líneas, avisos
+[SYSTEM], spam y la barra "To chat click here…") y jugadores con burbujas de chat apiladas (la nueva abajo, la anterior
+arriba).
 
-Cada vez que aparece un mensaje o una burbuja se anota en un registro JSON (hora exacta), para medir
-cuánto tarda Bubble en detectarlo y traducirlo.
+Cada mensaje o burbuja que aparece se registra en un archivo JSON con la hora exacta, para medir cuánto tarda Bubble en
+detectarlo y traducirlo.
 
-Uso:  python -m bubble.tools.chat_simulator <escenario> <registro.jsonl>
-Escenarios: lento, medio, rapido, rafagas
+Uso:  python -m bubble.tools.chat_simulator <escenario> <registro.jsonl> Escenarios: lento, medio, rapido, rafagas
 """
 
 from __future__ import annotations
@@ -27,8 +26,8 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageTk
 
 WIDTH, HEIGHT = 1100, 650
-CHAT = (10, 64, 500, 300)  # zona de mensajes (x0, y0, x1, y1) dentro de la ventana
-CHAT_REGION = {"relative": True, "x": 10, "y": 64, "w": 490, "h": 236}  # para calibrar Bubble igual
+CHAT = (10, 64, 500, 300)  # zona de mensajes (x0, y0, x1, y1) en la ventana
+CHAT_REGION = {"relative": True, "x": 10, "y": 64, "w": 490, "h": 236}  # para calibrar Bubble con la misma región
 LINE_HEIGHT = 22
 TEXT_WIDTH = CHAT[2] - CHAT[0] - 18
 TITLE = "FakeRoblox"
@@ -64,7 +63,7 @@ MESSAGES = {
 SYSTEM = ["jody jo donated 10 to crisxlives!", "Insaan has added a comment to danger! (+25)",
           "Kira joined the game", "yappy has added a comment to Suratt_xyzzz! (+25) \"good morning\""]
 SPAM = ("n7r0pyy", ["Plss donate", "Plss donate", "Plsss donate", "Plss donatee"])
-BUBBLE_PLAYERS = {"Jake": (620, 430), "Pedro_BR": (860, 470)}  # posición en la escena (se mueve con la cámara)
+BUBBLE_PLAYERS = {"Jake": (620, 430), "Pedro_BR": (860, 470)}  # posición en la escena (sigue a la cámara)
 
 
 @dataclass
@@ -99,7 +98,7 @@ def build_scenario(name: str, seed: int = 7) -> list[tuple[float, str, str, str,
     spam_at = count // 2
     for i in range(count):
         t += rng.uniform(low, high)
-        if i == spam_at:  # un jugador spamea el mismo pedido
+        if i == spam_at:  # un jugador repite el mismo pedido
             for j, text in enumerate(SPAM[1]):
                 events.append((t + j * 0.5, SPAM[0], text, "en", "spam" if j >= 2 else "player"))
             t += 2.0
@@ -112,10 +111,10 @@ def build_scenario(name: str, seed: int = 7) -> list[tuple[float, str, str, str,
 
 class Simulator:
     def __init__(self, scenario: str, log_path: Path, fade: bool = True) -> None:
-        # "<escenario>_transparente": el fondo del chat no vuelve con los mensajes nuevos (el caso más difícil).
+        # "<escenario>_transparente": el fondo del chat no reaparece con los mensajes nuevos (el caso más difícil).
         self.always_faded = scenario.endswith("_transparente")
         self.events = build_scenario(scenario.removesuffix("_transparente"))
-        self.fade = fade  # el fondo del chat se desvanece sin mensajes nuevos (como en Roblox)
+        self.fade = fade  # el fondo del chat se desvanece sin mensajes nuevos, como en Roblox
         self.last_activity = time.time()
         self.log = log_path.open("w", encoding="utf-8")
         self.font = ImageFont.truetype("arialbd.ttf", 15)
@@ -130,17 +129,19 @@ class Simulator:
         self.root.resizable(False, False)
         self.label = tk.Label(self.root, bd=0)
         self.label.pack()
-        # Barra del chat como la de Roblox: se abre con la tecla física "/" (VK_OEM_2), Enter envía. Cualquier otra
-        # tecla con el chat cerrado "le llega al juego" y se anota (Bubble no debería tocar ninguna).
+        # Barra del chat como la de Roblox: se abre con la tecla física "/" (VK_OEM_2) y Enter envía. Cualquier otra
+        # tecla con el chat cerrado se considera dirigida al juego y se registra (Bubble no debería procesar ninguna).
         self.typing: str | None = None
         self.root.bind("<KeyPress>", self._on_key)
-        # Chat que ya estaba cuando "entraste al servidor" (Bubble no debería traducir todo esto).
+        # Chat existente al ingresar al servidor (Bubble no debería traducirlo todo).
         for speaker, text in [("Juan", "buenas gente"), ("Jake", "gg"), ("Luana", "oi galera")]:
             self._add(Message(speaker, text, SPEAKERS[speaker][0]), log=False)
 
     # ---------------------------------------------------------------- mensajes
     def _wrap(self, message: Message) -> None:
-        """Arma las líneas como el chat de Roblox: "[bandera] Nombre: texto" y el texto que sobra abajo."""
+        """Arma las líneas como el chat de Roblox: "[bandera] Nombre: texto", con el texto sobrante en las líneas
+        siguientes.
+        """
         name_color = (255, 220, 90) if message.kind == "system" else SPEAKERS.get(message.speaker, ("", (220, 220, 220)))[1]
         prefix = "[SYSTEM]: " if message.kind == "system" else f"{message.speaker}: "
         words = message.text.split()
@@ -173,7 +174,8 @@ class Simulator:
             stack = self.bubbles[message.speaker]
             stack.append((message.text, time.time()))
             del stack[:-3]
-        # Los mensajes que ya estaban al entrar se anotan aparte: Bubble puede traducir los últimos, no es basura.
+        # Los mensajes presentes al ingresar se registran aparte: Bubble puede traducir los últimos, por lo que no son
+        # ruido.
         self._write(event or ("message" if log else "initial"), speaker=message.speaker, text=message.text,
                     lang=message.lang, kind=message.kind,
                     bubble=log and message.speaker in BUBBLE_PLAYERS and message.kind == "player")
@@ -188,7 +190,7 @@ class Simulator:
     def _on_key(self, event) -> None:
         if self.typing is None:
             if event.keycode == 0xBF:  # tecla física "/": abre el chat, como en Roblox
-                # Como Roblox: si con este teclado la tecla escribe otra cosa que "/" (en español, "}"), ese
+                # Como en Roblox: si la tecla produce un carácter distinto de "/" en este teclado (en español, "}"), ese
                 # carácter queda escrito en la barra recién abierta.
                 self.typing = event.char if event.char and event.char != "/" and event.char.isprintable() else ""
                 self._write("abrir_chat")
@@ -199,13 +201,14 @@ class Simulator:
             text = self.typing.strip()
             self.typing = None
             if text:
-                self._add(Message("Vos", text, "?"), log=False, event="enviado")  # tu mensaje aparece en el chat
+                # el mensaje enviado aparece en el chat
+                self._add(Message("Vos", text, "?"), log=False, event="enviado")
         elif event.keysym == "Escape":
             self.typing = None
         elif event.keysym == "BackSpace":
             self.typing = self.typing[:-1]
         elif event.keysym in self.MODIFIER_KEYS:
-            self._write("tecla_extra", keysym=event.keysym)  # Ctrl, Shift… mientras se escribe
+            self._write("tecla_extra", keysym=event.keysym)  # Ctrl, Shift, etc. mientras se escribe
         elif event.char and event.char.isprintable():
             self.typing += event.char
 
@@ -234,7 +237,8 @@ class Simulator:
 
     def _panel_brightness(self, now: float) -> float:
         """Como en Roblox: el fondo oscuro del chat se desvanece a los pocos segundos sin mensajes nuevos (el texto
-        queda directo sobre el juego, que se mueve con la cámara) y vuelve al llegar uno o al escribir."""
+        queda sobre el juego, que se mueve con la cámara) y reaparece al llegar uno o al escribir.
+        """
         quiet = now - getattr(self, "last_activity", now)
         if getattr(self, "typing", None) is not None:
             return 0.32
@@ -248,13 +252,13 @@ class Simulator:
         x0, y0, x1, y1 = CHAT
         if brightness < 0.999:
             panel = image.crop((x0 - 4, y0 - 34, x1, y1 + 40))
-            panel = ImageEnhance.Brightness(panel).enhance(brightness)  # fondo semitransparente oscuro del chat
+            panel = ImageEnhance.Brightness(panel).enhance(brightness)  # fondo oscuro semitransparente del chat
             image.paste(panel, (x0 - 4, y0 - 34))
         draw = ImageDraw.Draw(image)
         for i, tab in enumerate(["Here", "Global", "Friends"]):
             draw.text((x0 + 60 + i * 150, y0 - 18), tab, font=self.font, fill=(230, 230, 230), anchor="mm")
-        # Texto con borde negro semitransparente (como el del chat de Roblox, TextStrokeTransparency 0.5): sobre un
-        # fondo claro el borde queda gris, no negro.
+        # Texto con borde negro semitransparente (como el chat de Roblox, TextStrokeTransparency 0.5): sobre fondo claro
+        # el borde se ve gris, no negro.
         strokes = Image.new("RGBA", image.size, (0, 0, 0, 0))
         stroke_draw = ImageDraw.Draw(strokes)
         fills: list[tuple[tuple[int, int], str, tuple]] = []
@@ -293,10 +297,10 @@ class Simulator:
     def _draw_bubbles(self, image: Image.Image, now: float, ox: int, oy: int) -> None:
         draw = ImageDraw.Draw(image)
         for name, stack in self.bubbles.items():
-            stack[:] = [(text, t) for text, t in stack if now - t < 12]  # las burbujas se van a los 12 s
+            stack[:] = [(text, t) for text, t in stack if now - t < 12]  # las burbujas desaparecen a los 12 s
             px, py = BUBBLE_PLAYERS[name]
             bottom = py + oy - 95
-            for text, _t in reversed(stack):  # la más nueva abajo, las viejas suben
+            for text, _t in reversed(stack):  # la más nueva abajo; las anteriores suben
                 width = min(260, int(self.bubble_font.getlength(text)) + 28)
                 lines = self._bubble_lines(text, width - 24)
                 height = 14 + 22 * len(lines)

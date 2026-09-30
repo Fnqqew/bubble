@@ -1,7 +1,7 @@
 """Burbujas de chat sobre la cabeza de los jugadores: datos comunes y diagnóstico por renglón de OCR.
 
-El seguimiento en vivo (rápido, también con la cámara en movimiento) está en bubble_tracker.py. Acá quedan
-las comprobaciones por renglón de texto, que sirven para el diagnóstico de "Probar captura".
+El seguimiento en vivo (rápido, también con la cámara en movimiento) está en bubble_tracker.py. Aquí quedan las
+comprobaciones por renglón de texto, que se usan en el diagnóstico de "Probar captura".
 """
 
 from __future__ import annotations
@@ -27,13 +27,13 @@ class BubbleItem:
     vx: float = 0.0  # velocidad en pantalla (px/s)
     vy: float = 0.0
     captured_at: float = 0.0  # time.monotonic() de la captura en que se vio
-    # Parte visible (izquierda, arriba, derecha, abajo) cuando la burbuja está tapada en parte (detrás del chat o
-    # contra el borde de la pantalla); left/top/right/bottom es la burbuja entera. None: se ve entera.
+    # Parte visible (izquierda, arriba, derecha, abajo) cuando la burbuja está parcialmente tapada (por el chat o por el
+    # borde de la pantalla); left/top/right/bottom es la burbuja completa. None: se ve completa.
     clip: tuple[int, int, int, int] | None = None
 
 
 def _pixels(image: Image.Image) -> list:
-    getter = getattr(image, "get_flattened_data", None) or image.getdata  # getdata está deprecado
+    getter = getattr(image, "get_flattened_data", None) or image.getdata  # getdata está obsoleto
     return list(getter())
 
 
@@ -45,8 +45,8 @@ def _luma(color) -> float:
 def check_bubble_row(image: Image.Image, row: OcrRow) -> tuple[tuple[tuple, tuple] | None, str]:
     """((fondo, letra), "") si el renglón está dentro de una burbuja; (None, motivo) si no.
 
-    Se mira solo a los COSTADOS del texto (no arriba/abajo, donde en burbujas de varias líneas está el
-    renglón vecino): ahí tiene que haber fondo claro, parejo y sin color.
+    Solo se examinan los COSTADOS del texto (no arriba ni abajo, donde en burbujas de varias líneas está el renglón
+    vecino): allí debe haber fondo claro, uniforme y sin color.
     """
     if row.height < 6:
         return None, "letra demasiado chica"
@@ -88,7 +88,7 @@ def _same_bubble(upper: OcrRow, lower: OcrRow) -> bool:
 
 
 def group_bubbles(rows: list[tuple[OcrRow, tuple, tuple]]) -> list[BubbleItem]:
-    """Une renglones que forman la misma burbuja (uno debajo del otro, superpuestos en horizontal)."""
+    """Une los renglones que forman la misma burbuja (uno debajo del otro, superpuestos en horizontal)."""
     groups: list[list[tuple[OcrRow, tuple, tuple]]] = []
     for entry in sorted(rows, key=lambda e: e[0].top):
         for group in groups:
@@ -110,12 +110,12 @@ def group_bubbles(rows: list[tuple[OcrRow, tuple, tuple]]) -> list[BubbleItem]:
 
 
 def find_bubbles(image: Image.Image, rows: list[OcrRow], exclude: Rect | None = None) -> list[BubbleItem]:
-    """Burbujas en la captura, sin contar lo que cae dentro de `exclude` (el chat)."""
+    """Burbujas de la captura, sin contar las que caen dentro de `exclude` (el chat)."""
     return group_bubbles([(row, *colors) for row, colors, _ in _classify(image, rows, exclude) if colors])
 
 
 def explain_bubbles(image: Image.Image, rows: list[OcrRow], exclude: Rect | None = None) -> list[str]:
-    """Diagnóstico: por qué cada texto de la pantalla se tomó (o no) como burbuja."""
+    """Diagnóstico: indica por qué cada texto de la pantalla se consideró (o no) una burbuja."""
     lines = []
     for row, colors, reason in _classify(image, rows, exclude):
         status = "BURBUJA" if colors else f"descartado: {reason}"

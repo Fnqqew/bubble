@@ -1,4 +1,4 @@
-"""Tutorial de primer uso: se muestra una sola vez; después se abre solo desde el botón "Tutorial"."""
+"""Tutorial de primer uso: se muestra una sola vez y luego se abre desde el botón "Tutorial"."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ WIDTH, HEIGHT = 640, 440
 
 
 def _colors() -> dict[str, str]:
-    """Los colores del tema elegido (oscuro o claro), para que combine con la ventana."""
+    """Colores del tema elegido (oscuro o claro), acordes con la ventana."""
     from .widgets import palette
 
     colors = palette()
@@ -32,10 +32,10 @@ def _mix(color_a: str, color_b: str, amount: float) -> str:
 class Step:
     title: str
     body: str
-    # Botón opcional para hacer el paso en el momento (ej. "Calibrar ahora").
+    # Botón opcional para realizar el paso en el momento (p. ej. "Calibrar ahora").
     action_label: str = ""
     action: Callable[[], None] | None = None
-    # Un cartel destacado (título, texto), para lo más importante: se ve de color, debajo del texto.
+    # Cartel destacado (título, texto) para lo más importante del paso; se muestra en color, debajo del texto.
     highlight: tuple[str, str] | None = None
 
 
@@ -43,9 +43,9 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
                 fix_windows: Callable[[], None] | None = None) -> list[Step]:
     return [
         Step(
-            "¡Hola! Soy Bubble",
-            "Te traduzco Roblox mientras jugás: el chat, lo que dicen arriba de la cabeza y la voz. "
-            "Uso tu cuenta de Claude. Cuando arriba diga «Listo», arrancamos.",
+            "Hola, soy Bubble",
+            "Traduzco Roblox mientras jugás: el chat, lo que aparece sobre la cabeza de los jugadores y la voz. Uso "
+            "tu cuenta de Claude. Cuando arriba diga «Listo», comenzamos.",
             highlight=("Antes que nada: el micrófono",
                        "Te entiendo tan bien como te escucho. Con un micrófono de auriculares o uno USB cerca de la "
                        "boca, todo sale mucho mejor que con el de la notebook. Podés probarlo en Inicio."),
@@ -57,15 +57,14 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
         ),
         Step(
             "Apagá la traducción de Roblox",
-            "Roblox traduce el chat por su cuenta, y si lo deja prendido yo leo mensajes que ya vienen cambiados.\n\n"
-            "1. En el juego, apretá Esc.\n"
-            "2. Andá a «Configuración».\n"
-            "3. Apagá «Traducción automática del chat».",
+            "Roblox traduce el chat por su cuenta, y si lo deja activado yo leo mensajes que ya vienen "
+            "modificados.\n\n1. En el juego, presioná Esc.\n2. Ingresá en «Configuración».\n3. Desactivá «Traducción "
+            "automática del chat».",
         ),
         Step(
             "Entrá a un juego",
-            "Abrí cualquier juego y dejalo a la vista. Cuando aparezcan un par de mensajes, encuentro el chat solo.\n\n"
-            "Si en algún juego no lo encuentro, en Ajustes podés buscarlo o marcarlo a mano.",
+            "Abrí cualquier juego y dejalo a la vista. Cuando aparezcan algunos mensajes, encuentro el chat "
+            "automáticamente.\n\nSi en algún juego no lo encuentro, en Ajustes podés buscarlo o marcarlo manualmente.",
             "Buscar el chat ahora",
             calibrate,
         ),
@@ -77,11 +76,10 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
         ),
         Step(
             f"Escribí con {hotkey}",
-            f"En el juego apretá {hotkey} y se abre una barra. Escribí como hablás y vas viendo cómo queda.\n\n"
-            "• Enter lo manda al chat, ya traducido.\n"
-            "• Ctrl+Enter lo dice en voz.\n"
-            "• Tab cambia el idioma, ↑ ↓ el tono y Ctrl+G la voz (mujer u hombre).\n\n"
-            "Si tu tecla usa Shift (como «°»), apretala sola: en Roblox el Shift mueve la cámara.",
+            f"En el juego presioná {hotkey} y se abre una barra. Escribí como hablás y vas viendo cómo queda.\n\n• "
+            "Enter lo envía al chat, ya traducido.\n• Ctrl+Enter lo dice en voz alta.\n• Tab cambia el idioma, ↑ ↓ "
+            "el tono y Ctrl+G la voz (mujer u hombre).\n\nSi tu tecla usa Shift (como «°»), presionala sola: en "
+            "Roblox el Shift mueve la cámara.",
         ),
         Step(
             "La voz",
@@ -92,22 +90,19 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
         ),
         Step(
             "El micrófono virtual",
-            "Windows no deja que un programa hable por tu micrófono, así que uso uno virtual y gratis "
-            "(VB-Audio Virtual Cable). Es como Soundpad: le paso tu voz de verdad y le sumo la traducida.\n\n"
-            "1. En Voz, tocá «Instalar (gratis)». Aceptá el permiso y tocá «Install Driver».\n"
-            "2. Si Windows te pide reiniciar, reiniciá.\n"
-            "3. Listo. Mientras Bubble está abierto, los demás te escuchan por ahí. Cuando lo cerrás, vuelve tu "
-            "micrófono de siempre.\n\n"
-            "Abrí Bubble antes que Roblox, así Roblox lo agarra solo. Y acordate de tener el micrófono prendido en "
-            "Roblox.",
+            "Windows no permite que un programa hable por tu micrófono, así que uso uno virtual y gratuito (VB-Audio "
+            "Virtual Cable). Es como Soundpad: le envío tu voz real y le sumo la traducida.\n\n1. En Voz, tocá "
+            "«Instalar (gratis)». Aceptá el permiso y tocá «Install Driver».\n2. Si Windows te pide reiniciar, "
+            "reiniciá.\n3. Eso es todo. Mientras Bubble está abierto, los demás te escuchan a través de él. Cuando "
+            "lo cerrás, se restablece tu micrófono habitual.\n\nAbrí Bubble antes que Roblox, así Roblox lo detecta "
+            "automáticamente. Y recordá activar el micrófono en Roblox.",
             "Arreglar Windows" if fix_windows else "",
             fix_windows,
         ),
         Step(
             "Hacelo a tu gusto",
             "En Ajustes cambiás los colores, el tamaño de las traducciones, dónde van los subtítulos y qué tan "
-            "informal querés sonar.\n\n"
-            "Este tutorial lo volvés a ver cuando quieras desde Ajustes. ¡A jugar!",
+            "informal querés sonar.\n\nPodés volver a ver este tutorial cuando quieras desde Ajustes.",
         ),
     ]
 
@@ -148,7 +143,7 @@ class TutorialWindow:
         header.pack(fill="x", padx=24, pady=(20, 4))
         if self._icon:
             tk.Label(header, image=self._icon, bg=self.c["bg"]).pack(side="left", padx=(0, 12))
-        # El contador se empaqueta antes que los títulos para que un título largo no lo empuje afuera.
+        # El contador se empaqueta antes que los títulos para que un título largo no lo desplace fuera de la vista.
         self.counter = tk.Label(header, font=("Segoe UI", 9), fg=self.c["muted"], bg=self.c["bg"])
         self.counter.pack(side="right", anchor="n")
         titles = tk.Frame(header, bg=self.c["bg"])
@@ -164,7 +159,7 @@ class TutorialWindow:
         )
         self.body.pack(fill="both", expand=True, padx=24, pady=(10, 6))
 
-        # El cartel destacado (lo más importante del paso): fondo de color, una barra del acento y el ícono.
+        # Cartel destacado con lo más importante del paso: fondo de color, barra con el color de acento e ícono.
         tint = _mix(self.c["accent"], self.c["bg"], 0.84)
         self.callout = tk.Frame(self.win, bg=tint, highlightthickness=1,
                                 highlightbackground=_mix(self.c["accent"], self.c["bg"], 0.45))
@@ -247,7 +242,7 @@ class TutorialWindow:
         if step.highlight:
             self.callout_title.configure(text=step.highlight[0])
             self.callout_body.configure(text=step.highlight[1])
-            self.callout.pack(fill="x", padx=24, pady=(0, 10), before=self.dots)  # (el botón del paso, después)
+            self.callout.pack(fill="x", padx=24, pady=(0, 10), before=self.dots)  # (el botón del paso va después)
         else:
             self.callout.pack_forget()
         self.counter.configure(text=f"Paso {self.index + 1} de {len(self.steps)}")
@@ -256,8 +251,8 @@ class TutorialWindow:
             self.action_button.pack(anchor="w", padx=24, pady=(0, 6), before=self.dots)
         else:
             self.action_button.pack_forget()
-        self.next_button.configure(text="¡Listo!" if last else "Siguiente ›")
-        # "Saltar paso" solo tiene sentido en los pasos con una acción para hacer.
+        self.next_button.configure(text="Listo" if last else "Siguiente ›")
+        # "Saltar paso" solo tiene sentido en los pasos que tienen una acción para realizar.
         if step.action and not last:
             self.skip_button.pack(side="right", padx=(0, 8), after=self.next_button)
         else:

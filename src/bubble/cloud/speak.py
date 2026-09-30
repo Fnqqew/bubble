@@ -1,14 +1,15 @@
-"""Las voces de Bubble Pro: Deepgram Aura-2, voces naturales y con personalidad (alegre, canchera o tranquila), para tu
-voz traducida y el chat a voz. Misma cara que las voces de tu PC (voice/tts.py: `Voices`), así el resto no cambia.
+"""Voces de Bubble Pro: Deepgram Aura-2, voces naturales con personalidad (alegre, canchera o tranquila), para la voz
+traducida del jugador y la lectura del chat en voz alta. Tienen la misma interfaz que las voces locales (voice/tts.py:
+`Voices`), de modo que el resto del código no cambia.
 
-En inglés hablan las voces Flux (Deepgram, septiembre de 2026): más parejas de una frase a otra y con expresividad
-(de calma a animada), que se ajusta a cómo dijiste las cosas; cuestan 0,045 US$ cada 1.000 letras en vez de 0,030.
-Idiomas con voz en la nube: inglés (de EE. UU., Reino Unido, Australia y Filipinas), español (de Argentina, México,
-Colombia, España y neutro), francés, alemán, italiano, neerlandés y japonés: todas las voces que tiene Deepgram, con
-mujer y hombre en cada idioma. Los demás (portugués, ruso…) y cualquier falla: la voz de tu PC.
+En inglés se usan las voces Flux de Deepgram: son más uniformes entre frases y tienen expresividad (de calma a animada),
+que se ajusta a cómo se dijo cada frase. Cuestan 0,045 US$ cada 1.000 caracteres, en lugar de 0,030. Idiomas con voz en
+la nube: inglés (de EE. UU., Reino Unido, Australia y Filipinas), español (de Argentina, México, Colombia, España y
+neutro), francés, alemán, italiano, neerlandés y japonés, con voz femenina y masculina en cada uno. Son todas las voces
+que ofrece Deepgram. Para los demás idiomas (portugués, ruso, etc.) y ante cualquier falla se usa la voz local.
 
-Cada frase pasa por voice/prosody.py: la nube varía sola el tono y el volumen de una frase a otra (medido: de 100 a
-250 Hz y hasta 10 dB con la misma voz); ahí se emparejan y se les pone tu expresión.
+Cada frase pasa por voice/prosody.py: la nube varía por su cuenta el tono y el volumen entre frases (con la misma voz,
+de 100 a 250 Hz y hasta 10 dB); allí se uniforman y se les aplica la expresión del jugador.
 """
 
 from __future__ import annotations
@@ -30,14 +31,14 @@ from .errors import BadKey, CloudError, NoCredit
 
 log = logging.getLogger(__name__)
 SAMPLE_RATE = 24000
-PERSONALITIES = {"alegre": "Alegre", "canchera": "Canchera", "tranquila": "Tranquila"}
-# idioma → (femenina, masculina) por personalidad, según cómo las describe Deepgram.
+PERSONALITIES = {"alegre": "Alegre", "canchera": "Expresiva", "tranquila": "Tranquila"}
+# idioma → (femenina, masculina) por personalidad, según la descripción de Deepgram.
 VOICES = {
     "en": {"alegre": ("thalia", "aries"),  # clara, enérgica, entusiasta
-           "canchera": ("andromeda", "apollo"),  # casual, expresiva / seguro, casual
+           "canchera": ("andromeda", "apollo"),  # casual, expresiva / segura, casual
            "tranquila": ("helena", "arcas")},  # cálida, natural / suave, natural
     "es": {"alegre": ("celeste", "luciano"),  # enérgica, entusiasta / carismático, alegre
-           "canchera": ("selena", "aquila"),  # latinoamericanos, casuales (pronuncian bien las palabras en inglés)
+           "canchera": ("selena", "aquila"),  # latinoamericanos, casuales (pronuncian bien el inglés)
            "tranquila": ("estrella", "sirio")},  # calma, natural / calmo, barítono
     "fr": {"alegre": ("agathe", "hector"), "canchera": ("agathe", "hector"), "tranquila": ("agathe", "hector")},
     "de": {"alegre": ("viktoria", "julius"),  # carismática, alegre / casual, alegre
@@ -53,10 +54,11 @@ VOICES = {
            "canchera": ("ama", "ebisu"),  # casual, segura
            "tranquila": ("izanami", "fujin")},  # clara, cordial / calmo, seguro
 }
-# Con la región del que te escucha, las voces de esa zona (las que hay): {personalidad: (femenina, masculina)}. "*":
-# todas las personalidades. None: esa voz no está en la zona (queda la de VOICES).
+# Voces de la región del oyente, si existen: {personalidad: (femenina, masculina)}. "*": todas las personalidades. None:
+# esa voz no existe en la zona y se mantiene la de VOICES.
 REGIONAL = {
-    ("es", "AR"): {"*": ("antonia", "aquila")},  # argentina (Deepgram no tiene un hombre argentino: latinoamericano)
+    # argentina (Deepgram no tiene voz masculina argentina: se usa latinoamericana)
+    ("es", "AR"): {"*": ("antonia", "aquila")},
     ("es", "UY"): {"*": ("antonia", "aquila")},
     ("es", "MX"): {"alegre": ("olivia", "luciano"), "canchera": ("olivia", "javier"), "tranquila": ("estrella", "sirio")},
     ("es", "ES"): {"alegre": ("silvia", "alvaro"), "canchera": ("carina", "alvaro"), "tranquila": ("agustina", "nestor")},
@@ -65,9 +67,9 @@ REGIONAL = {
     ("en", "AU"): {"*": ("theia", "hyperion")},
     ("en", "PH"): {"*": ("amalthea", None)},
 }
-# El tono de siempre de cada voz (Hz, la mediana de 4 frases tranquilas, medido el 30/9/2026): la referencia con la
-# que se emparejan sus frases desde la primera (ver voice/prosody.py). Algunas varían poco (Agustina: 186 a 189 Hz);
-# otras, mucho (Beatrix: 212 a 288; Apollo, entusiasmado, de 108 a 241).
+# Tono habitual de cada voz (Hz, mediana de 4 frases tranquilas): referencia con la que se uniforman sus frases desde la
+# primera (ver voice/prosody.py). Algunas varían poco (Agustina: 186 a 189 Hz) y otras mucho (Beatrix: 212 a 288;
+# Apollo, entusiasmado, de 108 a 241).
 TYPICAL_PITCH = {
     "agathe-fr": 215, "agustina-es": 187, "alvaro-es": 120, "ama-ja": 217, "amalthea-en": 212, "andromeda-en": 182,
     "antonia-es": 231, "apollo-en": 141, "aquila-es": 147, "arcas-en": 127, "aries-en": 117, "aurelia-de": 200,
@@ -79,7 +81,7 @@ TYPICAL_PITCH = {
     "silvia-es": 205, "sirio-es": 106, "thalia-en": 213, "theia-en": 181, "uzume-ja": 197, "viktoria-de": 222,
 }
 POLISH.seed({f"aura-2-{name}": hz for name, hz in TYPICAL_PITCH.items()})
-# Flux, en inglés: (femenina, masculina) por personalidad y, por acento, las de esa zona.
+# Voces Flux en inglés: (femenina, masculina) por personalidad y, por acento, las de esa zona.
 FLUX_VOICES = {"alegre": ("heather", "wade"),  # atrapante, enérgica / entusiasta
                "canchera": ("brooke", "cole"),  # amigable, rápida / amigable, enérgico
                "tranquila": ("hannah", "miles")}  # clara, tranquila / calmo, sincero
@@ -88,18 +90,19 @@ FLUX_REGIONAL = {"GB": ("gemma", "kit"), "AU": ("sharon", None), "IE": ("maeve",
 FLUX_PITCH = {"brooke": 231, "cole": 135, "gemma": 221, "hannah": 234, "heather": 246, "kai": 112, "kit": 119,
               "maeve": 252, "marcelo": 116, "meena": 227, "miles": 101, "naveen": 186, "sharon": 178, "wade": 124}
 POLISH.seed({f"flux-{name}-en": hz for name, hz in FLUX_PITCH.items()})
-# Cómo lo dijiste → expresividad de Flux (de -2, calma, a 2, animada).
+# Cómo se dijo la frase → expresividad de Flux (de -2, calma, a 2, animada).
 EXPRESSIVITY = {"shout": 2, "exclaim": 1, "animated": 1, "soft": -2, "flat": -1}
-SPEED_LANGUAGES = {"en", "es"}  # Deepgram deja cambiar la velocidad solo en estos
+SPEED_LANGUAGES = {"en", "es"}  # Deepgram permite cambiar la velocidad solo en estos idiomas
 MAX_CHARS = 2000
-FADE_S = 0.07  # si la voz termina de golpe, se baja suave en este final
-CACHE_SIZE = 120  # frases dichas que se guardan (en memoria): repetir "gg" o "gracias" no se vuelve a pagar
+FADE_S = 0.07  # si la voz termina de golpe, se atenúa en este tramo final (s)
+CACHE_SIZE = 120  # frases sintetizadas guardadas en memoria: evita pagar de nuevo "gg" o "gracias"
 
 
 def speakable(text: str, style: str = "") -> str:
-    """Con signo al final: la voz de la nube corta el final de las palabras sueltas sin puntuación ("nice", "gg"). El
-    signo es el de cómo lo dijiste: "?" si preguntaste, "!" si exclamaste o gritaste, "." si no (antes, toda palabra
-    suelta llevaba "!" y sonaba exaltada aunque la dijeras tranquilo)."""
+    """Agrega un signo final: la voz de la nube recorta el final de las palabras sueltas sin puntuación ("nice", "gg").
+    El signo depende de cómo se dijo la frase: "?" si era pregunta, "!" si fue exclamada o gritada, "." en otro caso
+    (así una palabra dicha con calma no suena exaltada).
+    """
     text = " ".join(text.split())
     marks = set(style.split("+")) if style else set()
     if text and text[-1] not in ".!?…。！？\"'»”)":
@@ -108,8 +111,9 @@ def speakable(text: str, style: str = "") -> str:
 
 
 def soften_end(audio: np.ndarray) -> np.ndarray:
-    """Si la voz termina todavía sonando (la nube a veces corta la última sílaba), se baja suave en los últimos
-    FADE_S en vez del corte seco (que suena a palabra sin terminar)."""
+    """Si el audio termina aún con sonido (la nube a veces corta la última sílaba), lo atenúa suavemente en los últimos
+    FADE_S en lugar del corte seco, que suena a palabra inconclusa.
+    """
     tail = int(SAMPLE_RATE * FADE_S)
     if len(audio) < tail * 2:
         return audio
@@ -133,8 +137,9 @@ def is_flux(name: str) -> bool:
 
 def voice_name(language: str, gender: str = "femenina", personality: str = "canchera",
                flux: bool = True) -> str | None:
-    """El modelo de Deepgram para ese idioma ("es-AR", "en"…), o None si la nube no tiene voz en ese idioma. En
-    inglés, una voz Flux (con `flux=False`, la Aura de siempre)."""
+    """Modelo de Deepgram para ese idioma ("es-AR", "en"...), o None si la nube no tiene voz en ese idioma. En inglés
+    devuelve una voz Flux; con `flux=False`, la Aura habitual.
+    """
     parts = language.replace("_", "-").split("-")
     code = parts[0].lower()
     region = parts[1].upper() if len(parts) > 1 else ""
@@ -161,7 +166,9 @@ def _path(name: str) -> str:
 
 
 class CloudVoices:
-    """Las voces de la nube con la cara de `Voices` (tts.py). `local`: las de tu PC, para lo que la nube no tiene."""
+    """Voces de la nube con la interfaz de `Voices` (tts.py). `local`: voces locales, para los idiomas que la nube no
+    cubre.
+    """
 
     def __init__(self, key: str, local, on_fail: Callable[[CloudError], None] = lambda _exc: None,
                  personality: str = "canchera", timeout: float = 6.0) -> None:
@@ -169,13 +176,13 @@ class CloudVoices:
         self.local = local
         self.on_fail = on_fail
         self.personality = personality if personality in PERSONALITIES else "canchera"
-        self.flux = True  # en inglés, las voces Flux (si Deepgram no las acepta, las Aura de siempre)
+        self.flux = True  # en inglés, voces Flux (si Deepgram no las acepta, las Aura habituales)
         self.timeout = timeout
         self._ready: set[str] = set()
         self._cache: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (voz, velocidad, texto) → audio (int16)
         self._cache_lock = threading.Lock()
 
-    # género y velocidad: los mismos que las voces de tu PC (se eligen en la página Voz)
+    # género y velocidad: los mismos que en las voces locales (se eligen en la página Voz)
     @property
     def gender(self) -> str:
         return self.local.gender
@@ -202,12 +209,13 @@ class CloudVoices:
 
     def is_downloaded(self, language: str, gender: str | None = None) -> bool:
         if voice_name(language, gender or self.gender, self.personality, self.flux):
-            return True  # no se descarga nada
+            return True  # no requiere descarga
         return self.local.is_downloaded(language, gender)
 
     def prepare(self, language: str, gender: str | None = None) -> bool:
         if voice_name(language, gender or self.gender, self.personality, self.flux):
-            pool(self.timeout).warm()  # deja la conexión abierta: la primera frase sale enseguida (no gasta)
+            # mantiene la conexión abierta para que la primera frase salga enseguida (sin costo)
+            pool(self.timeout).warm()
             self._ready.add(language.split("-")[0].lower())
             return True
         return self.local.prepare(language, gender)
@@ -218,7 +226,7 @@ class CloudVoices:
         if name is None or not text.strip():
             return self.local.synthesize(text, language, gender, speed, style)
         if text.strip().lower() == "ok":
-            self.prepare(language, gender)  # la "práctica" de las voces de tu PC: acá alcanza con conectarse
+            self.prepare(language, gender)  # equivale a la preparación de las voces locales: aquí basta con conectarse
             return None
         text = speakable(text, style)
         params, key = self._request(name, language, speed, style, text)
@@ -256,8 +264,10 @@ class CloudVoices:
 
     def stream(self, text: str, language: str, gender: str | None = None, speed: float | None = None,
                style: str = ""):
-        """La voz de a pedazos, apenas llegan (empieza a sonar ~0,5 s antes que esperando la frase entera). Devuelve
-        (frecuencia, pedazos) o None si la nube no tiene voz en ese idioma (entonces se usa `synthesize`)."""
+        """Reproduce la voz por fragmentos a medida que llegan (empieza ~0,5 s antes que esperando la frase
+        completa). Devuelve (frecuencia, fragmentos), o None si la nube no tiene voz en ese idioma (en ese caso
+        se usa `synthesize`).
+        """
         name = voice_name(language, gender or self.gender, self.personality, self.flux)
         if name is None or not text.strip() or text.strip().lower() == "ok":
             return None
@@ -282,9 +292,9 @@ class CloudVoices:
 
     def _decode(self, pieces, key, name: str, style: str, language: str, chars: int):
         parts, leftover = [], b""
-        # Mismo tono y volumen que las otras frases (salvo si Flux ya puso el tono según tu expresión).
+        # Mismo tono y volumen que las demás frases (salvo que Flux ya haya ajustado el tono según la expresión).
         shaper = Streaming(POLISH, SAMPLE_RATE, name, style, tone=not (is_flux(name) and expressivity(style)))
-        hold = int(SAMPLE_RATE * FADE_S) * 2  # el final se retiene un momento: si termina de golpe, se suaviza
+        hold = int(SAMPLE_RATE * FADE_S) * 2  # se retiene el final: si termina de golpe, se atenúa
         held = np.zeros(0, dtype=np.float32)
         for data in pieces:
             data = leftover + data
@@ -323,13 +333,14 @@ class CloudVoices:
             if expressivity(style):
                 params["expressivity"] = expressivity(style)
         elif code in SPEED_LANGUAGES:
-            low = 0.9 if code == "es" else 0.7  # en español, más lento que 0,9 se traba
+            low = 0.9 if code == "es" else 0.7  # en español, por debajo de 0,9 se bloquea
             params["speed"] = round(min(1.5, max(low, (speed or self.speed) * pace)), 2)
         return params, (name, params.get("speed"), params.get("expressivity"), text.strip())
 
     def _no_flux(self, name: str, error: CloudError) -> bool:
-        """Deepgram no aceptó la voz Flux (una cuenta sin acceso, un cambio en su servicio): desde ahora, en inglés, las
-        Aura de siempre. True si hay que probar de nuevo."""
+        """Deepgram rechazó la voz Flux (cuenta sin acceso, cambio en el servicio): en adelante, en inglés se usan
+        las Aura habituales. Devuelve True si hay que reintentar.
+        """
         if not is_flux(name) or isinstance(error, (BadKey, NoCredit)) or not self.flux:
             return False
         log.warning("Las voces Flux no andan (%s): en inglés, las Aura", error)

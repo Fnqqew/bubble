@@ -1,8 +1,8 @@
-"""Termina una actualización de Bubble: espera a que Bubble se cierre, reemplaza sus archivos (o hace `git pull`),
-reinstala los paquetes si cambiaron y lo vuelve a abrir, con una ventanita que muestra cómo va.
+"""Completa una actualización de Bubble: espera a que Bubble se cierre, reemplaza sus archivos (o ejecuta `git pull`),
+reinstala los paquetes si cambiaron y vuelve a abrir la aplicación, mostrando el avance en una ventana pequeña.
 
-Corre desde una copia en la carpeta temporal (así puede reemplazar la de Bubble) y solo usa Python estándar: no
-importa nada de Bubble. Lo prepara y lo arranca update.py.
+Se ejecuta desde una copia en la carpeta temporal (para poder reemplazar la carpeta de Bubble) y usa solo la biblioteca
+estándar de Python: no importa nada de Bubble. Lo prepara y lo inicia update.py.
 
 Uso: actualizar.py <plan.json> [--sin-ventana]
 """
@@ -19,16 +19,16 @@ import threading
 import time
 from pathlib import Path
 
-KEEP = {".venv", ".git"}  # lo que una actualización nunca toca
+KEEP = {".venv", ".git"}  # lo que una actualización nunca modifica
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def wait_for(pid: int, timeout: float = 90.0) -> bool:
-    """Espera a que ese proceso termine. True si terminó."""
+    """Espera a que el proceso termine. Devuelve True si terminó."""
     kernel32 = ctypes.windll.kernel32
     handle = kernel32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
     if not handle:
-        return True  # ya no existe
+        return True  # el proceso ya no existe
     try:
         return kernel32.WaitForSingleObject(handle, int(timeout * 1000)) == 0
     finally:
@@ -36,7 +36,7 @@ def wait_for(pid: int, timeout: float = 90.0) -> bool:
 
 
 def dependencies(project: Path) -> str:
-    """El pyproject.toml sin la línea de la versión: si cambia, cambiaron los paquetes que necesita Bubble."""
+    """El pyproject.toml sin la línea de la versión: si cambia, cambiaron las dependencias de Bubble."""
     try:
         text = (project / "pyproject.toml").read_text(encoding="utf-8")
     except OSError:
@@ -45,8 +45,9 @@ def dependencies(project: Path) -> str:
 
 
 def replace_files(project: Path, staged: Path) -> bool:
-    """Pone la versión nueva en la carpeta de Bubble (sin tocar .venv ni .git). Si algo falla, deja la anterior
-    como estaba. Devuelve si cambiaron los paquetes que necesita."""
+    """Copia la versión nueva a la carpeta de Bubble (sin tocar .venv ni .git). Si algo falla, conserva la versión
+    anterior. Devuelve si cambiaron las dependencias.
+    """
     changed = dependencies(project) != dependencies(staged)
     package, backup = project / "src" / "bubble", project / "src" / "bubble.anterior"
     shutil.rmtree(backup, ignore_errors=True)
@@ -86,13 +87,13 @@ def pip_install(python: str, project: Path) -> None:
 
 
 def run(plan: dict, say=print) -> dict:
-    """Todos los pasos. Devuelve el resultado que lee Bubble al abrirse (ver update.finished)."""
+    """Ejecuta todos los pasos. Devuelve el resultado que lee Bubble al iniciarse (ver update.finished)."""
     project = Path(plan["project"])
     result = {"version": plan["version"], "ok": False, "error": ""}
     try:
         say("Esperando que Bubble se cierre…")
         wait_for(int(plan["pid"]))
-        time.sleep(0.5)  # (que Windows suelte los archivos)
+        time.sleep(0.5)  # (para que Windows libere los archivos)
         say(f"Poniendo Bubble {plan['version']}…")
         changed = git_pull(project) if plan["kind"] == "git" else replace_files(project, Path(plan["staged"]))
         if changed:
@@ -107,13 +108,13 @@ def run(plan: dict, say=print) -> dict:
     except OSError:
         pass
     say("✓ ¡Listo! Abriendo Bubble…" if result["ok"] else f"No se pudo actualizar: {result['error']}")
-    if plan.get("reopen", True):  # (actualizando al cerrar Bubble, no se vuelve a abrir)
+    if plan.get("reopen", True):  # (si se actualiza al cerrar Bubble, no se reabre)
         subprocess.Popen(plan["relaunch"], cwd=str(project), close_fds=True, creationflags=0x00000008)  # DETACHED
     return result
 
 
 def build_window(root, version: str):
-    """La ventanita «Actualizando Bubble» (oscura, como Bubble). Devuelve el texto de estado y la barra."""
+    """La ventana «Actualizando Bubble» (oscura, como Bubble). Devuelve el texto de estado y la barra de progreso."""
     import tkinter as tk
     from tkinter import ttk
 
@@ -137,7 +138,7 @@ def build_window(root, version: str):
     status.pack(anchor="w", pady=(16, 10))
     bar = ttk.Progressbar(frame, mode="indeterminate", length=380, style="Bubble.Horizontal.TProgressbar")
     bar.pack()
-    try:  # la barra de título oscura (Windows 10 20H1+ / 11)
+    try:  # barra de título oscura (Windows 10 20H1+ / 11)
         root.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
         dark = ctypes.c_int(1)
@@ -150,14 +151,14 @@ def build_window(root, version: str):
 def main() -> None:
     plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     if sys.stdout is not None:
-        sys.stdout.reconfigure(errors="replace")  # (una consola sin «✓» no lo frena)
+        sys.stdout.reconfigure(errors="replace")  # (una consola sin «✓» no debe interrumpir la ejecución)
     if "--sin-ventana" in sys.argv:
         run(plan)
         return
     import tkinter as tk
 
     root = tk.Tk()
-    try:  # el ícono de Bubble (se carga antes de reemplazar los archivos)
+    try:  # ícono de Bubble (se carga antes de reemplazar los archivos)
         root.iconbitmap(default=str(Path(plan["project"]) / "src" / "bubble" / "assets" / "bubble.ico"))
     except tk.TclError:
         pass

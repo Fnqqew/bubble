@@ -1,13 +1,13 @@
-"""Cómo suena la voz traducida: pareja entre una frase y la otra, y con tu expresión.
+"""Reproduce la voz traducida de forma homogénea entre frases y con la expresión del jugador.
 
-Medido con las voces de la nube (30/9/2026): cada frase se pide por separado y el modelo varía solo. La misma voz salía
-con un tono medio de 100 Hz en una frase y de 250 Hz en la siguiente, y hasta 10 dB más baja; la misma frase pedida
-dos veces, con otro tono (±20 %). Parecía otra persona a cada rato.
+Las voces de la nube se solicitan frase por frase y el modelo introduce variaciones: la misma voz puede salir con un
+tono medio de 100 Hz en una frase y de 250 Hz en la siguiente, hasta 10 dB más baja, y la misma frase pedida dos veces
+difiere en el tono (±20 %). El resultado suena como hablantes distintos.
 
-Acá cada frase se lleva al tono y al volumen de siempre de esa voz (su referencia, que se aprende frase a frase) y
-después se le suma tu expresión: más aguda y más fuerte si gritaste, más suave si hablaste bajito, con la melodía más
-marcada si hablaste animado, y subiendo al final si preguntaste. El tono se cambia sin tocar la velocidad ni el timbre
-(TD-PSOLA: se toman los ciclos de la voz uno por uno y se vuelven a poner más juntos o más separados).
+Por eso cada frase se lleva al tono y al volumen habituales de esa voz (su referencia, que se aprende frase a frase) y
+luego se le aplica la expresión del jugador: más aguda y más fuerte si gritó, más suave si habló bajo, con la melodía
+más marcada si habló animado y con subida final si preguntó. El tono se modifica sin alterar la velocidad ni el timbre
+(TD-PSOLA: se extraen los ciclos de la voz uno por uno y se vuelven a colocar más juntos o más separados).
 """
 
 from __future__ import annotations
@@ -23,24 +23,24 @@ from numpy.lib.stride_tricks import sliding_window_view
 HOP_S = 0.01
 FRAME_S = 0.04
 MIN_HZ, MAX_HZ = 60.0, 500.0
-TARGET_DB = -20.0  # volumen de la voz (RMS de lo que suena), igual para todas las voces y frases
+TARGET_DB = -20.0  # volumen de la voz (RMS), igual para todas las voces y frases
 MAX_GAIN_DB = 14.0
-MAX_CORRECTION = 8.0  # semitonos que se mueve una frase como mucho (la nube llegó a variar más de una octava)
-NOT_THE_VOICE = 12.0  # más lejos que esto no es la voz que varió: es un error al medir (mejor no tocar)
-PULL = 0.8  # cuánto se acerca a la referencia: del todo sonaría plano (algo de la variación es expresión)
-DEADBAND = 0.6  # semitonos: una diferencia menor no se nota (y así casi nunca se toca una voz pareja)
+MAX_CORRECTION = 8.0  # máximo de semitonos que se corrige una frase (la nube varió más de una octava)
+NOT_THE_VOICE = 12.0  # más allá de este valor se trata de un error de medición, no de la voz (no se corrige)
+PULL = 0.8  # fracción que se acerca a la referencia; del todo sonaría plano (parte es expresión)
+DEADBAND = 0.6  # semitonos: por debajo no se percibe, así que una voz pareja casi no se toca
 MEMORY = 12  # frases que forman la referencia de cada voz
-SEED_WEIGHT = 3  # el tono medido de antemano (voces de la nube) cuenta como tantas frases
+SEED_WEIGHT = 3  # el tono medido de antemano (voces de la nube) pesa como estas frases
 
 
 @dataclass(frozen=True)
 class Expression:
-    """Qué se le hace a la voz para cada forma de decir algo."""
+    """Transformaciones que se aplican a la voz según la forma de decir algo."""
 
-    semitones: float = 0.0  # más aguda o más grave que de costumbre
+    semitones: float = 0.0  # más aguda o más grave que lo habitual
     gain_db: float = 0.0  # más fuerte o más suave
     contour: float = 1.0  # melodía: >1 más marcada (animada), <1 más pareja
-    rise: float = 0.0  # si no sube al final (pregunta), cuánto hacerla subir (semitonos)
+    rise: float = 0.0  # si no sube al final (pregunta), semitonos que se le agregan
 
 
 EXPRESSIONS = {
@@ -54,7 +54,7 @@ EXPRESSIONS = {
 
 
 def expression(style: str) -> Expression:
-    """Las marcas de cómo lo dijiste ("question+exclaim", "shout"…) juntas en una sola."""
+    """Combina en una sola las marcas de expresión ("question+exclaim", "shout"…)."""
     marks = [EXPRESSIONS[mark] for mark in (style or "").split("+") if mark in EXPRESSIONS]
     if not marks:
         return Expression()
@@ -72,7 +72,7 @@ def _median5(values: np.ndarray) -> np.ndarray:
 
 
 def _lowpass(audio: np.ndarray, rate: int, cutoff: float) -> np.ndarray:
-    """Solo los graves (hasta `cutoff` Hz), sin correr la señal en el tiempo."""
+    """Conserva solo los graves (hasta `cutoff` Hz), sin desplazar la señal en el tiempo."""
     taps = int(rate * 0.004) | 1
     n = np.arange(taps) - taps // 2
     kernel = np.sinc(2 * cutoff / rate * n) * np.hamming(taps)
@@ -80,7 +80,7 @@ def _lowpass(audio: np.ndarray, rate: int, cutoff: float) -> np.ndarray:
 
 
 def _resample(audio: np.ndarray, length: int) -> np.ndarray:
-    """La misma señal con otra cantidad de muestras (como tocarla más lenta o más rápida)."""
+    """La misma señal con otra cantidad de muestras (equivale a reproducirla más lenta o más rápida)."""
     spectrum = np.fft.rfft(audio)
     kept = np.zeros(length // 2 + 1, dtype=spectrum.dtype)
     size = min(len(spectrum), len(kept))
@@ -90,9 +90,10 @@ def _resample(audio: np.ndarray, length: int) -> np.ndarray:
 
 # ---------------------------------------------------------------- el tono, ciclo por ciclo
 def pitch_track(audio: np.ndarray, rate: int) -> tuple[np.ndarray, np.ndarray]:
-    """Tono (Hz) cada 10 ms y si ahí hay voz (vocal, no ruido ni silencio). Con YIN: el primer período que se repite
-    casi igual, no el más parecido (la autocorrelación sola a veces tomaba el doble del tono en voces graves, y la
-    corrección creía que era otra voz)."""
+    """Tono (Hz) cada 10 ms y si hay voz en ese instante (vocal, no ruido ni silencio). Usa YIN: toma el primer período
+    que se repite casi igual, no el más parecido, porque la autocorrelación sola a veces detectaba el doble del tono
+    en voces graves y la corrección lo interpretaba como otra voz.
+    """
     frame, hop = int(FRAME_S * rate), int(HOP_S * rate)
     count = 1 + (len(audio) - frame) // hop
     if count < 3:
@@ -105,7 +106,7 @@ def pitch_track(audio: np.ndarray, rate: int) -> tuple[np.ndarray, np.ndarray]:
     spectrum = np.fft.rfft(frames, n=2 * frame)
     corr = np.fft.irfft(spectrum * np.conj(spectrum))[:, :frame]
     lags = np.arange(frame)
-    head = power[:, frame - 1 - lags]  # energía de lo que se compara al principio…
+    head = power[:, frame - 1 - lags]  # energía de la parte comparada al principio…
     tail = power[:, -1:] - np.concatenate([np.zeros((count, 1)), power[:, :-1]], axis=1)  # …y al final
     diff = np.maximum(head + tail - 2 * corr, 0.0)
     running = np.cumsum(diff[:, 1:], axis=1)
@@ -140,8 +141,9 @@ def median_pitch(audio: np.ndarray, rate: int) -> float | None:
 
 
 def _marks(audio: np.ndarray, rate: int, f0: np.ndarray, voiced: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Dónde empieza cada ciclo de la voz (una marca por período) y si esa marca es de voz. Sin voz, una marca cada
-    5 ms (ahí no se cambia nada)."""
+    """Inicio de cada ciclo de la voz (una marca por período) y si la marca corresponde a voz. Sin voz, una marca cada
+    5 ms (ahí no se modifica nada).
+    """
     hop = int(HOP_S * rate)
     smooth = _lowpass(audio, rate, 900.0)
     marks: list[int] = []
@@ -179,8 +181,9 @@ def _window(left: int, right: int) -> np.ndarray:
 
 def psola(audio: np.ndarray, rate: int, factor, f0: np.ndarray | None = None, voiced: np.ndarray | None = None,
           stretch: float = 1.0) -> np.ndarray:
-    """La misma voz con el tono multiplicado por `factor` (un número, o una función del tiempo en segundos que
-    devuelve el factor en ese momento), sin cambiar el timbre. `stretch`: cuánto más larga (1 = igual)."""
+    """La misma voz con el tono multiplicado por `factor` (un número, o una función del tiempo en segundos que devuelve
+    el factor en ese instante), sin cambiar el timbre. `stretch`: alargamiento (1 = igual).
+    """
     audio = np.asarray(audio, dtype=np.float32)
     if f0 is None or voiced is None:
         f0, voiced = pitch_track(audio, rate)
@@ -197,7 +200,7 @@ def psola(audio: np.ndarray, rate: int, factor, f0: np.ndarray | None = None, vo
     last = len(marks) - 1
     while at < length:
         source = at / stretch
-        # La marca original más cercana a este momento.
+        # La marca original más cercana a este instante.
         while k < last and abs(marks[k + 1] - source) <= abs(marks[k] - source):
             k += 1
         left = marks[k] - marks[k - 1] if k > 0 else (marks[1] - marks[0])
@@ -221,8 +224,9 @@ def psola(audio: np.ndarray, rate: int, factor, f0: np.ndarray | None = None, vo
 
 def change_gender(audio: np.ndarray, rate: int, to: str) -> np.ndarray:
     """La otra voz, para un idioma que tiene una sola: de mujer a hombre (o al revés), como el «Change gender» de
-    Praat. Se corren los formantes (el timbre: la garganta más larga o más corta) remuestreando, y después se lleva el
-    tono al de una voz de ese género sin cambiar la duración."""
+    Praat. Se desplazan los formantes (el timbre, según el largo de la garganta) remuestreando, y luego se lleva el
+    tono al de una voz de ese género sin cambiar la duración.
+    """
     audio = np.asarray(audio, dtype=np.float32)
     pitch = median_pitch(audio, rate)
     if pitch is None:
@@ -250,7 +254,7 @@ def level_db(audio: np.ndarray, rate: int) -> float | None:
 
 
 def _limit(audio: np.ndarray, ceiling: float = 0.97) -> np.ndarray:
-    """Sin saturar: por encima de 0,8 se redondea suave hasta el techo (en vez de cortar)."""
+    """Sin saturar: por encima de 0,8 se redondea suavemente hasta el techo, en lugar de recortar."""
     knee = 0.8
     magnitude = np.abs(audio)
     over = magnitude > knee
@@ -263,7 +267,7 @@ def _limit(audio: np.ndarray, ceiling: float = 0.97) -> np.ndarray:
 
 
 def _ramp(audio: np.ndarray, rate: int, seconds: float = 0.004) -> np.ndarray:
-    """Sin «clic» al empezar ni al terminar."""
+    """Evita el clic al empezar y al terminar."""
     size = min(len(audio) // 2, int(seconds * rate))
     if size < 2:
         return audio
@@ -275,7 +279,9 @@ def _ramp(audio: np.ndarray, rate: int, seconds: float = 0.004) -> np.ndarray:
 
 
 class Polish:
-    """Iguala cada frase con la referencia de su voz y le pone tu expresión. Uno solo para todas las voces."""
+    """Iguala cada frase con la referencia de su voz y le aplica la expresión del jugador. Una única instancia para
+    todas las voces.
+    """
 
     def __init__(self) -> None:
         self._pitches: dict[str, deque] = {}
@@ -283,7 +289,7 @@ class Polish:
         self._lock = threading.Lock()
 
     def seed(self, pitches: dict[str, float]) -> None:
-        """El tono de siempre de voces conocidas (las de la nube): se emparejan desde la primera frase."""
+        """Tono habitual de voces conocidas (las de la nube): se igualan desde la primera frase."""
         with self._lock:
             self._seeds.update(pitches)
 
@@ -300,8 +306,9 @@ class Polish:
             self._pitches.setdefault(voice, deque(maxlen=MEMORY)).append(pitch)
 
     def correction(self, voice: str, pitch: float | None) -> float:
-        """Cuántos semitonos mover esta frase para que suene con el tono de siempre de su voz (0 si ya está). La frase
-        pasa a formar parte de la referencia."""
+        """Semitonos que hay que mover esta frase para que suene con el tono habitual de su voz (0 si ya coincide).
+        La frase pasa a formar parte de la referencia.
+        """
         wanted = self.wanted(voice, pitch)
         if pitch is not None:
             self.learn(voice, pitch)
@@ -319,8 +326,10 @@ class Polish:
 
     def apply(self, audio: np.ndarray, rate: int, voice: str = "", style: str = "", correct: float | None = None,
               gain_db: float | None = None, tone: bool = True) -> np.ndarray:
-        """La frase entera, lista para sonar. `correct`/`gain_db`: si ya se decidieron (ver Streaming). `tone`: con
-        False no se toca el tono (la voz ya lo puso según tu expresión: ver cloud/speak.py, Flux)."""
+        """La frase entera, lista para reproducir. `correct`/`gain_db`: valores ya decididos (ver Streaming).
+        `tone`: con False no se modifica el tono (la voz ya lo fijó según la expresión del jugador: ver
+        cloud/speak.py, Flux).
+        """
         audio = np.asarray(audio, dtype=np.float32)
         if len(audio) < rate // 20:
             return audio
@@ -343,13 +352,13 @@ class Polish:
 
     @staticmethod
     def _factor(f0: np.ndarray, voiced: np.ndarray, rate: int, shift: float, how: Expression, length: int):
-        """El factor de tono en cada momento (None si no hay nada que cambiar)."""
+        """Factor de tono en cada instante (None si no hay nada que cambiar)."""
         if voiced.sum() < 8:
             return None
         pitch = float(np.median(f0[voiced]))
         needs_rise = 0.0
         if how.rise:
-            # ¿Ya sube al final? (la voz de la nube casi siempre sube con "?"; las de tu PC, no tanto)
+            # ¿Ya sube al final? (la voz de la nube casi siempre sube con "?"; las locales, menos)
             voiced_index = np.flatnonzero(voiced)
             tail = voiced_index[-max(4, len(voiced_index) // 4):]
             body = voiced_index[:-len(tail)] if len(voiced_index) > len(tail) else voiced_index
@@ -374,20 +383,21 @@ class Polish:
         return factor
 
 
-POLISH = Polish()  # uno para todo Bubble: cada voz aprende su tono de siempre una sola vez
+POLISH = Polish()  # una sola para todo Bubble: cada voz aprende su tono habitual una única vez
 
 
 class Streaming:
-    """La voz de la nube llega de a pedazos: se va entregando igualada, cortando en las pausas (así cada tramo se
-    procesa entero). El tono y el volumen se corrigen tramo a tramo, porque la nube también cambia dentro de una misma
-    frase (medido: 159 Hz al principio, 231 Hz al final), pero de a poco (en una pausa, un cambio chico no se nota).
-    Antes se decidía todo con el primer medio segundo: si la frase empezaba suave, quedaba 10 dB más fuerte."""
+    """La voz de la nube llega en fragmentos: se entrega igualada, cortando en las pausas para que cada tramo se
+    procese completo. El tono y el volumen se corrigen tramo a tramo, porque la nube también varía dentro de una
+    misma frase (159 Hz al principio, 231 Hz al final), pero de forma gradual (en una pausa un cambio pequeño no se
+    nota). Decidir todo con el primer medio segundo fallaba: si la frase empezaba suave, quedaba 10 dB más fuerte.
+    """
 
-    FIRST_S = 0.45  # lo mínimo para entregar el primer tramo (llega en ~0,2 s: la nube genera más rápido)
-    LONGEST_S = 0.8  # sin ninguna pausa, se entrega igual cada tanto
-    GAIN_STEP_DB = 3.0  # cuánto puede cambiar el volumen de un tramo al siguiente
-    PITCH_STEP = 2.0  # y el tono (semitonos)
-    TYPICAL_DB = -21.0  # volumen de costumbre de la voz de la nube (de ahí se parte)
+    FIRST_S = 0.45  # mínimo para entregar el primer tramo (llega en ~0,2 s: la nube genera más rápido)
+    LONGEST_S = 0.8  # sin pausas, se entrega igual cada cierto tiempo
+    GAIN_STEP_DB = 3.0  # variación máxima de volumen entre un tramo y el siguiente
+    PITCH_STEP = 2.0  # y de tono (semitonos)
+    TYPICAL_DB = -21.0  # volumen habitual de la voz de la nube (punto de partida)
 
     def __init__(self, polish: Polish, rate: int, voice: str, style: str, tone: bool = True) -> None:
         self.polish, self.rate, self.voice, self.style = polish, rate, voice, style
@@ -419,8 +429,10 @@ class Streaming:
         return out
 
     def _pause(self, audio: np.ndarray) -> int | None:
-        """El último silencio (una pausa entre palabras) donde se puede cortar sin que se note. Si hace rato que no
-        hay ninguno (voz muy ligada), el momento más bajo de la segunda mitad: si no, la frase entera esperaría."""
+        """Último silencio (pausa entre palabras) donde se puede cortar sin que se note. Si hace tiempo que no hay
+        ninguno (voz muy ligada), el punto más bajo de la segunda mitad; si no, la frase entera quedaría
+        esperando.
+        """
         frame = int(0.01 * self.rate)
         count = len(audio) // frame
         if count < 30:
@@ -446,7 +458,7 @@ class Streaming:
         level = level_db(audio, self.rate)
         if level is not None and seconds >= 0.15:
             wanted = float(np.clip(TARGET_DB - level, -MAX_GAIN_DB, MAX_GAIN_DB)) + expression(self.style).gain_db
-            step = self.GAIN_STEP_DB * min(1.0, seconds / 0.4)  # un tramo cortito mueve menos
+            step = self.GAIN_STEP_DB * min(1.0, seconds / 0.4)  # un tramo corto se mueve menos
             self._gain += float(np.clip(wanted - self._gain, -step, step))
         style = self.style if last else "+".join(mark for mark in self.style.split("+") if mark != "question")
         return self.polish.apply(audio, self.rate, self.voice, style, correct=self._correct or 0.0,

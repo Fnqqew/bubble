@@ -1,7 +1,7 @@
-"""Funciones de Windows vía ctypes: ventana de Roblox, foco, teclado simulado, portapapeles y hotkeys.
+"""Funciones de Windows mediante ctypes: ventana de Roblox, foco, teclado simulado, portapapeles y atajos.
 
-Nada de esto toca el proceso de Roblox: solo usa APIs públicas de ventanas y entrada,
-igual que un usuario o cualquier app de accesibilidad.
+No interactúa con el proceso de Roblox: solo usa las APIs públicas de ventanas y entrada, igual que cualquier usuario o
+aplicación de accesibilidad.
 """
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 ULONG_PTR = ctypes.c_size_t
-ROBLOX_PROCESS = "robloxplayerbeta.exe"  # el de roblox.com (también con Bloxstrap y parecidos)
+ROBLOX_PROCESS = "robloxplayerbeta.exe"  # el de roblox.com (también con Bloxstrap y similares)
 # El de la Microsoft Store se llama "Windows10Universal.exe" (en una carpeta de Roblox) y su ventana va dentro de un
-# marco de Windows ("ApplicationFrameHost.exe"). Antes Bubble no lo reconocía.
+# marco de Windows ("ApplicationFrameHost.exe").
 STORE_PROCESS = "windows10universal.exe"
 FRAME_HOST = "applicationframehost.exe"
 
@@ -79,19 +79,19 @@ def enable_dpi_awareness() -> None:
 
 
 def set_app_id(app_id: str) -> None:
-    """Para que la barra de tareas muestre el ícono propio en vez del de Python."""
+    """Permite que la barra de tareas muestre el ícono propio en lugar del de Python."""
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
 
 
 # ---------- ventana de Roblox ----------
-# Se pregunta muchas veces por segundo (subtítulos, burbujas, la barra para escribir) y cada pregunta a Windows
-# necesita a Python: con otro hilo ocupado (al abrir Bubble, cargando la voz), recorrer las ~250 ventanas abiertas
-# llegó a tardar 1 s y trababa la ventana de Bubble. Lo que no cambia se recuerda un momento.
+# Se consulta muchas veces por segundo (subtítulos, burbujas, barra de escritura) y cada consulta a Windows requiere el
+# intérprete de Python: con otro hilo ocupado (al abrir Bubble, cargando la voz), recorrer las ~250 ventanas abiertas
+# llegó a tardar 1 s y bloqueaba la ventana de Bubble. Por eso lo que no cambia se conserva en memoria un tiempo.
 PATH_MEMORY_S = 10.0
-WINDOW_MEMORY_S = 0.5  # la ventana de Roblox: se vuelve a buscar como mucho dos veces por segundo…
-WINDOW_KEEP_S = 2.0  # …o cada 2 s, si la que se encontró sigue a la vista
+WINDOW_MEMORY_S = 0.5  # ventana de Roblox: se busca de nuevo como máximo dos veces por segundo…
+WINDOW_KEEP_S = 2.0  # …o cada 2 s, si la encontrada sigue visible
 _paths: dict[int, tuple[str, float]] = {}
-_window: list = [None, -1e9]  # (la ventana encontrada, cuándo)
+_window: list = [None, -1e9]  # (ventana encontrada, instante de búsqueda)
 
 
 def _process_path(pid: int) -> str:
@@ -125,14 +125,14 @@ def _process_name(pid: int) -> str:
 
 
 def is_roblox_process(pid: int) -> bool:
-    """¿Ese proceso es Roblox? (el de roblox.com o el de la Microsoft Store)"""
+    """Indica si el proceso es Roblox (el de roblox.com o el de la Microsoft Store)."""
     path = _process_path(pid).lower()
     name = os.path.basename(path)
     return name == ROBLOX_PROCESS or (name == STORE_PROCESS and "roblox" in path)
 
 
 def _roblox_in_frame(hwnd: int) -> int:
-    """Si la ventana es un marco de la Microsoft Store con Roblox adentro, el proceso de Roblox (si no, 0)."""
+    """Si la ventana es un marco de la Microsoft Store que contiene Roblox, devuelve el proceso de Roblox; si no, 0."""
     found: list[int] = []
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -149,7 +149,7 @@ def _roblox_in_frame(hwnd: int) -> int:
 
 
 def roblox_window_pid(hwnd: int) -> int:
-    """El proceso de Roblox de esa ventana (0 si no es de Roblox)."""
+    """Devuelve el proceso de Roblox de la ventana (0 si no es de Roblox)."""
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     if is_roblox_process(pid.value):
@@ -168,12 +168,14 @@ def client_rect(hwnd: int) -> Rect:
 
 
 def roblox_running() -> bool:
-    """¿Roblox está abierto? (cualquier ventana suya, aunque esté minimizada). Distingue "cerrado" de "minimizado"."""
+    """Indica si Roblox está abierto (cualquier ventana suya, aunque esté minimizada). Distingue "cerrado" de
+    "minimizado".
+    """
     return bool(roblox_pid())
 
 
 def roblox_pid() -> int:
-    """El proceso de Roblox (0 si está cerrado), aunque esté minimizado."""
+    """Devuelve el proceso de Roblox (0 si está cerrado), aunque esté minimizado."""
     found = []
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -197,7 +199,9 @@ class _PROCESSENTRY32W(ctypes.Structure):
 
 
 def roblox_process_ids() -> list[int]:
-    """Los procesos de Roblox, tengan o no una ventana a la vista (puede haber más de uno un momento, al reabrirlo)."""
+    """Devuelve los procesos de Roblox, tengan o no una ventana visible (puede haber más de uno brevemente al
+    reabrirlo).
+    """
     kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
     snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
     if not snapshot or snapshot == wintypes.HANDLE(-1).value:
@@ -217,13 +221,14 @@ def roblox_process_ids() -> list[int]:
 
 
 def roblox_process_id() -> int:
-    """El proceso de Roblox (0 si no está), tenga o no una ventana a la vista: para escuchar solo su sonido."""
+    """Devuelve el proceso de Roblox (0 si no existe), tenga o no una ventana visible: permite capturar solo su sonido.
+    """
     ids = roblox_process_ids()
     return ids[-1] if ids else 0
 
 
 def find_roblox_window() -> int | None:
-    """La ventana visible más grande de RobloxPlayerBeta.exe (o None si Roblox no está abierto)."""
+    """Devuelve la ventana visible más grande de RobloxPlayerBeta.exe (o None si Roblox no está abierto)."""
     now = time.monotonic()
     hwnd, at = _window
     if now - at < WINDOW_MEMORY_S or (hwnd and now - at < WINDOW_KEEP_S and user32.IsWindowVisible(hwnd)
@@ -253,7 +258,7 @@ def is_roblox_window(hwnd: int | None) -> bool:
 
 
 def foreground_process() -> str:
-    """El programa de la ventana activa ("snippingtool.exe"), en minúsculas."""
+    """Devuelve el programa de la ventana activa (por ejemplo "snippingtool.exe"), en minúsculas."""
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
         return ""
@@ -263,7 +268,7 @@ def foreground_process() -> str:
 
 
 def roblox_is_foreground() -> bool:
-    """True si la ventana activa es Roblox (no minimizado ni en segundo plano)."""
+    """Indica si la ventana activa es Roblox (no minimizado ni en segundo plano)."""
     hwnd = user32.GetForegroundWindow()
     return is_roblox_window(hwnd) and not user32.IsIconic(hwnd)
 
@@ -302,8 +307,8 @@ WS_EX_NOACTIVATE = 0x08000000
 def make_overlay(hwnd: int, click_through: bool = True, hide_from_capture: bool = False) -> None:
     """Ventana que no roba el foco, no aparece en la barra de tareas y (opcional) deja pasar los clics.
 
-    Con `hide_from_capture`, la ventana no sale en las capturas de pantalla (Windows 10 2004+): así el OCR
-    sigue leyendo el chat original de Roblox que está debajo de las traducciones.
+    Con `hide_from_capture`, la ventana no aparece en las capturas de pantalla (Windows 10 2004+): así el OCR sigue
+    leyendo el chat original de Roblox que está debajo de las traducciones.
     """
     style = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
     style |= WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
@@ -369,21 +374,23 @@ def type_unicode(text: str) -> None:
 
 
 VK_OEM_2 = 0xBF  # la tecla "/" de un teclado estadounidense
-SCAN_SLASH = 0x35  # su posición física (en un teclado latinoamericano es la tecla "-")
+SCAN_SLASH = 0x35  # posición física (en un teclado latinoamericano es la tecla "-")
 
 
 def press_chat_key() -> None:
-    """Abre el chat de Roblox: la tecla física "/" (la que Roblox escucha), sin Shift ni ninguna otra.
+    """Abre el chat de Roblox con la tecla física "/" (la que Roblox escucha), sin Shift ni otra tecla.
 
-    Antes se apretaba el carácter "/", que en un teclado en español es Shift + 7: a Roblox le llegaba un Shift
-    (activa o desactiva el Shift Lock y la cámara se mueve) y un 7 (cambia de herramienta).
+    No se envía el carácter "/": en un teclado en español es Shift + 7, y a Roblox le llegaría un Shift (activa o
+    desactiva el Shift Lock y mueve la cámara) y un 7 (cambia de herramienta).
     """
     _send([(VK_OEM_2, SCAN_SLASH, 0), (VK_OEM_2, SCAN_SLASH, KEYEVENTF_KEYUP)])
 
 
 def chat_key_leaves_a_character() -> bool:
-    """True si la tecla física del chat escribe otra cosa que "/" con tu teclado (en uno latinoamericano escribe
-    "}"): Roblox abre el chat pero ese carácter queda escrito en la barra, y hay que borrarlo."""
+    """Indica si la tecla física del chat escribe un carácter distinto de "/" en el teclado actual (en uno
+    latinoamericano escribe "}"): Roblox abre el chat, pero ese carácter queda escrito en la barra y hay que
+    borrarlo.
+    """
     char = user32.MapVirtualKeyW(VK_OEM_2, 2) & 0x7FFF  # MAPVK_VK_TO_CHAR
     return bool(char) and chr(char) != "/"
 
@@ -397,8 +404,9 @@ def press_enter() -> None:
 
 
 def wait_modifiers_released(timeout_s: float = 1.0) -> None:
-    """Espera a que no haya Shift, Ctrl, Alt ni Win apretados (se combinarían con las teclas que se envían).
-    No se suelta nada a la fuerza: eso también le llegaría al juego."""
+    """Espera a que no haya Shift, Ctrl, Alt ni Win presionados (se combinarían con las teclas que se envían). No se
+    suelta ninguna a la fuerza: el juego también recibiría ese evento.
+    """
     deadline = time.monotonic() + timeout_s
     while _modifiers_down() and time.monotonic() < deadline:
         time.sleep(0.02)
@@ -471,7 +479,7 @@ NAMED_KEYS_ES = {"space": "Espacio", "enter": "Enter", "tab": "Tab", "insert": "
                  "end": "Fin", "pageup": "Re Pág", "pagedown": "Av Pág", "pause": "Pausa",
                  "scrolllock": "Bloq Despl", "capslock": "Bloq Mayús", "numlock": "Bloq Num",
                  "backspace": "Retroceso", "delete": "Supr"}
-# Botón del mouse -> virtual key. Izquierdo y derecho no se permiten (romperían el juego).
+# Botón del mouse -> virtual key. Los botones izquierdo y derecho no se permiten (romperían el juego).
 MOUSE_BUTTONS = {"mouse3": 0x04, "mouse4": 0x05, "mouse5": 0x06}
 MOUSE_NAMES = {"mouse3": "Clic de la rueda del mouse", "mouse4": "Botón lateral del mouse (atrás)",
                "mouse5": "Botón lateral del mouse (adelante)"}
@@ -573,17 +581,17 @@ WM_TIMER = 0x0113
 
 
 def _shift_only_from_char(spec: str, binding: Binding) -> bool:
-    """El atajo es un carácter que se escribe con Shift (ej. '°' en un teclado latinoamericano)."""
+    """Indica si el atajo es un carácter que se escribe con Shift (ej. '°' en un teclado latinoamericano)."""
     return len(spec.strip()) == 1 and binding.kind == "key" and binding.modifiers == MOD_SHIFT
 
 
 class _KeyListener(threading.Thread):
-    """Tecla: RegisterHotKey (Windows la entrega directo, sin procesar cada tecla en Python).
+    """Tecla: RegisterHotKey (Windows la entrega directamente, sin procesar cada tecla en Python).
 
-    - Con `active`, el atajo solo se registra mientras `active()` sea True (Roblox al frente): en otros
+    - Con `active`, el atajo solo se registra mientras `active()` sea True (Roblox en primer plano): en otros
       programas (y en la barra de Bubble) la tecla escribe normalmente.
-    - Si el atajo es un carácter con Shift ('°'), la misma tecla sin Shift también sirve: en Roblox, Shift
-      activa el Shift Lock y mueve la cámara, y ese Shift le llega al juego antes que el atajo.
+    - Si el atajo es un carácter con Shift ('°'), la misma tecla sin Shift también funciona: en Roblox, Shift activa
+      el Shift Lock y mueve la cámara, y ese Shift llega al juego antes que el atajo.
     """
 
     def __init__(self, spec: str, binding: Binding, callback: Callable[[], None],
@@ -602,7 +610,7 @@ class _KeyListener(threading.Thread):
         ok = bool(user32.RegisterHotKey(None, 1, self.binding.modifiers | MOD_NOREPEAT, self.binding.vk))
         if ok:
             for number, extra in enumerate(self.bindings[1:], start=2):
-                user32.RegisterHotKey(None, number, extra.modifiers | MOD_NOREPEAT, extra.vk)  # si falla, no importa
+                user32.RegisterHotKey(None, number, extra.modifiers | MOD_NOREPEAT, extra.vk)  # si falla, se ignora
         self._registered = ok
         return ok
 
@@ -643,7 +651,7 @@ class _KeyListener(threading.Thread):
 
 
 class _MouseListener(threading.Thread):
-    """Botón del mouse: se consulta su estado cada 15 ms (sin ganchos globales que agreguen lag al juego)."""
+    """Botón del mouse: se consulta su estado cada 15 ms (sin ganchos globales que agreguen latencia al juego)."""
 
     def __init__(self, spec: str, binding: Binding, callback: Callable[[], None],
                  active: Callable[[], bool] | None = None) -> None:
@@ -655,7 +663,7 @@ class _MouseListener(threading.Thread):
 
     def run(self) -> None:
         self.ready.set()
-        was_down = True  # no disparar si el botón ya estaba apretado al empezar
+        was_down = True  # no disparar si el botón ya estaba presionado al iniciar
         while not self._stop_event.wait(0.015):
             down = bool(user32.GetAsyncKeyState(self.binding.vk) & 0x8000)
             if (down and not was_down and _modifiers_down() == self.binding.modifiers
@@ -668,9 +676,10 @@ class _MouseListener(threading.Thread):
 
 
 def start_trigger(spec: str, callback: Callable[[], None], active: Callable[[], bool] | None = None):
-    """Arranca el atajo (tecla o botón del mouse). Devuelve el listener (con .error y .stop()).
+    """Inicia el atajo (tecla o botón del mouse). Devuelve el listener (con .error y .stop()).
 
-    Con `active`, el atajo solo funciona (y solo se adueña de la tecla) mientras `active()` sea True."""
+    Con `active`, el atajo solo funciona (y solo se apropia de la tecla) mientras `active()` sea True.
+    """
     binding = parse_binding(spec)
     listener_cls = _MouseListener if binding.kind == "mouse" else _KeyListener
     listener = listener_cls(spec, binding, callback, active)
@@ -680,9 +689,9 @@ def start_trigger(spec: str, callback: Callable[[], None], active: Callable[[], 
 
 
 def capture_binding(cancel: threading.Event, timeout_s: float = 30.0) -> str | None:
-    """Espera a que el usuario apriete una tecla o botón del mouse y devuelve su atajo ('°', 'mouse4'...).
+    """Espera a que el usuario presione una tecla o botón del mouse y devuelve su atajo ('°', 'mouse4'...).
 
-    Esc cancela (None). Clic izquierdo/derecho se ignoran.
+    Esc cancela (None). El clic izquierdo y el derecho se ignoran.
     """
     candidates = [vk for vk in range(0x03, 0xFF) if vk not in _MODIFIER_VKS and vk != VK_ESCAPE]
     deadline = time.monotonic() + timeout_s
@@ -700,7 +709,7 @@ def capture_binding(cancel: threading.Event, timeout_s: float = 30.0) -> str | N
 
 
 def spec_for(vk: int, mods: int) -> str:
-    """Atajo en texto para una tecla física + modificadores."""
+    """Atajo en texto para una tecla física más modificadores."""
     prefix = "".join(name + "+" for name, bit in (("ctrl", MOD_CONTROL), ("alt", MOD_ALT), ("win", MOD_WIN))
                      if mods & bit)
     shift = "shift+" if mods & MOD_SHIFT else ""

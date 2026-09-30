@@ -1,4 +1,4 @@
-"""«Acerca de»: versión, quién lo hizo, con qué está hecho, a dónde van tus datos y cómo pedir ayuda."""
+"""«Acerca de»: versión, autoría, tecnologías utilizadas, destino de los datos del jugador y canales de ayuda."""
 
 from __future__ import annotations
 
@@ -25,9 +25,9 @@ CREDITS = (
     ("Sun Valley (sv-ttk)", "el diseño de la ventana, al estilo de Windows 11"),
     ("Y además", "OCR de Windows, lingua, NumPy, SciPy, Pillow, mss, dxcam, soundcard y FormSubmit"),
 )
-PRIVACY = (("Bubble corre en tu PC. Lo que hay que traducir va a Claude con tu cuenta, y con Bubble Pro la voz "
-            "va a Deepgram con tu clave. Una vez por día mido tu internet con un archivo de prueba de "
-            "Cloudflare. No tengo servidores propios ni junto datos: al creador solo le llega lo que vos mandes "
+PRIVACY = (("Bubble funciona en tu PC. Lo que se debe traducir se envía a Claude con tu cuenta, y con Bubble Pro la "
+            "voz se envía a Deepgram con tu clave. Una vez por día mido tu conexión con un archivo de prueba de "
+            "Cloudflare. No tengo servidores propios ni recopilo datos: al creador solo le llega lo que vos envíes "
             "desde Soporte."))
 
 

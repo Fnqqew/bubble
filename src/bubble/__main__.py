@@ -66,8 +66,9 @@ async def _console(config: Config) -> None:
 
 
 def _error_log() -> None:
-    """Con la ventana (pythonw) no hay consola y los errores se perdían: quedan en %APPDATA%\\Bubble\\errores.log.
-    Incluye los cierres de golpe (una librería nativa que se cae), que Python no puede atrapar."""
+    """Con la ventana (pythonw) no hay consola, por lo que los errores se registran en %APPDATA%\\Bubble\\errores.log.
+    Incluye los cierres abruptos (por ejemplo, una librería nativa que falla), que Python no puede capturar.
+    """
     from .state import state_path
 
     path = state_path().with_name("errores.log")
@@ -82,8 +83,9 @@ def _error_log() -> None:
 
 
 def _activity_log() -> None:
-    """Lo que va haciendo Bubble, para entender un problema después: %APPDATA%\\Bubble\\bubble.log (~2 MB como
-    mucho). Solo lo de Bubble: ni lo que dicen en el chat ni lo que tecleás."""
+    """Registro de la actividad de Bubble para diagnosticar problemas: %APPDATA%\\Bubble\\bubble.log (máximo ~2 MB).
+    Solo contiene eventos de Bubble, nunca el contenido del chat ni lo que escribe el jugador.
+    """
     from logging.handlers import RotatingFileHandler
 
     from .state import state_path
@@ -101,7 +103,7 @@ def _activity_log() -> None:
 
 
 def _uninstall() -> None:
-    """Desinstalar sin abrir Bubble (Desinstalar.bat)."""
+    """Desinstala sin abrir Bubble (Desinstalar.bat)."""
     import tkinter as tk
 
     from .ui import theme
@@ -114,7 +116,8 @@ def _uninstall() -> None:
     root = tk.Tk()
     root.withdraw()
     if ICON_PATH.exists():
-        # (además del ícono: el tema oscuro solo se aplica entero si la ventana ya tiene su ícono; ver main_window)
+        # (además del ícono: el tema oscuro solo se aplica por completo si la ventana ya tiene su ícono; ver
+        # main_window)
         root.iconbitmap(default=str(ICON_PATH))
     theme.apply_theme(root)
     window = UninstallWindow(root, root.destroy)
@@ -139,7 +142,7 @@ def main() -> None:
     if not args.console:
         if not args.verbose:
             for handler in logging.getLogger().handlers:
-                handler.setLevel(logging.WARNING)  # errores.log sigue siendo solo de errores
+                handler.setLevel(logging.WARNING)  # errores.log sigue registrando solo errores
         _activity_log()
 
     config = load_config(args.config)

@@ -1,7 +1,7 @@
-"""Acceso directo de Bubble en el escritorio, siempre sincronizado con el ícono y la instalación actual.
+"""Acceso directo de Bubble en el escritorio, sincronizado con el ícono y la instalación actual.
 
-Windows guarda en caché los íconos por ruta de archivo: si el .ico cambia pero la ruta no, el escritorio
-sigue mostrando el viejo. Por eso cada versión del ícono se copia con un nombre que incluye su hash.
+Windows guarda en caché los íconos por ruta de archivo: si el .ico cambia pero la ruta no, el escritorio sigue mostrando
+el ícono anterior. Por eso cada versión del ícono se copia con un nombre que incluye su hash.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def _data_dir() -> Path:
 
 
 def versioned_icon() -> Path:
-    """Copia del ícono con su hash en el nombre (una ruta nueva por cada versión del ícono)."""
+    """Copia del ícono con su hash en el nombre, de modo que cada versión tenga una ruta distinta."""
     digest = hashlib.sha1(ICON_SOURCE.read_bytes()).hexdigest()[:10]
     target = _data_dir() / "icons" / f"bubble-{digest}.ico"
     if not target.exists():
@@ -89,7 +89,7 @@ def ensure_desktop_shortcut(force: bool = False) -> bool:
     )
     _state_file().parent.mkdir(parents=True, exist_ok=True)
     _state_file().write_text(json.dumps(spec, indent=2), encoding="utf-8")
-    # Avisa al Explorador que refresque los íconos.
+    # Notifica al Explorador que debe refrescar los íconos.
     ctypes.windll.shell32.SHChangeNotify(0x08000000, 0, None, None)  # SHCNE_ASSOCCHANGED
     return True
 

@@ -1,23 +1,23 @@
-"""Laboratorio con grabaciones reales de Roblox: el mismo código que corre en el juego, contra un video.
+"""Laboratorio con grabaciones reales de Roblox: ejecuta el mismo código que corre en el juego, pero contra un video.
 
-El grabador de Roblox (Configuración → Grabar) guarda el juego SIN las traducciones de Bubble encima: es una entrada
-limpia. Cada prueba reproduce el video a su velocidad real y le "muestra" a Bubble los cuadros como si fueran tu
-pantalla (o el audio como si fuera tu parlante):
+El grabador de Roblox (Configuración → Grabar) guarda el juego SIN las traducciones de Bubble superpuestas, por lo que
+la entrada es limpia. Cada prueba reproduce el video a su velocidad real y entrega a Bubble los cuadros como si fueran
+la pantalla (o el audio como si fuera el parlante):
 
-  chat      lectura del chat → seguidor → traducciones (falsas o de una tabla). Mide mensajes encontrados contra
-            una lista de los reales (--esperados), repetidos o basura, traducciones fuera del chat y parpadeos.
-  burbujas  detector de burbujas → lecturas → traducciones. Mide cuántas burbujas a la vista tienen traducción y
-            cuántas traducciones quedan fuera de lugar, y anota cada lectura (para ver si se corta el texto).
-  voz       oído en vivo (detector de voz, Whisper, quién habla). Con --referencia (una transcripción buena,
-            JSON con "segments": [{start, end, text}]) mide palabras mal entendidas (WER) y frases perdidas.
+  chat      lectura del chat → seguidor → traducciones (falsas o de una tabla). Mide los mensajes encontrados contra
+            una lista de los reales (--esperados), los repetidos o basura, las traducciones fuera del chat y los parpadeos.
+  burbujas  detector de burbujas → lecturas → traducciones. Mide cuántas burbujas visibles tienen traducción y
+            cuántas traducciones quedan fuera de lugar, y registra cada lectura (para detectar si se corta el texto).
+  voz       oído en vivo (detector de voz, Whisper, quién habla). Con --referencia (una transcripción confiable,
+            JSON con "segments": [{start, end, text}]) mide las palabras mal reconocidas (WER) y las frases perdidas.
 
 Uso:
   python -m bubble.tools.recording_lab chat "C:\\...\\Videos\\Roblox\\Roblox-....mp4" [--esperados msgs.json]
   python -m bubble.tools.recording_lab burbujas VIDEO
   python -m bubble.tools.recording_lab voz VIDEO [--referencia ref.json]
 
-Guarda cómo se vería (cada 2 s) en %LOCALAPPDATA%\\Bubble\\recording_lab\\. Las grabaciones tienen nombres de otros
-jugadores: no se suben a ningún lado.
+Guarda una vista de lo que se mostraría (cada 2 s) en %LOCALAPPDATA%\\Bubble\\recording_lab\\. Las grabaciones contienen
+nombres de otros jugadores: no se suben a ningún sitio.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ OUT = models_dir().parent / "recording_lab"
 
 
 
-RAW = False  # --sin-filtro: sin radio de escucha ni filtro de ruido (para comparar)
+RAW = False  # --sin-filtro: sin radio de escucha ni filtro de ruido (comparación)
 
 def ffmpeg() -> str:
     try:
@@ -54,7 +54,7 @@ def ffmpeg() -> str:
 
 
 class LiveVideo:
-    """El video "en vivo": ffmpeg lo entrega a su velocidad real y queda solo el último cuadro (como la pantalla)."""
+    """Video "en vivo": ffmpeg lo entrega a su velocidad real y solo se conserva el último cuadro (como la pantalla)."""
 
     def __init__(self, video: Path, crop: Rect | None = None, size: tuple[int, int] = (1920, 1040)) -> None:
         self.crop = crop
@@ -91,7 +91,7 @@ def frame_at(video: Path, seconds: float) -> Image.Image:
 
 
 class Layer:
-    """En vez de ventanas: dónde está cada traducción, y los parpadeos (se apaga y vuelve enseguida)."""
+    """Registra dónde está cada traducción y los parpadeos (se apaga y reaparece enseguida), en lugar de ventanas."""
 
     def __init__(self) -> None:
         self.shown: dict = {}
@@ -113,7 +113,7 @@ class Layer:
 
 
 def fake_translation(text: str) -> str:
-    """Traducción falsa un 25 % más larga (como el español), para ver si entra."""
+    """Traducción falsa un 25 % más larga (como el español), para verificar que entre en el espacio."""
     words = text.split()
     return " ".join(words) + " " + " ".join(words[: max(1, len(words) // 4)])
 
@@ -146,7 +146,8 @@ def run_chat(video: Path, expected: list[str], translations: dict[str, str], loc
     if guess is None:
         raise SystemExit("No encontré el chat en ese momento del video: probá con --buscar-en otro segundo.")
     r = guess.region
-    region = Rect(r.left // 2 * 2, r.top // 2 * 2, r.width // 2 * 2, r.height // 2 * 2)  # ffmpeg recorta en pares
+    # ffmpeg exige dimensiones pares
+    region = Rect(r.left // 2 * 2, r.top // 2 * 2, r.width // 2 * 2, r.height // 2 * 2)
     live = LiveVideo(video, region)
     layer = Layer()
     tracker = ChatTracker()
@@ -159,7 +160,7 @@ def run_chat(video: Path, expected: list[str], translations: dict[str, str], loc
     ids = iter(range(1, 1 << 30))
     start = time.monotonic()
     snaps = {"next": 2.0, "outside": 0, "checks": 0}
-    panel_right = region.width  # sin más datos: el borde de la zona
+    panel_right = region.width  # sin más datos: borde de la zona
 
     def on_message(line) -> None:
         msg_id = next(ids)
@@ -200,7 +201,7 @@ def run_chat(video: Path, expected: list[str], translations: dict[str, str], loc
         for line in detected:
             text = line.split(": ", 1)[-1].lower()
             if not any(c.isalnum() for c in text):
-                continue  # "####": lo tapó el filtro de Roblox, no se traduce
+                continue  # "####": lo ocultó el filtro de Roblox, no se traduce
             scores = [(SequenceMatcher(None, text, e.lower()).ratio(), i) for i, e in enumerate(left)]
             best = max(scores, default=(0, -1))
             if best[0] >= 0.75:
@@ -250,7 +251,8 @@ def run_bubbles(video: Path, translations: dict[str, str]) -> dict:
     base = RobloxConfig().bubble_interval_s
     pacer = Pacer(SHARES["alta"]["bubbles"], base * MIN_INTERVAL_FACTOR["alta"], 1.0)
     watcher = BubbleWatcher(WindowsOcr("en"), lambda: area, lambda: None, on_bubbles, interval_s=base, pacer=pacer)
-    # Cuánto tarda cada burbuja desde que se la ve por primera vez hasta que se lee su texto (y si se leyó a medias).
+    # Tiempo de cada burbuja desde que se detecta por primera vez hasta que se lee su texto (y si la lectura fue
+    # parcial).
     seen: dict[int, float] = {}
     read: dict[int, float] = {}
     texts: dict[int, list[str]] = {}

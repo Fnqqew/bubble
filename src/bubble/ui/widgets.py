@@ -1,4 +1,4 @@
-"""Piezas de la ventana: tarjetas, filas con interruptor, títulos e íconos (tema Sun Valley de Windows 11)."""
+"""Componentes de la ventana: tarjetas, filas con interruptor, títulos e íconos (tema Sun Valley de Windows 11)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from tkinter import ttk
 from typing import Callable
 
 ICON_FONT = ("Segoe Fluent Icons", 15)
-# Íconos de Segoe Fluent Icons (Windows 11; en Windows 10 los mismos códigos están en Segoe MDL2 Assets).
+# Íconos de Segoe Fluent Icons (Windows 11). En Windows 10 los mismos códigos corresponden a Segoe MDL2 Assets.
 ICONS = {
     "chat": "", "bubbles": "", "listen": "", "mic": "", "globe": "",
     "keyboard": "", "settings": "", "home": "", "history": "", "info": "",
@@ -26,7 +26,7 @@ PALETTES = {
 
 
 def palette() -> dict[str, str]:
-    """Los colores del tema. Con Bubble Pro el acento es dorado: se nota que estás usando el Pro."""
+    """Colores del tema. Con Bubble Pro el acento es dorado, para distinguir esa edición."""
     from .. import pro
     from . import theme
 
@@ -45,8 +45,9 @@ def icon_font() -> tuple:
 
 
 def card(parent, title: str = "", subtitle: str = "", pady: tuple = (0, 6)) -> ttk.Frame:
-    """Una sección: título, explicación chiquita y lo que va adentro. Sin cajas (minimalista): separa el aire y una
-    línea finita. Devuelve el marco de adentro."""
+    """Sección con título, descripción breve y contenido. No usa cajas: se separa con espacio y una línea fina.
+    Devuelve el marco interior.
+    """
     outer = ttk.Frame(parent)
     outer.pack(fill="x", pady=pady)
     if len(parent.winfo_children()) > 1:
@@ -63,7 +64,7 @@ def card(parent, title: str = "", subtitle: str = "", pady: tuple = (0, 6)) -> t
 
 def switch_row(parent, icon: str, title: str, description: str, variable: tk.BooleanVar,
                command: Callable[[], None], pady: tuple = (4, 4)) -> ttk.Frame:
-    """Fila: ícono, título, explicación chiquita y un interruptor a la derecha."""
+    """Fila con ícono, título, descripción breve y un interruptor a la derecha."""
     row = ttk.Frame(parent)
     row.pack(fill="x", pady=pady)
     ttk.Label(row, text=ICONS.get(icon, icon), font=icon_font(), foreground=palette()["accent"],
@@ -78,7 +79,7 @@ def switch_row(parent, icon: str, title: str, description: str, variable: tk.Boo
 
 
 def label_row(parent, text: str, pady: tuple = (6, 2)) -> ttk.Frame:
-    """Fila con un rótulo a la izquierda; lo que se agregue después va a la derecha."""
+    """Fila con un rótulo a la izquierda; los widgets que se agreguen después quedan a la derecha."""
     row = ttk.Frame(parent)
     row.pack(fill="x", pady=pady)
     ttk.Label(row, text=text).pack(side="left")
@@ -93,7 +94,7 @@ def muted(parent, text: str = "", wrap: int = 440, **pack) -> ttk.Label:
 
 
 def segmented(parent, variable: tk.StringVar, options: dict[str, str], command: Callable[[], None]) -> ttk.Frame:
-    """Botones que se eligen de a uno (como un interruptor de varias opciones)."""
+    """Botones de selección excluyente, equivalentes a un interruptor de varias opciones."""
     box = ttk.Frame(parent)
     for value, text in options.items():
         ttk.Radiobutton(box, text=text, value=value, variable=variable, command=command,
@@ -102,7 +103,7 @@ def segmented(parent, variable: tk.StringVar, options: dict[str, str], command: 
 
 
 def dialog(root: tk.Misc, title: str, width: int = 520) -> tuple[tk.Toplevel, ttk.Frame]:
-    """Una ventana secundaria del tema (escondida hasta `present`) y su cuerpo con márgenes."""
+    """Ventana secundaria del tema, oculta hasta llamar a `present`, y su cuerpo con márgenes."""
     window = tk.Toplevel(root)
     window.withdraw()
     window.title(title)
@@ -117,7 +118,7 @@ def dialog(root: tk.Misc, title: str, width: int = 520) -> tuple[tk.Toplevel, tt
 
 
 def present(window: tk.Toplevel, root: tk.Misc) -> None:
-    """Muestra la ventana centrada sobre Bubble (o en la pantalla), apareciendo suave."""
+    """Muestra la ventana centrada sobre Bubble (o sobre la pantalla) con un aparecer gradual."""
     from . import motion, theme
 
     window.update_idletasks()
@@ -133,12 +134,12 @@ def present(window: tk.Toplevel, root: tk.Misc) -> None:
     motion.appear(window, rise=0, seconds=0.2)
 
 
-DIM = 0.7  # qué tan difuminado queda un texto bloqueado (0 = igual, 1 = invisible)
+DIM = 0.7  # opacidad perdida por un texto bloqueado (0 = igual, 1 = invisible)
 CONTROLS = (ttk.Button, ttk.Checkbutton, ttk.Radiobutton, ttk.Entry, ttk.Combobox, ttk.Scale, ttk.Spinbox)
 
 
 def mix(color_a: str, color_b: str, amount: float) -> str:
-    """Un color entre `color_a` (0) y `color_b` (1)."""
+    """Color intermedio entre `color_a` (0) y `color_b` (1)."""
     a = [int(color_a.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
     b = [int(color_b.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
     return "#" + "".join(f"{round(x + (y - x) * amount):02x}" for x, y in zip(a, b))
@@ -152,15 +153,15 @@ def _hex(widget: tk.Misc, color: str) -> str:
 
 
 def dim(container: tk.Misc, dimmed: bool, animate: bool = True, only: list | None = None, reason: str = "") -> None:
-    """Bloquea (o desbloquea) todo lo de adentro: los textos se difuminan suave hacia el fondo y los controles no se
-    pueden tocar. Sirve para lo que no corresponde en este momento (lo de Pro en Basic, lo de Basic en Pro, lo de tu
-    voz si no está prendida…): se ve que existe, pero no se puede usar ni probar por error. `only`: solo esas partes
-    del contenedor (por ejemplo, una columna de una tabla).
+    """Bloquea o desbloquea todo el contenido del contenedor: los textos se difuminan gradualmente hacia el fondo y los
+    controles dejan de responder. Se usa para lo que no corresponde en ese momento (funciones de Pro en Basic, de
+    Basic en Pro, o de la voz del jugador si no está activada): permanece visible, pero no se puede usar por error.
+    `only`: limita el efecto a esas partes del contenedor (por ejemplo, una columna de una tabla).
 
-    Cada bloqueo tiene su motivo (`reason`; si no, el contenedor): algo queda difuminado mientras quede al menos uno,
-    y al salir el último vuelve exactamente a como estaba. Antes, dos bloqueos encimados (tu voz apagada y el modo
-    directo, sobre el mismo botón) se pisaban: sacar uno podía dejar un botón bloqueado para siempre, o un texto
-    normal con su control bloqueado."""
+    Cada bloqueo tiene su motivo (`reason`; si se omite, el contenedor). Un elemento permanece difuminado mientras
+    quede al menos un motivo activo, y al salir el último recupera exactamente su estado original. Así, bloqueos
+    superpuestos sobre el mismo control no se pisan entre sí.
+    """
     from . import motion
 
     reason = reason or f"contenedor-{id(container)}"
@@ -192,7 +193,9 @@ def dim(container: tk.Misc, dimmed: bool, animate: bool = True, only: list | Non
             collect(widget)
 
     def lock(widget: tk.Misc) -> bool | None:
-        """Suma o saca este motivo. Devuelve True si recién se bloqueó, False si recién se liberó, None si no cambió."""
+        """Agrega o quita este motivo. Devuelve True si el widget pasó a bloqueado, False si quedó liberado y None
+        si no hubo cambio.
+        """
         locks = widget.__dict__.setdefault("dim_locks", set())
         before = bool(locks)
         (locks.add if dimmed else locks.discard)(reason)
@@ -201,7 +204,7 @@ def dim(container: tk.Misc, dimmed: bool, animate: bool = True, only: list | Non
     for control in controls:
         changed = lock(control)
         if changed is True:
-            control.locked_before = control.instate(["disabled"])  # (si ya estaba bloqueado por otra cosa, sigue)
+            control.locked_before = control.instate(["disabled"])  # (si otro motivo ya lo bloqueaba, sigue bloqueado)
             control.state(["disabled"])
         elif changed is False and not getattr(control, "locked_before", False):
             control.state(["!disabled"])
@@ -228,26 +231,28 @@ def dim(container: tk.Misc, dimmed: bool, animate: bool = True, only: list | Non
 
 
 def set_enabled(control: ttk.Widget, enabled: bool) -> None:
-    """Habilita o bloquea un control sin pisar un difuminado (ver dim): si está difuminado, queda bloqueado y se
-    habilita (o no) recién cuando se libere. Antes, al terminar una prueba se habilitaban todos sus botones, aunque
-    estuvieran en una tarjeta difuminada."""
+    """Habilita o bloquea un control sin pisar un difuminado (ver dim): si está difuminado, permanece bloqueado y se
+    habilita (o no) recién al liberarse.
+    """
     if control.__dict__.get("dim_locks"):
         control.locked_before = not enabled
         return
     control.state(["!disabled"] if enabled else ["disabled"])
 
 
-WHEEL_PX = 64  # píxeles por "clic" de la ruedita
-GLIDE = 0.4  # en cada paso se recorre esta parte de lo que falta (se frena suave al llegar)
+WHEEL_PX = 64  # píxeles por paso de la rueda del mouse
+GLIDE = 0.4  # fracción de la distancia restante que se recorre en cada paso (frena suave)
 
 
 class Scrollable(ttk.Frame):
-    """Una página con barra de desplazamiento (para Ajustes, que es larga). Se mueve con la ruedita, suave y de a
-    píxeles (también con touchpad: antes los movimientos chicos no la movían y los grandes la hacían saltar)."""
+    """Página con barra de desplazamiento (para Ajustes, que es extensa). Se mueve con la rueda del mouse de forma
+    gradual y por píxeles; también con touchpad, donde los movimientos pequeños deben desplazarla y los grandes no
+    deben producir saltos.
+    """
 
     def __init__(self, parent) -> None:
         super().__init__(parent)
-        self._goal: float | None = None  # hasta dónde se está desplazando (píxeles desde arriba)
+        self._goal: float | None = None  # destino del desplazamiento actual (píxeles desde arriba)
         self._gliding = None
         self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0, background=palette()["bg"],
                                 yscrollincrement=1)
@@ -263,7 +268,7 @@ class Scrollable(ttk.Frame):
         self.bind_all("<MouseWheel>", self._wheel, add="+")
 
     def _fit(self) -> None:
-        """La barra aparece solo si el contenido no entra."""
+        """La barra aparece solo si el contenido no cabe."""
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         overflow = self.body.winfo_reqheight() > self.canvas.winfo_height() + 2
         if overflow and not self.bar.winfo_ismapped():
@@ -282,7 +287,7 @@ class Scrollable(ttk.Frame):
             self.scroll_by(-event.delta / 120 * WHEEL_PX)
 
     def scroll_by(self, pixels: float) -> None:
-        """Desplaza la página, deslizándose (si ya se estaba moviendo, sigue desde adonde iba)."""
+        """Desplaza la página de forma gradual; si ya estaba en movimiento, continúa desde la posición actual."""
         top = self.canvas.canvasy(0)
         bottom = max(0.0, self.body.winfo_reqheight() - self.canvas.winfo_height())
         start = self._goal if self._goal is not None else top

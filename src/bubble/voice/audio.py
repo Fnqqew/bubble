@@ -1,9 +1,9 @@
-"""Entrada y salida de audio (WASAPI, vía soundcard).
+"""Entrada y salida de audio (WASAPI, mediante soundcard).
 
 - Lo que suena en la PC (el juego, incluido el chat de voz): captura "loopback" del parlante.
-- Tu micrófono.
-- La salida hacia el micrófono virtual (VB-Audio Virtual Cable): lo que se reproduce en «CABLE Input» Roblox lo recibe
-  por «CABLE Output» si lo elegís como micrófono.
+- El micrófono del jugador.
+- La salida hacia el micrófono virtual (VB-Audio Virtual Cable): lo que se reproduce en «CABLE Input» lo recibe Roblox
+  por «CABLE Output» si este se elige como micrófono.
 """
 
 from __future__ import annotations
@@ -18,16 +18,18 @@ SAMPLE_RATE = 16000
 
 
 def com_ready() -> None:
-    """El audio de Windows (WASAPI) usa COM, que se prepara por hilo. soundcard lo prepara solo en el hilo que lo
-    importa: si ese hilo termina, los demás fallaban con "Error 0x800401f0". Se prepara en cada hilo que lo usa."""
+    """El audio de Windows (WASAPI) usa COM, que se inicializa por hilo. soundcard lo inicializa solo en el hilo que lo
+    importa; si ese hilo termina, los demás fallan con "Error 0x800401f0". Por eso se inicializa en cada hilo que lo
+    usa.
+    """
     import ctypes
     import warnings
 
-    # Primero soundcard (al cargarse prepara COM en su hilo y falla si ya estaba preparado), después este hilo.
+    # Primero soundcard (al cargarse inicializa COM en su hilo y falla si ya estaba inicializado), después este hilo.
     warnings.filterwarnings("ignore", message="data discontinuity in recording")
     import soundcard  # noqa: F401
 
-    ctypes.windll.ole32.CoInitializeEx(None, 0)  # COINIT_MULTITHREADED; si ya estaba, no hace nada
+    ctypes.windll.ole32.CoInitializeEx(None, 0)  # COINIT_MULTITHREADED; no hace nada si ya estaba inicializado
 
 
 def _sc():
@@ -36,19 +38,19 @@ def _sc():
     com_ready()
     import soundcard
 
-    # Aviso de soundcard al empezar a grabar (y si el búfer se atrasa): llenaba el registro de errores.
+    # Aviso de soundcard al empezar a grabar (o si el búfer se atrasa); saturaba el registro de errores.
     warnings.filterwarnings("ignore", message="data discontinuity in recording")
     return soundcard
 
 
 def speaker_loopback():
-    """Lo que suena en tus parlantes o auriculares (el juego)."""
+    """Lo que suena en los parlantes o auriculares del jugador (el juego)."""
     sc = _sc()
     return sc.get_microphone(id=str(sc.default_speaker().name), include_loopback=True)
 
 
 class _WithFallback:
-    """Una fuente que prueba primero `primary` y, si Windows no la deja abrir, usa la de `fallback()`."""
+    """Fuente que intenta primero `primary` y, si Windows no permite abrirla, usa la de `fallback()`."""
 
     def __init__(self, primary, fallback) -> None:
         self.primary, self.fallback = primary, fallback
@@ -73,8 +75,10 @@ class _WithFallback:
 
 
 def game_audio():
-    """Lo que suena en Roblox, y nada más: ni Discord, ni YouTube, ni música (Windows 11). Si Roblox todavía no abrió,
-    silencio hasta que abra. Solo en un Windows que no permite escuchar un programa suelto se escucha toda la PC."""
+    """Captura solo el audio de Roblox, sin Discord, YouTube ni música (Windows 11). Si Roblox todavía no abrió, hay
+    silencio hasta que abra. Solo en un Windows que no permite capturar un programa individual se captura toda la
+    PC.
+    """
     from .process_audio import RobloxAudio
 
     return _WithFallback(RobloxAudio(), speaker_loopback)
@@ -85,9 +89,10 @@ def microphone():
 
 
 def virtual_cable():
-    """La entrada del micrófono virtual, si está instalado: la misma que usa el puente con tu micrófono (bridge.py).
-    VB-Cable también instala «CABLE In 16ch»: reproducir ahí fallaba (0x8889000A) y la voz traducida nunca llegaba a
-    Roblox."""
+    """Entrada del micrófono virtual, si está instalado: la misma que usa el puente con el micrófono (bridge.py).
+    VB-Cable también instala «CABLE In 16ch»: reproducir ahí falla (0x8889000A) y la voz traducida no llega a
+    Roblox.
+    """
     from .bridge import cable_input
 
     return cable_input()
@@ -111,7 +116,7 @@ def resample(audio: np.ndarray, rate: int, target: int = SAMPLE_RATE) -> np.ndar
 
 @dataclass
 class Output:
-    """Dónde sale tu voz traducida."""
+    """Destino de la voz traducida."""
 
     device: object
     is_cable: bool
@@ -130,25 +135,26 @@ TAIL_S = 0.5
 
 
 def play(output: Output, audio: np.ndarray, rate: int) -> None:
-    """Reproduce (bloquea hasta terminar). Termina con medio segundo de silencio: el reproductor se cierra apenas
-    recibe el último pedazo, y el final de la frase se cortaba."""
+    """Reproduce el audio y bloquea hasta terminar. Agrega medio segundo de silencio al final: el reproductor se cierra
+    apenas recibe el último fragmento y cortaría el final de la frase.
+    """
     com_ready()
     audio = np.clip(audio, -1, 1).astype(np.float32)
     tail = np.zeros((int(rate * TAIL_S), *audio.shape[1:]), dtype=np.float32)
     output.device.play(np.concatenate([audio, tail]), samplerate=rate)
 
 
-STREAM_BUFFER_S = 0.25  # colchón del reproductor (el de Windows por defecto es ~10 ms: con eso la voz se cortaba)
-STREAM_START_S = 0.35  # se empieza a reproducir con esto listo
+STREAM_BUFFER_S = 0.25  # colchón del reproductor (el de Windows, ~10 ms, corta la voz)
+STREAM_START_S = 0.35  # audio acumulado necesario para iniciar la reproducción
 
 
 def play_stream(output: Output, pieces, rate: int, on_piece: Callable[[float], None] | None = None) -> float:
-    """Reproduce pedazos a medida que llegan (bloquea hasta terminar). Devuelve los segundos que sonó.
+    """Reproduce fragmentos a medida que llegan, bloqueando hasta terminar. Devuelve los segundos reproducidos.
 
-    Los pedazos se traen en otro hilo, así ir a buscar el próximo (la red) nunca frena la reproducción, y el
-    reproductor tiene un colchón de STREAM_BUFFER_S: una demora corta de la red no se nota. Antes el mismo hilo
-    reproducía y esperaba la red con ~10 ms de colchón, y la voz sonaba entrecortada. `on_piece(segundos)`: antes de
-    cada pedazo que se manda a sonar."""
+    Los fragmentos se obtienen en otro hilo, de modo que esperar el siguiente (red) nunca frena la reproducción, y
+    el reproductor tiene un colchón de STREAM_BUFFER_S que absorbe demoras cortas de la red. Con un solo hilo y ~10
+    ms de colchón la voz sonaba entrecortada. `on_piece(segundos)` se invoca antes de reproducir cada fragmento.
+    """
     import queue
     import threading
 
@@ -170,7 +176,7 @@ def play_stream(output: Output, pieces, rate: int, on_piece: Callable[[float], N
     played = 0.0
     buffer: list[np.ndarray] = []
     buffered, done = 0, False
-    while buffered < rate * STREAM_START_S:  # un poco listo antes de empezar
+    while buffered < rate * STREAM_START_S:  # acumula algo de audio antes de empezar
         piece = incoming.get()
         if piece is None:
             done = True
@@ -184,7 +190,7 @@ def play_stream(output: Output, pieces, rate: int, on_piece: Callable[[float], N
                 buffer = []
                 if on_piece:
                     on_piece(len(chunk) / rate)
-                player.play(chunk)  # vuelve cuando queda ~STREAM_BUFFER_S por sonar
+                player.play(chunk)  # retorna cuando quedan ~STREAM_BUFFER_S por reproducir
                 played += len(chunk) / rate
             if done:
                 break
@@ -193,7 +199,7 @@ def play_stream(output: Output, pieces, rate: int, on_piece: Callable[[float], N
                 done = True
                 continue
             buffer.append(piece)
-            while True:  # y todo lo que ya llegó, junto
+            while True:  # y junta todo lo que ya llegó
                 try:
                     extra = incoming.get_nowait()
                 except queue.Empty:
@@ -207,5 +213,5 @@ def play_stream(output: Output, pieces, rate: int, on_piece: Callable[[float], N
 
 
 def monitor_output() -> Output:
-    """Tus parlantes o auriculares: para que escuches lo que dijo tu voz traducida."""
+    """Parlantes o auriculares del jugador: permiten escuchar la voz traducida."""
     return Output(default_speaker(), False)

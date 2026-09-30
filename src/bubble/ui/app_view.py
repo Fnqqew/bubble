@@ -1,4 +1,4 @@
-"""La ventana de Bubble: simple a primera vista (tu idioma y cuatro interruptores) y personalizable en Ajustes.
+"""La ventana de Bubble: simple a primera vista (idioma y cuatro interruptores) y personalizable en Ajustes.
 
     ┌ Bubble ─────────────── ● Todo listo ┐
     │ Inicio · Voz · Ajustes · Actividad   │
@@ -10,7 +10,7 @@
     │ └────────────────────────────────┘  │
     └──────────────────────────────────────┘
 
-Arma los mismos controles que usa la lógica de `BubbleWindow` (idiomas, tono, estado de Roblox, registro…).
+Crea los mismos controles que usa la lógica de `BubbleWindow` (idiomas, tono, estado de Roblox, registro…).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 LOGO = Path(__file__).resolve().parent.parent / "assets" / "bubble.png"
 PAGES = {"inicio": "Inicio", "voz": "Voz", "pruebas": "Pruebas", "pro": "✦ Pro", "ajustes": "Ajustes",
          "actividad": "Actividad"}
-# Páginas que se arman recién la primera vez que las abrís (son las más pesadas): Bubble abre un poco antes.
+# Páginas que se construyen recién la primera vez que se abren, por ser las más pesadas; Bubble las abre un poco antes.
 LAZY = ("pruebas", "pro")
 PILL_NAMES = {"grafito": "Grafito", "medianoche": "Medianoche", "violeta": "Violeta", "bosque": "Bosque",
               "negro": "Negro"}
@@ -47,17 +47,17 @@ PERFORMANCE = {"auto": "Automático", "alta": "Máxima", "media": "Equilibrado",
 def build(app: BubbleWindow) -> None:
     root = app.root
     root.configure(background=widgets.palette()["bg"])
-    # Las listas desplegables de solo lectura quedaban con el texto resaltado (seleccionado) al elegir o al tener el
-    # foco: se saca la selección.
+    # Las listas desplegables de solo lectura quedaban con el texto resaltado al elegir un valor o recibir el foco; se
+    # borra la selección.
     root.bind_class("TCombobox", "<FocusIn>", lambda event: event.widget.selection_clear(), add="+")
-    # Con la ruedita encima, una lista cambiaba de valor sola (y se guardaba) al bajar por la página: ahora la ruedita
-    # solo mueve la página.
+    # Con la rueda del mouse sobre una lista, esta cambiaba de valor (y se guardaba) al desplazar la página; se anula
+    # para que la rueda solo desplace la página.
     root.bind_class("TCombobox", "<MouseWheel>", lambda _event: None)
     root.bind_all("<<ComboboxSelected>>", lambda event: (event.widget.selection_clear(),
                                                          root.after_idle(root.focus_set)), add="+")
-    # Con Bubble Pro: una franja dorada arriba de todo (ver apply_pro_look). Está siempre (en Basic, del color del
-    # fondo): prenderla o apagarla es solo cambiarle el color. Antes se ponía y se sacaba, y eso redibujaba toda la
-    # ventana (~0,4 s trabada).
+    # Con Bubble Pro: franja dorada en la parte superior (ver apply_pro_look). Está siempre presente (en Basic, del
+    # color del fondo), de modo que activarla o desactivarla solo cambia su color; agregarla y quitarla redibujaba toda
+    # la ventana y la bloqueaba unos 0,4 s.
     colors = widgets.palette()
     app.pro_stripe = tk.Canvas(root, height=3, background=colors["bg"], borderwidth=0, highlightthickness=0)
     app.pro_stripe.pack(fill="x", side="top")
@@ -76,7 +76,7 @@ def build(app: BubbleWindow) -> None:
                                  command=lambda: _show_page(app))
         button.pack(side="left", padx=(0, 6))
         app.nav_buttons[key] = button
-    # Una rayita debajo de la pestaña elegida, que se desliza hasta la nueva al cambiar.
+    # Línea bajo la pestaña seleccionada, que se desliza hasta la nueva al cambiar.
     app.nav_line = tk.Canvas(holder, height=3, background=colors["bg"], borderwidth=0, highlightthickness=0)
     app.nav_line.pack(fill="x", pady=(5, 0))
     app.nav_mark = app.nav_line.create_rectangle(0, 0, 0, 3, width=0, fill=colors["accent"])
@@ -96,7 +96,7 @@ def build(app: BubbleWindow) -> None:
             scroll = app.pages[key] = widgets.Scrollable(stack)  # se desplaza si la ventana es chica
             parent = scroll.body
         if key in LAZY:
-            app.lazy_pages[key] = (parent, builders[key])  # se arma la primera vez que la abrís
+            app.lazy_pages[key] = (parent, builders[key])  # se construye la primera vez que se abre
         else:
             builders[key](parent)
 
@@ -105,7 +105,7 @@ def build(app: BubbleWindow) -> None:
     links = ttk.Frame(footer)
     links.pack(side="right", anchor="n")
     app.update_link = ttk.Label(links, text="", font="SunValleyBodyStrongFont", foreground=widgets.palette()["accent"],
-                                cursor="hand2")  # (se ve solo si hay una versión nueva: ver show_update_link)
+                                cursor="hand2")  # (visible solo si hay una versión nueva: ver show_update_link)
     app.update_link.bind("<Button-1>", lambda _event: app.open_update())
     for text, command in (("Soporte", app.open_support), ("Acerca de", app.open_about)):
         link = ttk.Label(links, text=text, font="SunValleyCaptionFont", foreground=widgets.palette()["accent"],
@@ -115,13 +115,13 @@ def build(app: BubbleWindow) -> None:
     app.status = ttk.Label(footer, text="", font="SunValleyCaptionFont", foreground=widgets.palette()["muted"],
                            anchor="w", wraplength=420, justify="left")
     app.status.pack(side="left", fill="x", expand=True)
-    app.voice_panel._update_locks(animate=False)  # (Ajustes se arma después de Voz)
+    app.voice_panel._update_locks(animate=False)  # (Ajustes se construye después de Voz)
     _show_page(app)
 
 
 
 def show_update_link(app: BubbleWindow, release) -> None:
-    """El link «Actualizar a la X» abajo de todo, mientras haya una versión nueva."""
+    """Enlace «Actualizar a la X» al pie de la ventana, mientras haya una versión nueva."""
     link = getattr(app, "update_link", None)
     if link is None:
         return
@@ -150,7 +150,7 @@ def _header(app: BubbleWindow, parent) -> None:
     app.title_label.pack(side="left")
     app.pro_badge = tk.Label(title, text="PRO", font=("Segoe UI", 8, "bold"), padx=7, pady=1, borderwidth=0,
                              background=pro.gold(), foreground=widgets.palette()["bg"])
-    app.greeting = ttk.Label(texts, text="Preparando todo… dame un segundito.", font="SunValleyCaptionFont",
+    app.greeting = ttk.Label(texts, text="Preparando todo… un momento, por favor.", font="SunValleyCaptionFont",
                              foreground=widgets.palette()["muted"])
     app.greeting.pack(anchor="w")
     side = ttk.Frame(head)
@@ -158,7 +158,7 @@ def _header(app: BubbleWindow, parent) -> None:
     app.state_chip = ttk.Label(side, text="●  Conectando", font="SunValleyCaptionFont",
                                foreground=widgets.palette()["warn"])
     app.state_chip.pack(anchor="e", pady=(2, 4))
-    # Si algo anda raro: reinicia todo el mecanismo sin cerrar Bubble.
+    # Reinicia todo el mecanismo sin cerrar Bubble, por si algo falla.
     app.refresh_button = ttk.Button(side, text="↻  Refrescar", command=app._refresh)
     app.refresh_button.pack(anchor="e")
 
@@ -173,7 +173,7 @@ def _show_page(app: BubbleWindow) -> None:
     pending = getattr(app, "lazy_pages", {}).pop(app.page_var.get(), None)
     if pending is not None:
         parent, builder = pending
-        builder(parent)  # (se arma con los colores del plan de ahora: no hace falta recolorear)
+        builder(parent)  # (usa los colores del plan actual: no hace falta recolorear)
     _slide_nav(app)
     for key, page in app.pages.items():
         if key == app.page_var.get():
@@ -181,19 +181,19 @@ def _show_page(app: BubbleWindow) -> None:
         else:
             page.pack_forget()
     if app.page_var.get() in ("voz", "pruebas"):
-        app.voice_panel.warm_up()  # que «Probar voz» (y tu voz traducida) salga enseguida
+        app.voice_panel.warm_up()  # para que «Probar voz» y la voz traducida respondan enseguida
     if app.page_var.get() == "pro":
         app.pro_panel.refresh()
     if app.page_var.get() == "pruebas":
         app.tests_panel.refresh_learned()
         if app.ready:
-            app.voice_panel._open_voice_lane()  # el carril rápido de Claude, listo para probar
+            app.voice_panel._open_voice_lane()  # carril rápido de Claude, listo para probar
 
 
 # ---------------------------------------------------------------- Inicio
 MIC_TIP_TITLE = "Lo más importante: un buen micrófono"
-MIC_TIP = (("Te entiendo tan bien como te escucho. Con un micrófono de auriculares o uno USB cerca de la boca, "
-            "la traducción sale mucho mejor que con el de la notebook o la webcam."))
+MIC_TIP = (("Te entiendo tan bien como te escucho. Con un micrófono de auriculares o uno USB cerca de la boca, la "
+            "traducción es mucho mejor que con el de la notebook o la webcam."))
 
 
 def _home(app: BubbleWindow, page) -> None:
@@ -201,7 +201,7 @@ def _home(app: BubbleWindow, page) -> None:
     from .main_window import LANG_CHOICES, _choice
 
     if not load_state().get("mic_tip_done"):
-        _mic_tip(app, page)  # lo primero que se ve al entrar (hasta que tu micrófono ande bien o lo cierres)
+        _mic_tip(app, page)  # primer aviso al entrar, hasta que el micrófono funcione o se cierre
     box = widgets.card(page, "Hablo", "Te muestro todo en este idioma.")
     app.my_lang = ttk.Combobox(box, values=LANG_CHOICES, state="readonly")
     app.my_lang.set(_choice(app.config.user.language))
@@ -287,7 +287,7 @@ def _settings(app: BubbleWindow, page) -> None:
                     style="Switch.TCheckbutton", command=lambda: _change_screenshots(app)).pack(anchor="w", pady=(12, 0))
     app.capture_label = widgets.muted(box, "")  # (ver main_window._refresh_capture_label)
 
-    box = app.subs_box = widgets.card(page, "Subtítulos de voz")  # (se difumina sin subtítulos: ver voice_panel)
+    box = app.subs_box = widgets.card(page, "Subtítulos de voz")  # (se atenúa sin subtítulos: ver voice_panel)
     app.sub_size_var = tk.StringVar(value=_closest(look.subtitle_size, SUB_SIZES))
     row = widgets.label_row(box, "Tamaño")
     widgets.segmented(row, app.sub_size_var, SUB_SIZES, lambda: _change_subtitles(app)).pack(side="right")
@@ -299,7 +299,7 @@ def _settings(app: BubbleWindow, page) -> None:
                     style="Switch.TCheckbutton", command=lambda: _change_subtitles(app)).pack(anchor="w", pady=(10, 0))
 
     box = widgets.card(page, "Al escribir")
-    row = widgets.label_row(box, "Mandar en")
+    row = widgets.label_row(box, "Enviar en")
     app.out_lang = ttk.Combobox(row, values=[AUTO_CHOICE, *LANG_CHOICES], state="readonly", width=30)
     app.out_lang.set(_choice(app.config.user.outgoing_language))
     app.out_lang.bind("<<ComboboxSelected>>", app._on_lang_change)
@@ -311,12 +311,12 @@ def _settings(app: BubbleWindow, page) -> None:
     app.tone.pack(side="right")
     app.tone_hint = widgets.muted(box, TONE_HINTS[clamp_tone(app.config.user.tone)])
 
-    box = widgets.card(page, "Chat de Roblox", "El chat lo encuentro solo. Si en algún juego no lo encuentro, "
-                                               "marcalo a mano.")
+    box = widgets.card(page, "Chat de Roblox", "El chat lo encuentro automáticamente. Si en algún juego no lo "
+                                               "encuentro, marcalo manualmente.")
     row = ttk.Frame(box)
     row.pack(fill="x")
     ttk.Button(row, text="Buscar el chat", command=app._detect_chat).pack(side="left")
-    ttk.Button(row, text="Marcarlo a mano", command=app._calibrate).pack(side="left", padx=8)
+    ttk.Button(row, text="Marcarlo manualmente", command=app._calibrate).pack(side="left", padx=8)
     ttk.Button(row, text="Probar lectura", command=app._capture_test).pack(side="left")
 
     box = widgets.card(page, "Rendimiento")
@@ -326,8 +326,8 @@ def _settings(app: BubbleWindow, page) -> None:
     _option_menu(row, app.perf_var, PERFORMANCE, lambda: _change_performance(app))
     app.perf_label = widgets.muted(box, "Detectando tu PC…")
 
-    box = widgets.card(page, "Instalación", "Cuando abrís Bubble, instalo solo lo que falte y te aviso si hay "
-                                            "una versión nueva. Si desinstalás, elegís qué borrar.")
+    box = widgets.card(page, "Instalación", "Cuando abrís Bubble, instalo lo que falte y te aviso si hay una versión "
+                                            "nueva. Si desinstalás, elegís qué borrar.")
     row = ttk.Frame(box)
     row.pack(fill="x")
     ttk.Button(row, text="Revisar instalación", command=app.open_setup).pack(side="left")
@@ -335,12 +335,12 @@ def _settings(app: BubbleWindow, page) -> None:
         side="left", padx=(8, 0))
     ttk.Button(row, text="Desinstalar Bubble…", command=app.open_uninstall).pack(side="right")
     app.auto_update_var = tk.BooleanVar(value=app.config.user.auto_update)
-    widgets.switch_row(box, "download", "Actualizar solo",
-                       "Las versiones nuevas se bajan e instalan solas, cuando no estás jugando.",
+    widgets.switch_row(box, "download", "Actualizar automáticamente",
+                       "Las versiones nuevas se descargan e instalan automáticamente, cuando no estás jugando.",
                        app.auto_update_var, lambda: _change_auto_update(app), pady=(12, 0))
 
-    box = widgets.card(page, "Ayuda", "¿Algo no anda o tenés una idea? Contalo en Soporte, con capturas si "
-                                      "querés. Le llega directo al creador.")
+    box = widgets.card(page, "Ayuda", "¿Algo no funciona o tenés una idea? Contalo en Soporte, con capturas si "
+                                      "querés. Le llega directamente al creador.")
     row = ttk.Frame(box)
     row.pack(fill="x")
     ttk.Button(row, text="Ver el tutorial", command=app.open_tutorial).pack(side="left")
@@ -351,8 +351,9 @@ def _settings(app: BubbleWindow, page) -> None:
 
 
 def _mic_tip(app: BubbleWindow, page) -> None:
-    """«Lo más importante: un buen micrófono», bien a la vista: con fondo de color, una barra del acento y el botón para
-    probarlo. Se va cuando la prueba dice que tu micrófono anda bien, o si lo cerrás."""
+    """Aviso «Lo más importante: un buen micrófono», bien visible: fondo de color, barra del acento y botón para
+    probarlo. Desaparece cuando la prueba indica que el micrófono funciona bien, o si el jugador lo cierra.
+    """
     outer = tk.Frame(page, highlightthickness=1)
     outer.pack(fill="x", pady=(0, 12))
     bar = tk.Frame(outer, width=4)
@@ -377,7 +378,7 @@ def _mic_tip(app: BubbleWindow, page) -> None:
 
 
 def paint_mic_tip(app: BubbleWindow) -> None:
-    """Los colores del cartel del micrófono (con el tema y el plan de ahora: dorado con Pro)."""
+    """Colores del aviso del micrófono según el tema y el plan actuales (dorado con Pro)."""
     tip = getattr(app, "mic_tip", None)
     if not tip or not tip["outer"].winfo_exists():
         return
@@ -397,7 +398,7 @@ def paint_mic_tip(app: BubbleWindow) -> None:
 
 
 def later(app: BubbleWindow, name: str, action, delay_ms: int = 250) -> None:
-    """Hace `action` cuando se deja de mover un deslizador (si no, se guardaba el ajuste en cada píxel)."""
+    """Ejecuta `action` cuando el deslizador deja de moverse, para no guardar el ajuste en cada píxel."""
     jobs = app.__dict__.setdefault("_later_jobs", {})
     if name in jobs:
         app.root.after_cancel(jobs[name])
@@ -405,7 +406,7 @@ def later(app: BubbleWindow, name: str, action, delay_ms: int = 250) -> None:
 
 
 def _option_menu(parent, variable: tk.StringVar, options: dict[str, str], command) -> ttk.Combobox:
-    """Lista desplegable que muestra nombres lindos y guarda el valor."""
+    """Lista desplegable que muestra nombres legibles y guarda el valor asociado."""
     box = ttk.Combobox(parent, values=list(options.values()), state="readonly", width=16)
     box.set(options.get(variable.get(), next(iter(options.values()))))
 
@@ -424,8 +425,9 @@ def _closest(value: float, options: dict[str, str]) -> str:
 
 
 def _change_theme(app: BubbleWindow) -> None:
-    """Cambia el tema detrás de una "foto" de la ventana y después la desvanece: así el cambio es de una vez y suave
-    (antes se veía cada parte cambiar por separado)."""
+    """Cambia el tema detrás de una captura de la ventana y luego la desvanece, de modo que el cambio se vea de una vez
+    y sin transiciones parciales.
+    """
     if app.config.appearance.theme == app.theme_var.get():
         return
     app.config.appearance.theme = app.theme_var.get()
@@ -441,7 +443,7 @@ def _change_theme(app: BubbleWindow) -> None:
 
 
 def _freeze(root) -> tk.Toplevel | None:
-    """Una ventana sin bordes encima de Bubble con la imagen de cómo se ve ahora."""
+    """Ventana sin bordes sobre Bubble con la imagen de su estado actual."""
     import ctypes
     from ctypes import wintypes
 
@@ -495,26 +497,27 @@ def _fade(cover: tk.Toplevel, step: int = 0, steps: int = 12) -> None:
 
 
 def apply_pro_look(app: BubbleWindow, animate: bool = False) -> None:
-    """Bubble Pro se nota: "Bubble Pro" con una insignia dorada, una franja dorada arriba (que brilla al activarlo),
-    el acento de la ventana (botones, interruptores, íconos) dorado y lo mismo en las traducciones dentro del juego.
-    Sin Pro, todo vuelve. Tarda unos milisegundos (antes la ventana quedaba trabada ~0,6 s)."""
+    """Marca visualmente Bubble Pro: "Bubble Pro" con insignia dorada, franja dorada arriba (con un destello al
+    activarlo), acento dorado en la ventana (botones, interruptores, íconos) y en las traducciones dentro del juego.
+    Sin Pro, se restauran los valores originales. Tarda pocos milisegundos.
+    """
     recolor(app, animate=animate)
     apply_overlay_style(app)
     if hasattr(app, "look_preview"):
         _render_preview(app)
     for hook in getattr(app, "plan_hooks", ()):
-        hook(animate)  # lo que se bloquea o se desbloquea según el plan (página Pro, etc.)
+        hook(animate)  # bloqueos y desbloqueos según el plan (página Pro, etc.)
 
 
 def _slide_nav(app: BubbleWindow, animate: bool = True) -> None:
-    """Lleva la rayita de las pestañas hasta la elegida."""
+    """Desplaza la línea de las pestañas hasta la seleccionada."""
     from . import motion
 
     button = app.nav_buttons.get(app.page_var.get())
     if button is None:
         return
     if not button.winfo_ismapped() or button.winfo_width() <= 1:
-        # La ventana todavía no está en pantalla (se está abriendo): se ubica apenas aparezca.
+        # La ventana aún no está en pantalla (se está abriendo): se posiciona en cuanto aparezca.
         if not getattr(app, "_nav_waiting", False):
             app._nav_waiting = True
 
@@ -535,7 +538,7 @@ def _slide_nav(app: BubbleWindow, animate: bool = True) -> None:
 
 
 def _stripe(app: BubbleWindow, on: bool, animate: bool) -> None:
-    """La franja de arriba: dorada con Pro (y un brillo que la recorre al activarlo), del color del fondo en Basic."""
+    """Franja superior: dorada con Pro (con un destello al activarlo) y del color del fondo en Basic."""
     from . import motion
 
     stripe = app.pro_stripe
@@ -559,7 +562,7 @@ def _stripe(app: BubbleWindow, on: bool, animate: bool) -> None:
 
 
 def _pro_header(app: BubbleWindow, animate: bool = False) -> None:
-    """"Bubble Pro" con la insignia PRO dorada y la franja arriba; en Basic, "Bubble" con una insignia BASIC gris."""
+    """"Bubble Pro" con insignia PRO dorada y la franja superior; en Basic, "Bubble" con insignia BASIC gris."""
     on = pro.active()
     colors = widgets.palette()
     app.title_label.configure(text="Bubble Pro" if on else "Bubble")
@@ -575,8 +578,9 @@ def _pro_header(app: BubbleWindow, animate: bool = False) -> None:
 
 
 def recolor(app: BubbleWindow, animate: bool = False) -> None:
-    """Después de cambiar el tema (o de prender o apagar Bubble Pro): lo que no es del tema (textos grises, registro,
-    fondos, el acento) toma los colores nuevos."""
+    """Tras cambiar el tema o activar o desactivar Bubble Pro, aplica los colores nuevos a lo que no depende del tema
+    (textos grises, registro, fondos, acento).
+    """
     colors = widgets.palette()
     app.root.configure(background=colors["bg"])
     theme.tint_accent(app.root, pro.active())
@@ -590,11 +594,11 @@ def recolor(app: BubbleWindow, animate: bool = False) -> None:
     def walk(widget):
         for child in widget.winfo_children():
             if isinstance(child, ttk.Label):
-                blocked = getattr(child, "dim_color", None)  # difuminado (bloqueado): se guarda su color de verdad
+                blocked = getattr(child, "dim_color", None)  # atenuado (bloqueado): se guarda su color real
                 current = blocked or str(child.cget("foreground"))
                 new = current
                 if getattr(child, "gold", False):
-                    new = pro.gold()  # lo de Pro, dorado siempre (con el dorado del tema)
+                    new = pro.gold()  # elementos Pro: siempre dorado (el dorado del tema)
                 else:
                     for old in olds:
                         for key in ("muted", "faint", "accent", "good", "warn", "bad"):
@@ -626,14 +630,14 @@ def _change_look(app: BubbleWindow, redraw_preview: bool = True) -> None:
 
 def apply_overlay_style(app: BubbleWindow) -> None:
     look = app.config.appearance
-    # Con Bubble Pro, la rayita de las traducciones en el juego es dorada (si no elegiste otro color).
+    # Con Bubble Pro, la línea de las traducciones en el juego es dorada, salvo que se haya elegido otro color.
     accent = "dorado" if pro.active() and look.accent == "azul" else look.accent
     inline.set_style(look.pill_color, look.pill_opacity, accent, look.text_scale)
     subtitles.set_subtitles(look.subtitle_size, look.subtitle_position, look.subtitle_original)
 
 
 def _render_preview(app: BubbleWindow) -> None:
-    """Muestra cómo queda una traducción con los ajustes elegidos, sobre un pedacito de "juego"."""
+    """Muestra cómo queda una traducción con los ajustes elegidos, sobre un fragmento de "juego"."""
     from PIL import Image, ImageDraw, ImageTk
 
     width, height = 440, 64
@@ -680,13 +684,13 @@ def _change_auto_update(app: BubbleWindow) -> None:
     app.config.user.auto_update = bool(app.auto_update_var.get())
     save_setting("user", "auto_update", app.config.user.auto_update)
     if app.config.user.auto_update:
-        app.check_update()  # ya mismo, por si hay una
+        app.check_update()  # de inmediato, por si hay una
 
 
 def _change_performance(app: BubbleWindow) -> None:
     app.config.roblox.performance = app.perf_var.get()
     save_setting("roblox", "performance", app.config.roblox.performance)
-    app._set_status("Listo. El modo nuevo se usa la próxima vez que abras Bubble.")
+    app._set_status("El modo nuevo se aplicará la próxima vez que abras Bubble.")
 
 
 # ---------------------------------------------------------------- Actividad

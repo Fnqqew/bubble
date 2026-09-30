@@ -1,9 +1,9 @@
 """Ventanas con transparencia por píxel (UpdateLayeredWindow) para dibujar traducciones sobre Roblox.
 
-Permiten bordes redondeados y suaves, sombras y fondos semitransparentes (algo que una ventana de Tk no
-puede), y son más rápidas: mostrar una imagen es una sola llamada a Windows y moverla no la redibuja.
-Además no aparecen en las capturas de pantalla (así el OCR sigue leyendo el chat original de debajo), salvo un
-momento cuando vos sacás una captura (ver screenshots.py), y dejan pasar los clics.
+Permiten bordes redondeados y suaves, sombras y fondos semitransparentes (algo que una ventana de Tk no puede), y son
+más rápidas: mostrar una imagen es una sola llamada a Windows y moverla no la redibuja. Además no aparecen en las
+capturas de pantalla (así el OCR sigue leyendo el chat original de debajo), salvo un momento cuando el jugador hace una
+captura (ver screenshots.py), y dejan pasar los clics.
 """
 
 from __future__ import annotations
@@ -115,7 +115,7 @@ def capturable(window: "LayeredWindow") -> bool:
     value = wintypes.DWORD()
     user32.GetWindowDisplayAffinity(window.hwnd, ctypes.byref(value))
     return value.value != WDA_EXCLUDEFROMCAPTURE
-# DefWindowProcW nativo como procedimiento de la ventana: no hay código Python por cada mensaje.
+# DefWindowProcW nativo como procedimiento de la ventana: evita ejecutar código Python por cada mensaje.
 _WNDPROC = WNDPROC(ctypes.cast(user32.DefWindowProcW, ctypes.c_void_p).value)
 
 
@@ -128,24 +128,24 @@ def _register_class() -> None:
     wc.lpfnWndProc = _WNDPROC
     wc.hInstance = kernel32.GetModuleHandleW(None)
     wc.lpszClassName = CLASS_NAME
-    user32.RegisterClassExW(ctypes.byref(wc))  # si ya estaba registrada, falla sin problema
+    user32.RegisterClassExW(ctypes.byref(wc))  # si ya estaba registrada, falla sin consecuencias
     _class_registered = True
 
 
 def to_premultiplied_bgra(image: Image.Image) -> bytes:
-    """RGBA -> BGRA con alfa premultiplicado (lo que pide UpdateLayeredWindow)."""
+    """RGBA -> BGRA con alfa premultiplicado (formato que requiere UpdateLayeredWindow)."""
     r, g, b, a = image.convert("RGBA").split()
     r, g, b = (ImageChops.multiply(channel, a) for channel in (r, g, b))
     return Image.merge("RGBA", (b, g, r, a)).tobytes()
 
 
-FADE_S = 0.18  # las traducciones aparecen desvaneciéndose (solo cambia la opacidad: casi no gasta)
-_fading: dict["LayeredWindow", float] = {}  # ventana → cuándo empezó a aparecer
-_driver = None  # la ventana de Tk que mueve las animaciones (ver animate_with)
+FADE_S = 0.18  # las traducciones aparecen con fundido (solo cambia la opacidad: bajo costo)
+_fading: dict["LayeredWindow", float] = {}  # ventana -> instante en que empezó a aparecer
+_driver = None  # ventana de Tk que mueve las animaciones (ver animate_with)
 
 
 def animate_with(root) -> None:
-    """Las traducciones aparecen suave. Sin esto (pruebas, herramientas) aparecen de golpe."""
+    """Hace que las traducciones aparezcan con un fundido. Sin esto (pruebas, herramientas) aparecen de inmediato."""
     global _driver
     _driver = root
 
@@ -170,7 +170,7 @@ def _fade_step() -> None:
 
 
 class LayeredWindow:
-    """Ventana siempre arriba, sin foco, que deja pasar los clics y no sale en capturas (salvo las tuyas)."""
+    """Ventana siempre visible, sin foco, que deja pasar los clics y no aparece en capturas (salvo las del jugador)."""
 
     def __init__(self) -> None:
         _register_class()
@@ -220,13 +220,13 @@ class LayeredWindow:
         self._show()
 
     def _starting_opacity(self) -> int:
-        """Si va a aparecer (estaba escondida), arranca transparente y se anima."""
+        """Si la ventana estaba oculta y va a aparecer, parte transparente y se anima."""
         if not self.visible and _driver is not None:
             self.opacity = 0
         return self.opacity
 
     def set_opacity(self, alpha: int) -> None:
-        """Cambia solo la opacidad (sin redibujar)."""
+        """Cambia solo la opacidad, sin redibujar."""
         alpha = max(0, min(255, int(alpha)))
         if alpha == self.opacity:
             return
@@ -237,7 +237,7 @@ class LayeredWindow:
     def _show(self) -> None:
         if not self.visible:
             if _driver is not None:
-                self.set_opacity(0)  # (si ya estaba en 0 por `update`, no hace nada)
+                self.set_opacity(0)  # (si `update` ya la dejó en 0, no hace nada)
             user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
             user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | 0x2)
             self.visible = True

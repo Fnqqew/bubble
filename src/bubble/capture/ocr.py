@@ -10,7 +10,7 @@ from PIL import Image
 
 
 def _ndimage():
-    """scipy tarda ~1 s en cargarse: se carga recién cuando hace falta (así Bubble abre rápido)."""
+    """scipy tarda ~1 s en cargarse, por lo que se importa de forma diferida para que Bubble abra rápido."""
     from scipy import ndimage
 
     return ndimage
@@ -47,16 +47,15 @@ class OcrRow:
         return self.left + self.width
 
 
-CHAT_TEXT_WHITE = 235  # brillo desde el que un píxel es letra plena
+CHAT_TEXT_WHITE = 235  # brillo mínimo para considerar un píxel como letra plena
 
 
 def prepare_chat_image(image: Image.Image) -> Image.Image:
-    """Deja el chat como letras negras sobre blanco, sea cual sea el fondo del juego.
+    """Deja el chat como letras negras sobre fondo blanco, sin importar el fondo del juego.
 
-    El texto del chat es claro (blanco, o nombres de colores) con borde oscuro, sobre un panel semitransparente
-    que deja ver la escena. Se toma el canal más brillante de cada píxel (un nombre rojo o azul queda tan claro
-    como el texto blanco), se estira el contraste desde el brillo típico del fondo y se invierte.
-    En el simulador, con fondos oscuros, de nieve y paneles claros, las líneas leídas pasan de 64 % a 99 %.
+    El texto del chat es claro (blanco o de color, en los nombres) con borde oscuro, sobre un panel semitransparente
+    que deja ver la escena. Se toma el canal más brillante de cada píxel (un nombre rojo o azul queda tan claro como
+    el texto blanco), se estira el contraste desde el brillo típico del fondo y se invierte.
     """
     value = np.asarray(image.convert("RGB")).max(axis=2).astype(np.float32)
     background = float(np.percentile(value, 50))
@@ -66,12 +65,12 @@ def prepare_chat_image(image: Image.Image) -> Image.Image:
 
 
 def binarize_local_background(image: Image.Image, min_distance: float = 60, ratio: float = 0.75) -> Image.Image:
-    """Segunda forma de preparar el chat, para cuando su fondo oscuro se desvaneció y el texto queda directo sobre el
-    juego (cielo, pasto, paredes que se mueven con la cámara).
+    """Variante de preparación para cuando el fondo oscuro del chat se desvaneció y el texto queda directamente sobre
+    el juego (cielo, pasto, paredes que se mueven con la cámara).
 
-    Estima el color del fondo alrededor de cada punto (mediana de la zona: las letras son finas y no la cambian) y
-    marca como letra lo que tiene un color muy distinto a ese fondo sin ser mucho más oscuro que él (el borde
-    semitransparente de las letras sí es más oscuro: queda afuera). Resultado en blanco y negro puro.
+    Estima el color del fondo alrededor de cada punto (mediana de la zona: las letras son finas y no la alteran) y
+    marca como letra lo que difiere mucho de ese fondo sin ser mucho más oscuro que él (el borde semitransparente de
+    las letras sí es más oscuro, por lo que queda excluido). El resultado es blanco y negro puro.
     """
     rgb = image.convert("RGB")
     small = rgb.reduce(3)
@@ -86,7 +85,7 @@ def binarize_local_background(image: Image.Image, min_distance: float = 60, rati
 
 
 def looks_faded(image: Image.Image) -> bool:
-    """El fondo oscuro del chat se desvaneció (Roblox lo esconde a los pocos segundos sin actividad)."""
+    """Indica si el fondo oscuro del chat se desvaneció (Roblox lo oculta tras unos segundos sin actividad)."""
     return float(np.median(np.asarray(image.convert("RGB")).max(axis=2))) > 120
 
 
@@ -94,30 +93,33 @@ WHITE_TEXT = 230  # el texto de los mensajes de Roblox es blanco: todos los cana
 
 
 def white_text_bands(image: Image.Image, min_pixels: int = 2) -> list[tuple[int, int]]:
-    """Franjas (arriba, abajo) de la imagen donde hay letras blancas: dónde hay mensajes, sin OCR (~1 ms)."""
+    """Franjas verticales (arriba, abajo) de la imagen con letras blancas, es decir, donde hay mensajes; no usa OCR (~1
+    ms).
+    """
     white = np.asarray(image.convert("RGB")).min(axis=2) >= WHITE_TEXT
     busy = np.concatenate(([False], white.sum(axis=1) >= min_pixels, [False]))
     edges = np.flatnonzero(busy[1:] != busy[:-1])
     bands: list[list[int]] = []
     for start, end in zip(edges[::2].tolist(), edges[1::2].tolist()):
         if bands and start - bands[-1][1] <= 2:
-            bands[-1][1] = end  # huecos de 1-2 filas dentro de la misma línea (entre letras)
+            bands[-1][1] = end  # huecos de 1-2 filas dentro de una misma línea (entre letras)
         else:
             bands.append([start, end])
     return [(start, end) for start, end in bands if end - start >= 5]
 
 
 def _same_line(a: OcrRow, b: OcrRow) -> bool:
-    """Misma línea visual si se superponen verticalmente al menos la mitad de la más baja.
+    """Indica si dos filas pertenecen a la misma línea visual: deben superponerse verticalmente al menos la mitad de la
+    más baja.
 
-    (Comparar centros con la altura máxima unía líneas vecinas cuando un ícono, como las
-    banderitas del chat, agrandaba una de ellas.)
+    (Comparar centros con la altura máxima unía líneas vecinas cuando un ícono, como las banderas del chat,
+    agrandaba una de ellas.)
     """
     overlap = min(a.bottom, b.bottom) - max(a.top, b.top)
     return overlap >= 0.5 * min(a.height, b.height)
 
 
-GAP_LETTERS = 3.0  # hueco (en alturas de letra) desde el que dos textos a la misma altura son cosas distintas
+GAP_LETTERS = 3.0  # hueco mínimo (en alturas de letra) para separar dos textos a la misma altura
 
 
 def _gap_limit(rows: list[OcrRow]) -> float:
@@ -132,8 +134,9 @@ def _from_words(words: list[OcrWord]) -> OcrRow:
 
 
 def split_far_words(row: OcrRow) -> list[OcrRow]:
-    """Separa una línea con un hueco enorme en el medio: el OCR junta el mensaje del chat con lo que haya a la misma
-    altura más a la derecha (la burbuja de otro jugador, un nombre sobre una cabeza, un cartel del juego)."""
+    """Separa una línea con un hueco muy grande en el medio: el OCR une el mensaje del chat con cualquier texto a la
+    misma altura más a la derecha (burbuja de otro jugador, nombre sobre una cabeza, cartel del juego).
+    """
     words = sorted(row.words, key=lambda w: w.left)
     if len(words) < 2:
         return [row]
@@ -148,8 +151,9 @@ def split_far_words(row: OcrRow) -> list[OcrRow]:
 
 
 def merge_rows(rows: list[OcrRow]) -> list[OcrRow]:
-    """Une fragmentos de la misma línea (Windows separa el nombre coloreado del mensaje), pero solo si están cerca:
-    texto del juego a la misma altura, lejos a la derecha, no es parte del mensaje."""
+    """Une fragmentos de la misma línea (Windows separa el nombre coloreado del mensaje), pero solo si están cerca: el
+    texto del juego a la misma altura y lejos a la derecha no es parte del mensaje.
+    """
     merged: list[list[OcrRow]] = []
     rows = [part for row in rows for part in split_far_words(row)]
     for row in sorted(rows, key=lambda r: r.top + r.height / 2):
@@ -163,7 +167,8 @@ def merge_rows(rows: list[OcrRow]) -> list[OcrRow]:
         limit = _gap_limit(line)
         groups = [[line[0]]]
         for row in line[1:]:
-            reach = max(r.right if r.width else float("inf") for r in groups[-1])  # sin ancho: no se sabe
+            # sin ancho no se puede calcular el alcance
+            reach = max(r.right if r.width else float("inf") for r in groups[-1])
             if row.left - reach > limit:
                 groups.append([row])
             else:
@@ -185,9 +190,9 @@ def merge_rows(rows: list[OcrRow]) -> list[OcrRow]:
 def _use_system_cpp_runtime() -> None:
     """Carga la librería de C++ de Windows (msvcp140.dll) antes que winrt.
 
-    El paquete winrt trae su propia copia, vieja (14.29). Si se carga primero, todo el proceso usa esa, y otras
-    librerías compiladas con una versión más nueva se caen sin aviso: el reconocimiento de voz (Whisper) cerraba
-    Bubble al abrir. La del sistema es más nueva y sirve para las dos.
+    El paquete winrt incluye su propia copia, antigua (14.29). Si se carga primero, todo el proceso la usa y otras
+    librerías compiladas con una versión más nueva fallan sin aviso (el reconocimiento de voz con Whisper cerraba
+    Bubble al abrirse). La del sistema es más nueva y sirve para ambas.
     """
     import ctypes
     import os
@@ -195,7 +200,7 @@ def _use_system_cpp_runtime() -> None:
     try:
         ctypes.WinDLL(os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "msvcp140.dll"))
     except OSError:
-        pass  # sin la del sistema, queda la de winrt (el OCR anda igual)
+        pass  # sin la del sistema se usa la de winrt (el OCR funciona igual)
 
 
 class WindowsOcr:
@@ -209,8 +214,8 @@ class WindowsOcr:
         else:
             self._engine = OcrEngine.try_create_from_user_profile_languages()
         if self._engine is None:
-            # El idioma de tu Windows no tiene lector de texto: se usa otro que esté instalado (el chat de Roblox en
-            # letras latinas se lee igual con cualquiera de ellos). Antes Bubble no podía leer el chat.
+            # Si el idioma de Windows no tiene lector de texto, se usa otro instalado: el chat de Roblox en letras
+            # latinas se lee igual con cualquiera.
             available = [language.language_tag for language in OcrEngine.available_recognizer_languages]
             preferred = sorted(available, key=lambda tag: (not tag.startswith("en"), not tag.startswith("es"), tag))
             for tag in preferred:
@@ -221,8 +226,8 @@ class WindowsOcr:
             raise RuntimeError("Windows no tiene ningún idioma para leer texto: agregá uno en Configuración › Hora e "
                                "idioma › Idioma (con «Reconocimiento óptico de caracteres»).")
         self._max_dim = OcrEngine.max_image_dimension
-        # Un motor de OCR no admite dos lecturas al mismo tiempo ("Another RecognizeAsync operation is
-        # already running"): se hacen de a una. Para leer en paralelo, usar otra instancia.
+        # Un motor de OCR no admite dos lecturas simultáneas ("Another RecognizeAsync operation is already running"),
+        # por lo que se hacen de a una. Para leer en paralelo, usar otra instancia.
         self._lock = asyncio.Lock()
 
     @property
@@ -233,8 +238,8 @@ class WindowsOcr:
         from winrt.windows.graphics.imaging import BitmapPixelFormat, SoftwareBitmap
         from winrt.windows.storage.streams import DataWriter
 
-        # El chat de Roblox tiene letra chica: agrandarla mejora mucho la lectura.
-        # Para la pantalla completa (burbujas) no hace falta y sería más lento.
+        # El chat de Roblox tiene letra chica y agrandarla mejora mucho la lectura. En pantalla completa (burbujas) no
+        # hace falta y sería más lento.
         scale = 2 if upscale and max(image.size) * 2 <= self._max_dim else 1
         if scale > 1:
             image = image.resize((image.width * scale, image.height * scale), Image.Resampling.LANCZOS)

@@ -1,4 +1,4 @@
-"""Bubble 3.2: tu voz y las voces del juego salen más rápido, nombres y jerga, y arreglos (sin conectarse de verdad)."""
+"""Bubble 3.2: voz propia y voces del juego más rápidas, nombres y jerga, y correcciones (sin conexión real)."""
 
 import asyncio
 import threading
@@ -18,9 +18,10 @@ def test_the_first_sentence_is_said_while_the_rest_is_translated():
     sentences = Sentences(said.append)
     for chunk in ["Hey, wait ", "for me at the tower. ", "Ok. ", "I'm coming right now, ", "don't leave!"]:
         sentences.add(chunk)
-    assert said == ["Hey, wait for me at the tower."]  # la primera, apenas llegó entera
+    assert said == ["Hey, wait for me at the tower."]  # la primera, en cuanto llega completa
     sentences.finish("Hey, wait for me at the tower. Ok. I'm coming right now, don't leave!")
-    assert said == ["Hey, wait for me at the tower.", "Ok. I'm coming right now, don't leave!"]  # "Ok." no queda solo
+    # "Ok." no queda aislado
+    assert said == ["Hey, wait for me at the tower.", "Ok. I'm coming right now, don't leave!"]
 
 
 def test_a_corrected_translation_does_not_repeat_what_was_already_said():
@@ -29,7 +30,7 @@ def test_a_corrected_translation_does_not_repeat_what_was_already_said():
     said = []
     sentences = Sentences(said.append)
     sentences.add("Wait for me at the tower. And bring the sw")
-    sentences.finish("Wait for me at the castle. And bring the sword.")  # la versión final cambió lo ya dicho
+    sentences.finish("Wait for me at the castle. And bring the sword.")  # la versión final modifica lo ya dicho
     assert said == ["Wait for me at the tower.", "And bring the sw"]
 
 
@@ -51,7 +52,7 @@ def test_speaker_says_each_sentence_in_order(monkeypatch):
 
     def translate(text, intonation="", on_sentence=None):
         on_sentence("Wait for me at the tower.", "en")
-        time.sleep(0.2)  # Claude sigue traduciendo…
+        time.sleep(0.2)  # la traducción de Claude sigue en curso
         on_sentence("I'm coming right now.", "en")
         return "Wait for me at the tower. I'm coming right now.", "en"
 
@@ -62,7 +63,7 @@ def test_speaker_says_each_sentence_in_order(monkeypatch):
     speaker = VoiceSpeaker(Whisper(), Out(None, output=Output()), translate, 0, "es-AR", by_sentence=True)
     turn = speaker.speak(np.zeros(16000, np.float32))
     assert [text for text, _ in spoken] == ["Wait for me at the tower.", "I'm coming right now."]
-    assert spoken[1][1] - spoken[0][1] >= 0.15  # la primera sonó antes de que terminara la traducción
+    assert spoken[1][1] - spoken[0][1] >= 0.15  # la primera se oyó antes de terminar la traducción
     assert turn.translation.startswith("Wait") and not turn.error
 
 
@@ -96,15 +97,15 @@ def test_streamed_turn_knows_when_you_finished_and_has_the_text():
     listener = FakeListener()
     turn = StreamedTurn(listener, "es-AR")
     turn.start()
-    assert listener.started is False  # solo la conexión: el audio lo pasa el botón
+    assert listener.started is False  # solo la conexión: el audio lo envía el botón
     turn.begin()
     turn.feed(np.zeros(1600, np.float32))
     quiet_since = time.monotonic()
-    assert turn.said_since(quiet_since) is None  # la nube todavía no cerró la frase
+    assert turn.said_since(quiet_since) is None  # la nube aún no cerró la frase
     listener.on_caption(Caption(1, 0.0, 1.0, "che, hacemos pvp", "es", 0, final=True))
     assert turn.said_since(quiet_since) == "che, hacemos pvp"
     heard = turn.finish(1.5)
-    assert heard.text == "che, hacemos pvp" and heard.took < 0.1  # ya estaba: no se espera
+    assert heard.text == "che, hacemos pvp" and heard.took < 0.1  # ya estaba disponible: no se espera
     assert listener.finalized == 1
 
 
@@ -114,7 +115,7 @@ def test_streamed_turn_waits_for_the_last_words_when_you_release_early():
     listener = FakeListener()
     turn = StreamedTurn(listener, "en")
     turn.begin()
-    turn.feed(np.zeros(1600, np.float32))  # hablaste y soltaste el botón enseguida
+    turn.feed(np.zeros(1600, np.float32))  # habla y suelta el botón de inmediato
 
     def cloud_answers():
         time.sleep(0.2)
@@ -145,7 +146,7 @@ def test_a_finished_sentence_is_translated_before_the_pause():
     listener = DeepgramListener("clave", captions.append, source_factory=lambda: None)
     listener.handle({"type": "Results", "is_final": True, "start": 0, "duration": 1,
                      "channel": {"alternatives": [{"transcript": "Can you trade me?", "words": []}]}})
-    assert captions[-1].stable and not captions[-1].final  # termina con "?": se pide la traducción ya
+    assert captions[-1].stable and not captions[-1].final  # termina con "?": se pide la traducción de inmediato
 
 
 def test_push_to_talk_sends_everything_while_held():
@@ -157,7 +158,7 @@ def test_push_to_talk_sends_everything_while_held():
 
     listener = DeepgramListener("clave", lambda _c: None, source_factory=lambda: None, vad=Vad(), send_all=True)
     listener.feed(np.zeros(1600, np.float32))
-    assert listener._outbox.qsize() == 1  # también el silencio: así la nube nota enseguida que terminaste
+    assert listener._outbox.qsize() == 1  # también el silencio: así la nube detecta el final enseguida
 
 
 # ---------------------------------------------------------------- dos carriles sin mezclar
@@ -177,7 +178,7 @@ def test_racing_lanes_never_mix_two_translations():
             return "".join(self.chunks)
 
     engine = Translator.__new__(Translator)
-    engine.voice_router = Router(["Hola ", "che"], 0.0)  # el rápido empieza enseguida…
+    engine.voice_router = Router(["Hola ", "che"], 0.0)  # el modelo rápido empieza de inmediato
     engine.router = Router(["Buenas"], 0.0)
     got = []
     import bubble.translate.engine as module
@@ -188,7 +189,7 @@ def test_racing_lanes_never_mix_two_translations():
         result = asyncio.run(engine._hedged(object(), got.append))
     finally:
         module.HEDGE_AFTER_S = old
-    assert result == "Hola che" and got == ["Hola ", "che"]  # la voz sigue a uno solo
+    assert result == "Hola che" and got == ["Hola ", "che"]  # la voz sigue a un solo modelo
 
 
 # ---------------------------------------------------------------- nombres, siglas y jerga
@@ -197,7 +198,7 @@ def test_spelled_gaming_acronyms_are_joined():
 
     assert join_spelled("Hacemos p v p en Blox Fruits.") == "Hacemos pvp en Blox Fruits."
     assert join_spelled("estoy a f k, g g") == "estoy afk, gg"
-    assert join_spelled("fui y a la plaza") == "fui y a la plaza"  # "y a" son palabras: no se toca
+    assert join_spelled("fui y a la plaza") == "fui y a la plaza"  # "y a" son palabras: no se modifica
 
 
 def test_chat_names_are_recognized_as_they_are_said():
@@ -207,7 +208,7 @@ def test_chat_names_are_recognized_as_they_are_said():
     book = NameBook()
     for name in ("lucas_br", "xXShadowXx_2012", "lucas_br", "DarkNinja123"):
         book.canonical(name)
-    assert book.recent(2) == ["DarkNinja123", "lucas_br"]  # el que habló más recién, primero
+    assert book.recent(2) == ["DarkNinja123", "lucas_br"]  # el que habló más recientemente, primero
     names = spoken_names(book.recent())
     assert names[:2] == ["Dark Ninja", "DarkNinja123"] and "Shadow" in names and "lucas" in names
 
@@ -224,7 +225,8 @@ def test_your_language_is_never_shown_as_a_subtitle():
     from bubble.voice.captions import CaptionBoard
 
     board = CaptionBoard("es-AR", lambda *a, **k: None, is_native=lambda text, lang: "che" in text)
-    board.caption(Caption(1, 0, 1, "che vamos al lobby", "en", 1))  # el reconocimiento dijo inglés, pero es tuyo
+    # el reconocimiento detectó inglés, pero es del propio jugador
+    board.caption(Caption(1, 0, 1, "che vamos al lobby", "en", 1))
     assert not board.lines
     board.caption(Caption(2, 0, 1, "trade me your sword", "en", 1))
     assert [line.original for line in board.lines] == ["trade me your sword"]
@@ -240,7 +242,7 @@ def test_subtitle_card_is_fast():
     start = time.perf_counter()
     for _ in range(10):
         render_subtitles(lines)
-    assert (time.perf_counter() - start) / 10 < 0.035  # antes ~64 ms por cuadro (trababa a Bubble y al juego)
+    assert (time.perf_counter() - start) / 10 < 0.035  # ~64 ms por cuadro bloqueaba Bubble y el juego
 
 
 # ---------------------------------------------------------------- desinstalar: el micrófono virtual primero
@@ -261,4 +263,4 @@ def test_the_virtual_mic_is_removed_first_and_by_default(monkeypatch, tmp_path):
     parts = {part.key: part for part in uninstall.parts(tmp_path)}
     assert parts["cable"].selected and parts["cable"].available  # como si nunca hubiera estado
     uninstall.run({"cable", "modelos"}, tmp_path, after_exit=False)
-    assert order == [("cable", True)]  # antes de borrar las descargas (ahí está su desinstalador)
+    assert order == [("cable", True)]  # antes de borrar las descargas (contienen el desinstalador)

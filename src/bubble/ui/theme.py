@@ -8,7 +8,7 @@ import tkinter as tk
 
 log = logging.getLogger(__name__)
 
-MUTED = "#9aa0a6"  # textos secundarios (compatibilidad: las piezas nuevas usan widgets.palette())
+MUTED = "#9aa0a6"  # textos secundarios (se mantiene por compatibilidad; ver widgets.palette())
 BACKGROUND = "#1c1c1c"
 TEXT = "#e8eaed"
 _current = "oscuro"
@@ -19,7 +19,7 @@ def current() -> str:
 
 
 def apply_theme(root: tk.Tk, name: str = "oscuro") -> bool:
-    """Tema moderno ("oscuro" o "claro"). Si el tema no está instalado, queda el de siempre."""
+    """Aplica el tema moderno ("oscuro" o "claro"). Si no está instalado, se mantiene el tema predeterminado."""
     global _current
     _current = "claro" if name == "claro" else "oscuro"
     try:
@@ -34,25 +34,26 @@ def apply_theme(root: tk.Tk, name: str = "oscuro") -> bool:
 
 
 def title_bar(window: tk.Misc) -> None:
-    """Barra de título oscura o clara (Windows 10 20H1+ / 11), para que combine con la ventana."""
+    """Ajusta la barra de título al tema, oscura o clara (Windows 10 20H1+ / 11)."""
     try:
         window.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(window.winfo_id()) or window.winfo_id()
         value = ctypes.c_int(1 if _current == "oscuro" else 0)
-        for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (20; 19 en versiones viejas)
+        for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (20; 19 en versiones anteriores)
             if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)) == 0:
                 break
     except Exception:  # noqa: BLE001
         pass
 
 
-dark_title_bar = title_bar  # nombre viejo
+dark_title_bar = title_bar  # nombre anterior, por compatibilidad
 
-GOLD_HUE = 42 / 360  # el tono del dorado de Bubble Pro
-# Imagen del tema → (copia original, copia dorada). Se preparan una vez (en segundo plano, después de abrir) y cambiar
-# de plan es copiar píxeles: instantáneo. Antes se rearmaba cada imagen como PNG en cada cambio (~0,15 s trabado).
+GOLD_HUE = 42 / 360  # tono del dorado de Bubble Pro
+# Imagen del tema -> (copia original, copia dorada). Se preparan una sola vez, en segundo plano tras abrir la ventana,
+# de modo que cambiar de plan solo copia píxeles. Regenerar cada imagen como PNG en cada cambio bloqueaba la interfaz
+# unos 0,15 s.
 _pairs: dict[str, tuple[tk.PhotoImage, tk.PhotoImage]] = {}
-_checked: set[str] = set()  # imágenes ya revisadas (tengan azul o no)
+_checked: set[str] = set()  # imágenes ya revisadas (con azul o sin él)
 _state = {"root": None, "gold": False}
 
 
@@ -61,12 +62,12 @@ def _theme_images(root: tk.Misc) -> list[str]:
         names = [str(name) for name in root.tk.call("image", "names")]
     except tk.TclError:
         return []
-    # ni los íconos de Tk ni las imágenes de Bubble (ni las copias de acá): solo las del tema
+    # excluye los íconos de Tk, las imágenes de Bubble y sus copias; solo quedan las del tema
     return [name for name in names if not name.startswith(("::", "pyimage", "bubble_gold"))]
 
 
 def _golden(data: bytes) -> bytes | None:
-    """La misma imagen con los azules en dorado (PNG), o None si no tiene azul."""
+    """Devuelve la misma imagen (PNG) con los azules convertidos a dorado, o None si no contiene azul."""
     import io
 
     import numpy as np
@@ -119,7 +120,9 @@ def _prepare_one(root: tk.Misc, name: str) -> None:
 
 
 def prepare_gold(root: tk.Misc, budget_s: float | None = None) -> bool:
-    """Prepara el dorado de las imágenes que falten (todas, o las que entren en `budget_s`). True si terminó."""
+    """Prepara la versión dorada de las imágenes pendientes (todas, o las que entren en `budget_s`). Devuelve True si
+    terminó.
+    """
     import time
 
     _reset_if_new(root)
@@ -134,18 +137,19 @@ def prepare_gold(root: tk.Misc, budget_s: float | None = None) -> bool:
 
 
 def prepare_gold_soon(root: tk.Misc) -> None:
-    """De a poquito, sin trabar la ventana: ~8 ms cada 40 ms."""
+    """Procesa de a tandas cortas para no bloquear la ventana: ~8 ms cada 40 ms."""
     if not prepare_gold(root, budget_s=0.008):
         root.after(40, lambda: prepare_gold_soon(root))
 
 
 def tint_accent(root: tk.Misc, gold: bool) -> int:
-    """Con Bubble Pro, los botones destacados, interruptores, casillas y barras del tema pasan del azul al dorado; sin
-    Pro, vuelven al azul. El tema dibuja todo con imágenes (las de los dos temas se cargan juntas). Devuelve cuántas
-    imágenes cambió (0 si ya estaban así)."""
+    """Con Bubble Pro, los botones destacados, interruptores, casillas y barras del tema pasan de azul a dorado; sin
+    Pro, vuelven al azul. El tema dibuja todo con imágenes (las de ambos temas se cargan juntas). Devuelve la
+    cantidad de imágenes modificadas (0 si ya estaban en ese estado).
+    """
     _reset_if_new(root)
     if _state["gold"] == gold:
-        prepare_gold(root)  # (si faltaba alguna, queda como corresponde)
+        prepare_gold(root)  # completa las imágenes que falten
         return 0
     _state["gold"] = gold
     prepare_gold(root)
@@ -158,14 +162,14 @@ def tint_accent(root: tk.Misc, gold: bool) -> int:
 
 
 def strong_font() -> str | tuple:
-    """Letra destacada del tema (la misma familia y tamaño que el resto de la ventana)."""
+    """Fuente destacada del tema (misma familia y tamaño que el resto de la ventana)."""
     import tkinter.font
 
     return "SunValleyBodyStrongFont" if "SunValleyBodyStrongFont" in tkinter.font.names() else ("Segoe UI", 10, "bold")
 
 
 def scrolled_text(parent: tk.Misc, **options) -> tuple[tk.Frame, tk.Text]:
-    """Texto con barra de desplazamiento del tema (la de ScrolledText queda blanca en el tema oscuro)."""
+    """Texto con la barra de desplazamiento del tema (la de ScrolledText queda blanca en el tema oscuro)."""
     from tkinter import ttk
 
     frame = ttk.Frame(parent)

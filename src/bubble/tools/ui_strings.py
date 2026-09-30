@@ -1,10 +1,10 @@
-"""Los textos de la interfaz y sus traducciones (Bubble en el idioma de cada uno; ver i18n.py).
+"""Textos de la interfaz y sus traducciones (Bubble en el idioma de cada usuario; ver i18n.py).
 
     python -m bubble.tools.ui_strings                     # junta los textos → src/bubble/locales/_textos.json
     python -m bubble.tools.ui_strings --idiomas en,pt,fr  # y los traduce con Claude → src/bubble/locales/<idioma>.json
 
-Los textos se buscan en el código (los literales y los f-strings que ve la persona: con variables quedan como
-plantillas con {0}, {1}…). Al traducir se conserva lo ya traducido y se piden solo los textos nuevos.
+Los textos se extraen del código (literales y f-strings visibles para el jugador; los que llevan variables quedan como
+plantillas con {0}, {1}…). Al traducir se conserva lo ya traducido y solo se piden los textos nuevos.
 """
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ from pathlib import Path
 PACKAGE = Path(__file__).resolve().parent.parent
 LOCALES = PACKAGE / "locales"
 SOURCES = LOCALES / "_textos.json"
-# Dónde están los textos que ve la persona (la ventana, los avisos, la revisión de tu PC…).
+# Archivos que contienen los textos visibles para el jugador (ventana, avisos, revisión del equipo, etc.).
 FILES = [*sorted((PACKAGE / "ui").glob("*.py")), *(PACKAGE / name for name in (
     "system.py", "support.py", "install.py", "update.py", "uninstall.py", "pro.py", "win32.py", "cloud/errors.py",
     "voice/checks.py", "translate/base.py"))]
-SKIP_IN = {"rtl.py"}  # (sin textos para traducir)
+SKIP_IN = {"rtl.py"}  # sin textos para traducir
 _WORD = re.compile(r"[A-Za-zÁÉÍÓÚáéíóúñÑüÜ¿¡]{3,}")
 _TECHNICAL = ("$s.", "\r\n", "tasklist", "rmdir", "irm https", "install -e", "Content-Disposition", "\\Scripts\\")
 BATCH = 120
@@ -46,13 +46,13 @@ def _visible(text: str) -> bool:
     if not _WORD.search(text) or text.startswith(("http", "#", "<", "%", "bubble-", "-")) or any(
             mark in text for mark in _TECHNICAL):
         return False
-    if re.fullmatch(r"[\w.\-:/]+", text):  # identificadores, rutas, nombres de archivo…
-        return bool(re.fullmatch(r"[A-ZÁÉÍÓÚÑ][a-záéíóúñü]+", text))  # …pero sí los rótulos ("Voz", "Tamaño")
+    if re.fullmatch(r"[\w.\-:/]+", text):  # identificadores, rutas, nombres de archivo, etc.
+        return bool(re.fullmatch(r"[A-ZÁÉÍÓÚÑ][a-záéíóúñü]+", text))  # excepto los rótulos ("Voz", "Tamaño")
     return " " in text.strip() or text[:1].isupper() or any(c in text for c in "áéíóúñ¿¡…·→")
 
 
 def extract() -> list[str]:
-    """Todos los textos de la interfaz, en español (sin repetir, en orden)."""
+    """Todos los textos de la interfaz, en español, sin repetir y en orden de aparición."""
     found: dict[str, None] = {}
     for path in FILES:
         if path.name in SKIP_IN:
@@ -62,16 +62,16 @@ def extract() -> list[str]:
         for node in ast.walk(tree):
             if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)) and node.body \
                     and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant):
-                skip.add(id(node.body[0].value))  # documentación
+                skip.add(id(node.body[0].value))  # docstrings
             if isinstance(node, ast.JoinedStr):
                 skip |= {id(value) for value in node.values}
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in (
                     "debug", "info", "warning", "exception", "error") and isinstance(node.func.value, ast.Name) \
                     and node.func.value.id in ("log", "logging"):
-                skip |= {id(arg) for arg in node.args}  # lo que va al registro
+                skip |= {id(arg) for arg in node.args}  # argumentos de registro (log)
             if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id in (
                     "SAMPLES", "SAMPLE", "PHRASES") for target in node.targets):
-                skip |= {id(sub) for sub in ast.walk(node.value)}  # frases de prueba en cada idioma
+                skip |= {id(sub) for sub in ast.walk(node.value)}  # frases de prueba de cada idioma
         for node in ast.walk(tree):
             if id(node) in skip:
                 continue
@@ -86,7 +86,7 @@ def extract() -> list[str]:
     from ..translate.languages import DISPLAY_NAMES, LOCALE_CHOICES
 
     for name in [*DISPLAY_NAMES.values(), *(name for _code, name in LOCALE_CHOICES)]:
-        found[name] = None  # (los nombres de los idiomas, en las listas)
+        found[name] = None  # nombres de idiomas dentro de las listas
     return list(found)
 
 
@@ -124,7 +124,8 @@ def _ask(batch: list[str], language: str, timeout: float = 300) -> dict[str, str
 
 
 def _objects(reply: str) -> dict:
-    """Los objetos JSON de la respuesta, juntos (a veces Claude la parte en dos, o mete un salto de línea crudo)."""
+    """Reúne los objetos JSON de la respuesta (Claude a veces los divide en dos o incluye saltos de línea sin escapar).
+    """
     decoder, data, at = json.JSONDecoder(strict=False), {}, 0
     while (at := reply.find("{", at)) >= 0:
         try:
@@ -139,7 +140,7 @@ def _objects(reply: str) -> dict:
 
 
 def _same_slots(source: str, translation: str) -> bool:
-    """La traducción conserva las variables ({0}, {1}…) y no vino vacía."""
+    """Indica si la traducción conserva las variables ({0}, {1}…) y no está vacía."""
     slots = re.compile(r"(?<!\{)\{\d+\}(?!\})")
     return isinstance(translation, str) and bool(translation.strip()) and \
         sorted(slots.findall(source)) == sorted(slots.findall(translation))
@@ -147,14 +148,15 @@ def _same_slots(source: str, translation: str) -> bool:
 
 def translate(texts: list[str], language: str, known: dict[str, str] | None = None, workers: int = 3,
               progress=lambda _done, _total: None) -> dict[str, str]:
-    """Las traducciones de `texts` a `language` (nombre en inglés, ej. "Portuguese"). Pide solo las que faltan; si
-    Claude se saltea alguna, la vuelve a pedir (hasta dos veces más, en tandas más chicas)."""
+    """Traducciones de `texts` a `language` (nombre en inglés, p. ej. "Portuguese"). Solo pide las que faltan; si
+    Claude omite alguna, la solicita de nuevo (hasta dos veces más, en tandas menores).
+    """
     done = dict(known or {})
     for attempt in range(3):
         missing = [text for text in texts if text not in done]
         if not missing:
             break
-        size = BATCH if attempt == 0 else max(20, BATCH // 3)  # (lo que falló, en tandas más chicas)
+        size = BATCH if attempt == 0 else max(20, BATCH // 3)  # reintentos: tandas menores
         batches = [missing[i:i + size] for i in range(0, len(missing), size)]
         with ThreadPoolExecutor(max_workers=workers) as pool:
             for result in pool.map(lambda batch: _safe_ask(batch, language), batches):

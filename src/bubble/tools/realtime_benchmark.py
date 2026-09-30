@@ -1,8 +1,8 @@
 """Prueba en tiempo real de Bubble contra el simulador de Roblox, con distintas velocidades de chat.
 
-Para cada escenario abre el simulador y la app real (con traducciones de verdad por tu suscripción), registra
-cuándo aparece cada mensaje, cuándo Bubble lo detecta, cuándo termina la traducción y qué muestra en las
-burbujas, y al final arma un informe.
+Para cada escenario abre el simulador y la aplicación real (con traducciones reales, según la suscripción del usuario),
+registra cuándo aparece cada mensaje, cuándo lo detecta Bubble, cuándo termina la traducción y qué muestran las
+burbujas, y al final genera un informe.
 
 Uso:  python -m bubble.tools.realtime_benchmark [lento medio rapido rafagas]
 """
@@ -19,7 +19,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 SCENARIOS = ["lento", "medio", "rapido", "rafagas"]
-CHAT_REGION_REAL = (10, 64, 490, 236)  # la zona de mensajes del simulador (x, y, ancho, alto)
+CHAT_REGION_REAL = (10, 64, 490, 236)  # zona de mensajes del simulador (x, y, ancho, alto)
 
 
 def _out_dir() -> Path:
@@ -65,7 +65,7 @@ def run_app(log_path: Path, max_seconds: float, sends: bool = False, detect: boo
 
     log = log_path.open("w", encoding="utf-8")
     if detect:
-        # Sin chat calibrado: la app lo tiene que encontrar sola (en memoria: no se toca tu calibración real).
+        # Sin chat calibrado: la app debe encontrarlo por sí misma (en memoria, sin modificar la calibración real).
         memory: dict = {}
 
         def save_region(absolute, client):
@@ -111,7 +111,7 @@ def run_app(log_path: Path, max_seconds: float, sends: bool = False, detect: boo
 
     ChatTracker.update = logged_update
 
-    # Cuándo se prende y se apaga cada traducción en pantalla (para medir parpadeos).
+    # Momentos en que se muestra y se oculta cada traducción en pantalla (para medir parpadeos).
     from bubble.ui import inline
 
     shown_keys: set = set()
@@ -195,15 +195,16 @@ def run_app(log_path: Path, max_seconds: float, sends: bool = False, detect: boo
     config.roblox.display_mode = "inline"
     config.roblox.translate_bubbles = True
     config.roblox.read_chat = True
-    config.roblox.hotkey = "ctrl+alt+F12"  # que no choque con tu Bubble abierto
+    config.roblox.hotkey = "ctrl+alt+F12"  # evita conflictos con una instancia de Bubble abierta
     app = window_class(config)
     app.root.geometry("+1200+40")
     started = time.time()
     views = {"count": 0, "tick": 0}
 
     def save_player_view() -> None:
-        """Lo que ve el jugador: el juego con las traducciones encima. Las traducciones no salen en capturas de
-        pantalla (a propósito, para que el OCR no se lea a sí mismo), así que se dibujan sobre la captura."""
+        """Lo que ve el jugador: el juego con las traducciones encima. Las traducciones no aparecen en las capturas
+        de pantalla (a propósito, para que el OCR no se lea a sí mismo), por lo que se dibujan sobre la captura.
+        """
         from bubble.capture.screen import grab
 
         hwnd = find()
@@ -225,7 +226,7 @@ def run_app(log_path: Path, max_seconds: float, sends: bool = False, detect: boo
     plan = list(SENDS) if sends else []
 
     def do_send() -> None:
-        """Como un jugador: abre la barra con el atajo, escribe y aprieta Enter."""
+        """Simula a un jugador: abre la barra con el atajo, escribe y presiona Enter."""
         if not plan or not app.ready:
             return
         text, wait_preview = plan.pop(0)
@@ -234,10 +235,10 @@ def run_app(log_path: Path, max_seconds: float, sends: bool = False, detect: boo
         app.compose.entry.delete(0, "end")
         app.compose.entry.insert(0, text)
         if wait_preview:
-            app.compose._schedule_preview()  # como si hubiera escrito: la vista previa se pide sola
+            app.compose._schedule_preview()  # equivale a escribir: la vista previa se solicita sola
             app.root.after(3500, app.compose._submit)
         else:
-            app.root.after(400, app.compose._submit)  # Enter enseguida: traduce y después manda
+            app.root.after(400, app.compose._submit)  # Enter inmediato: traduce y luego envía
 
     def watchdog():
         views["tick"] += 1
@@ -253,7 +254,7 @@ def run_app(log_path: Path, max_seconds: float, sends: bool = False, detect: boo
             fake["seen"] = True
             w.force_foreground(hwnd)
         elif hwnd:
-            # Bubble solo lee con "Roblox" al frente: si usás otra ventana durante la prueba, se anota.
+            # Bubble solo lee con "Roblox" al frente: si se usa otra ventana durante la prueba, queda registrado.
             focused = bool(user32.GetForegroundWindow() == hwnd)
             if focused != fake.get("focused"):
                 fake["focused"] = focused
@@ -354,7 +355,7 @@ def analyze(sim_log: Path, app_log: Path, my_lang: str = "es") -> dict:
         elif message["lang"] != my_lang and message["kind"] == "player" and final:
             if final["status"] not in ("universal", "local"):
                 foreign_not_translated.append(f'{message["text"]} [{final["status"]}]')
-    # Detecciones repetidas del mismo mensaje (sin contar el spam, que repite a propósito).
+    # Detecciones repetidas del mismo mensaje (sin contar el spam, que se repite a propósito).
     for message in players:
         if message["kind"] == "spam":
             continue
@@ -362,13 +363,13 @@ def analyze(sim_log: Path, app_log: Path, my_lang: str = "es") -> dict:
                     and _key(d["speaker"])[:4] == _key(message["speaker"])[:4])
         same_text_sent = sum(1 for m in players if _similar(m["text"], message["text"]) and m["speaker"] == message["speaker"])
         duplicates += max(0, count - same_text_sent)
-    initial = [e for e in sim if e["event"] == "initial"]  # ya estaban en el chat al entrar
+    initial = [e for e in sim if e["event"] == "initial"]  # ya estaban en el chat al iniciar
     garbage = [d for i, d in enumerate(detected) if i not in matched_detections
                and not any(_similar(d["text"], m["text"]) for m in messages + initial)]
     system_as_player = [d for d in detected if any(_similar(d["text"], m["text"]) for m in messages if m["kind"] == "system")]
 
-    # Burbujas: lo que se lee tiene que ser una burbuja que se ve en ese momento, y la traducción mostrada no
-    # puede ser la de otro mensaje (la traducción vieja que quedaba cuando el jugador escribía de nuevo).
+    # Burbujas: el texto leído debe corresponder a una burbuja visible en ese momento, y la traducción mostrada no puede
+    # pertenecer a otro mensaje (p. ej. la traducción anterior que persistía cuando el jugador volvía a escribir).
     translations: dict[str, set[str]] = {}
     for f in finals:
         translations.setdefault(_key(f["text"]), set()).add(_key(f["translation"]))
@@ -386,7 +387,7 @@ def analyze(sim_log: Path, app_log: Path, my_lang: str = "es") -> dict:
         if shown_key not in own and shown_key in others:
             stale.append(f'{shown["ocr_text"]} -> {shown["translation"]} (traducción de otro mensaje)')
 
-    # Parpadeos: una traducción que se apaga y se vuelve a prender enseguida (el mensaje seguía ahí).
+    # Parpadeos: una traducción que se oculta y se vuelve a mostrar enseguida (el mensaje seguía presente).
     flickers = {"chat": 0, "bubble": 0}
     off_at: dict[str, float] = {}
     for event in (e for e in app if e["event"] == "patch"):
@@ -396,7 +397,7 @@ def analyze(sim_log: Path, app_log: Path, my_lang: str = "es") -> dict:
             flickers[event["kind"]] += 1
 
     # Reacomodo: cuánto tardan las traducciones en moverse con el chat cuando llega un mensaje (mientras tanto quedan
-    # corridas una línea). Se mueven con el desplazamiento instantáneo ("shift") o, si no, con la lectura siguiente.
+    # desfasadas una línea). Se mueven con el desplazamiento instantáneo ("shift") o, si no, con la lectura siguiente.
     shifts = [e["t"] for e in app if e["event"] == "shift"]
     renders = [e["t"] for e in app if e["event"] == "render"]
     realign, by_shift = [], 0
@@ -408,7 +409,7 @@ def analyze(sim_log: Path, app_log: Path, my_lang: str = "es") -> dict:
             realign.append(min(options) - message["t"])
             by_shift += after_shift is not None and min(options) == after_shift
 
-    # Envío con la barra: ¿llegó cada mensaje traducido al chat, sin tocar ninguna otra tecla del juego?
+    # Envío con la barra: verifica que cada mensaje llegue traducido al chat, sin pulsar ninguna otra tecla del juego.
     bars = [e for e in app if e["event"] == "barra"]
     sending = [e for e in app if e["event"] == "enviando"]
     arrived = [e for e in sim if e["event"] == "enviado"]
@@ -515,8 +516,8 @@ def run(scenarios: list[str]) -> None:
     for name in scenarios:
         stamp = time.strftime("%H%M%S")
         sim_log, app_log = _out_dir() / f"{name}_{stamp}_sim.jsonl", _out_dir() / f"{name}_{stamp}_app.jsonl"
-        # "envio": el chat lento y además se escriben mensajes con la barra (atajo → escribir → Enter).
-        # "detectar": el chat medio, sin calibrar: la app lo tiene que encontrar sola.
+        # "envio": chat lento, además de mensajes escritos con la barra (atajo → escribir → Enter). "detectar": chat
+        # medio, sin calibrar: la app debe encontrarlo por sí misma.
         extra = [name] if name in ("envio", "detectar") else []
         app = subprocess.Popen([python, "-m", "bubble.tools.realtime_benchmark", "--app", str(app_log), "240", *extra])
         for _ in range(120):  # esperar a que Bubble esté listo (sesiones de Claude abiertas)

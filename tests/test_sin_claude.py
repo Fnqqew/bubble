@@ -1,5 +1,6 @@
-"""Sin Claude: Bubble Pro traduce con el agente de Deepgram (con un Deepgram de mentira: nunca gasta crédito), se
-detecta quién no tiene Claude y la ventana «Para traducir, Bubble necesita Claude» guía los dos caminos."""
+"""Sin Claude: Bubble Pro traduce con el agente de Deepgram (con un Deepgram simulado, que nunca consume crédito), se
+detecta si el usuario no tiene Claude y la ventana «Para traducir, Bubble necesita Claude» guía ambos caminos.
+"""
 
 import asyncio
 import json
@@ -19,13 +20,14 @@ from bubble.translate.router import SENT
 
 # ---------------------------------------------------------------- un agente de Deepgram de mentira
 class FakeAgent:
-    """Como el de Deepgram: Settings → SettingsApplied; cada pedido → la respuesta, la voz (bytes) y AgentAudioDone.
-    Si le mandan un pedido mientras «habla», corta (como el de verdad)."""
+    """Simula al agente de Deepgram: Settings → SettingsApplied; cada pedido → la respuesta, la voz (bytes) y
+    AgentAudioDone. Si recibe un pedido mientras «habla», corta la conexión, igual que el real.
+    """
 
     def __init__(self, replies=None, error=None, drop_after=None):
         self.replies = replies or (lambda content: "<t1>hola</t1>")
-        self.error = error  # un Error en vez de responder
-        self.drop_after = drop_after  # se corta después de tantos pedidos
+        self.error = error  # devuelve un Error en vez de responder
+        self.drop_after = drop_after  # se corta tras esa cantidad de pedidos
         self.inbox: asyncio.Queue = asyncio.Queue()
         self.sent: list[dict] = []
         self.speaking = False
@@ -40,7 +42,7 @@ class FakeAgent:
             await self.inbox.put(json.dumps({"type": "SettingsApplied"}))
         elif kind == "InjectUserMessage":
             if self.speaking:
-                await self.inbox.put(None)  # corta la conexión
+                await self.inbox.put(None)  # cierra la conexión
                 return
             self.asked += 1
             if self.drop_after is not None and self.asked > self.drop_after:
@@ -53,7 +55,7 @@ class FakeAgent:
             await self.inbox.put(json.dumps({"type": "ConversationText", "role": "user", "content": data["content"]}))
             await self.inbox.put(json.dumps({"type": "ConversationText", "role": "assistant",
                                              "content": self.replies(data["content"])}))
-            await self.inbox.put(b"\x00" * 3200)  # la voz del agente (se ignora)
+            await self.inbox.put(b"\x00" * 3200)  # voz del agente (se ignora)
             asyncio.get_running_loop().call_later(0.05, self._done_speaking)
 
     def _done_speaking(self):
@@ -110,7 +112,7 @@ async def test_translates_through_the_agent_with_the_same_format():
 async def test_waits_for_the_agent_to_finish_speaking_before_the_next_message():
     provider, made, _ = provider_with([FakeAgent()])
     await ask(provider, "uno")
-    await ask(provider, "dos")  # si se lo mandara mientras «habla», el agente cortaría
+    await ask(provider, "dos")  # enviado mientras «habla», el agente cortaría
     assert len(made) == 1 and made[0].asked == 2
     await provider.close()
 
@@ -119,11 +121,11 @@ async def test_opens_only_when_needed_and_closes_when_the_chat_is_quiet():
     provider, made, counted = provider_with([FakeAgent()], idle_close_s=0.2)
     await provider.start()
     await provider.warm_up()
-    assert made == []  # abrir la conexión se cobra: recién con la primera traducción
+    assert made == []  # la conexión se cobra recién con la primera traducción
     await ask(provider, "uno")
     await asyncio.sleep(0.4)
     assert made[0].closed and provider._conn is None
-    assert len(counted) == 1 and 0 < counted[0] < 2  # se cobra el rato que estuvo abierta
+    assert len(counted) == 1 and 0 < counted[0] < 2  # se cobra el tiempo que estuvo abierta
 
 
 async def test_if_the_connection_drops_it_reconnects_and_asks_again():
@@ -153,7 +155,7 @@ async def test_starts_a_fresh_conversation_every_so_often(monkeypatch):
     provider, made, _ = provider_with([FakeAgent(), FakeAgent()])
     for text in ("uno", "dos", "tres"):
         await ask(provider, text)
-    assert len(made) == 2  # (el agente arrastra toda la conversación: después de tanto, una nueva)
+    assert len(made) == 2  # el agente acumula toda la conversación: pasado el límite, se abre otra
     await provider.close()
 
 
@@ -163,8 +165,9 @@ def test_without_claude_the_translator_uses_the_agent():
 
     translator = build_translator(Config(), cloud_key="clave")
     lanes = [*translator.router.providers, *translator.voice_router.providers]
-    assert [type(p).__name__ for p in lanes] == ["DeepgramAgentProvider"] * 2  # chat y voz, cada uno por su lado
-    assert translator.hedge is False  # la voz nunca abre dos conexiones para lo mismo
+    # chat y voz usan proveedores independientes
+    assert [type(p).__name__ for p in lanes] == ["DeepgramAgentProvider"] * 2
+    assert translator.hedge is False  # la voz nunca abre dos conexiones para la misma traducción
     assert build_translator(Config()).router.providers[0].name == "claude"
 
 
@@ -175,7 +178,7 @@ def test_without_claude_the_translator_uses_the_agent():
     (system.Claude(installed=True, logged_in=True, plan="free", auth="claude.ai"), "gratis"),
     (system.Claude(installed=True, logged_in=True, auth="console"), "por_uso"),
     (system.Claude(installed=True, logged_in=True, plan="max", auth="claude.ai"), ""),
-    (system.Claude(installed=True), ""),  # (un Claude Code viejo que no dice nada: no se asume nada)
+    (system.Claude(installed=True), ""),  # Claude Code antiguo que no informa nada: no se asume nada
 ])
 def test_knows_what_is_missing_to_translate_with_claude(claude, problem):
     assert system.claude_problem(claude) == problem
@@ -234,7 +237,7 @@ def window(monkeypatch):
     from bubble.ui import widgets
     from bubble.ui.no_claude_window import NoClaudeWindow
 
-    monkeypatch.setattr(widgets, "present", lambda window, root: None)  # escondida: nunca te saca el foco
+    monkeypatch.setattr(widgets, "present", lambda window, root: None)  # oculta: nunca le quita el foco al jugador
     root = tk.Tk()
     root.withdraw()
     app = FakeApp(root)
@@ -303,7 +306,7 @@ def test_logging_in_to_claude_then_checking_reconnects(window, monkeypatch):
                                                                        auth="claude.ai"))
     dialog, app = window("sin_sesion")
     dialog.login.invoke()
-    assert logins and str(dialog.login.cget("text")) == "Listo, revisar"
+    assert logins and str(dialog.login.cget("text")) == "Revisar ahora"
     dialog.login.invoke()
     pump(app, dialog, lambda: app.calls)
     assert app.calls == ["claude"]

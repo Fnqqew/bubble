@@ -21,7 +21,7 @@ def test_repetitions_from_the_short_window_are_cut():
     assert cut_repetitions("Bro you just stole my kill. Bro, you just stole my kill that") == "Bro you just stole my kill."
     assert cut_repetitions("with the map you can find it for it for it for it for it") == "with the map you can find it for it"
     assert cut_repetitions("Galera, alguém quer trocar pets comigo? Galera") == "Galera, alguém quer trocar pets comigo?"
-    assert cut_repetitions("no no no wait for me") == "no no no wait for me"  # repetir a propósito está bien
+    assert cut_repetitions("no no no wait for me") == "no no no wait for me"  # repetir a propósito es válido
 
 
 def test_models_follow_the_processor():
@@ -44,7 +44,7 @@ def test_fbank_has_80_bands_every_10_ms():
 
 # ---------------------------------------------------------------- escucha en vivo (sin modelos de verdad)
 class ScriptedVad:
-    """Detector de voz de mentira: la probabilidad sale de una función del tiempo."""
+    """Detector de voz simulado: la probabilidad es una función del tiempo."""
 
     def __init__(self, speaking):
         self.speaking = speaking
@@ -78,20 +78,20 @@ def run_listener(seconds, speaking, settings=None, partial=True):
     stream = np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
     for start in range(0, len(stream), FRAME * 3):
         listener.feed(stream[start:start + FRAME * 3])
-        while (job := listener._next_job()) is not None:  # el trabajo del hilo de texto, en el acto
+        while (job := listener._next_job()) is not None:  # ejecuta de inmediato el trabajo del hilo de texto
             job()
     return captions, final, quick
 
 
 def test_a_phrase_shows_text_while_speaking_and_then_the_final():
     captions, final, quick = run_listener(4.0, lambda t: 0.5 <= t < 2.5)
-    assert any(not c.final for c in captions)  # texto mientras habla
+    assert any(not c.final for c in captions)  # hay texto mientras se habla
     finals = [c for c in captions if c.final]
     assert len(finals) == 1 and finals[0].text == "anyone wanna trade?"
-    assert 1.8 <= finals[0].end - finals[0].start <= 2.6  # la frase, con un poco de antes y sin el silencio
+    assert 1.8 <= finals[0].end - finals[0].start <= 2.6  # la frase, con algo de margen previo y sin el silencio
     stable = [c for c in captions if c.stable]
     assert stable and captions.index(stable[0]) < captions.index(finals[0])  # se puede traducir antes del final
-    assert final.calls == []  # en inglés alcanza la última lectura rápida: no hace falta el modelo preciso
+    assert final.calls == []  # en inglés basta la última lectura rápida; no hace falta el modelo preciso
 
 
 def test_two_phrases_with_a_pause_are_separate():
@@ -119,9 +119,9 @@ def test_translation_starts_early_and_is_not_repeated():
     board = CaptionBoard("es-AR", lambda text, lang, voice, piece, done, _how="": asked.append((text, piece, done)))
     board.caption(Caption(1, 0.0, 1.0, "hey guys does anyone", "en", 1))
     board.caption(Caption(1, 0.0, 2.0, "Hey guys, does anyone know?", "en", 1, stable=True))
-    assert [a[0] for a in asked] == ["Hey guys, does anyone know?"]  # ya se pidió en la pausa
+    assert [a[0] for a in asked] == ["Hey guys, does anyone know?"]  # ya se solicitó durante la pausa
     board.caption(Caption(1, 0.0, 2.0, "Hey guys does anyone know", "en", 1, final=True))
-    assert len(asked) == 1  # el final dice lo mismo: se usa la traducción que ya viene
+    assert len(asked) == 1  # el final coincide: se usa la traducción ya obtenida
     asked[0][1]("Che, ¿alguien ")
     asked[0][2]("Che, ¿alguien sabe?")
     line = board.visible()[0]
@@ -134,7 +134,7 @@ def test_final_text_that_changed_is_translated_again():
     board.caption(Caption(1, 0.0, 1.0, "wake where is it", "en", 2, stable=True))
     board.caption(Caption(1, 0.0, 1.0, "Wait, where is the left side?", "en", 2, final=True))
     assert [a[0] for a in asked] == ["wake where is it", "Wait, where is the left side?"]
-    asked[0][2]("despertá")  # llega tarde la traducción vieja: no pisa a la nueva
+    asked[0][2]("despertá")  # una traducción antigua que llega tarde no reemplaza a la nueva
     asked[1][2]("Pará, ¿dónde queda el lado izquierdo?")
     assert board.visible()[0].translation == "Pará, ¿dónde queda el lado izquierdo?"
 
@@ -182,8 +182,9 @@ def test_speaker_says_the_translation_and_you_hear_it_too(monkeypatch):
                            on_event=lambda kind, text: events.append((kind, text)))
     speaker.speak(np.zeros(SAMPLE_RATE * 2, dtype=np.float32))
     assert [kind for kind, _ in events] == ["entendi", "traduccion"]
-    time.sleep(0.2)  # tu copia suena en otro hilo
-    assert sorted(played) == [(False, 22050), (True, 22050)]  # a Roblox (micrófono virtual) y a tus auriculares
+    time.sleep(0.2)  # la copia para el jugador suena en otro hilo
+    # a Roblox (micrófono virtual) y a los auriculares del jugador
+    assert sorted(played) == [(False, 22050), (True, 22050)]
 
 
 def test_hearing_yourself_can_be_turned_off(monkeypatch):
@@ -213,9 +214,9 @@ def test_direct_voice_translates_each_phrase_early_and_in_order(monkeypatch):
     direct._caption(Caption(2, 2.0, 3.0, "ya voy", "es", 0, final=True))
     time.sleep(0.4)
     direct.stop()
-    assert asked == ["dale, esperame en la torre", "ya voy"]  # la primera se pidió en la pausa, una sola vez
+    assert asked == ["dale, esperame en la torre", "ya voy"]  # la primera se solicitó en la pausa, una sola vez
     assert [text for kind, text in events if kind == "traduccion"] == ["EN: dale, esperame en la torre", "EN: ya voy"]
-    assert direct.listener.language == "es"  # tu idioma ya se sabe: no se detecta
+    assert direct.listener.language == "es"  # el idioma del jugador ya se conoce: no se detecta
 
 
 # ---------------------------------------------------------------- micrófono virtual (como Soundpad)
@@ -260,13 +261,13 @@ def test_bridge_passes_your_voice_and_lowers_it_while_the_translation_plays(monk
         if len(player.blocks) >= 3:
             break
         time.sleep(0.03)
-    assert player.blocks and max(player.blocks[-3:]) == 0.5  # tu voz pasa tal cual
+    assert player.blocks and max(player.blocks[-3:]) == 0.5  # la voz del jugador pasa sin modificación
     loop.duck(0.3)
     time.sleep(0.1)
-    assert abs(player.blocks[-1] - 0.1) < 1e-6  # mientras suena la traducida, baja
+    assert abs(player.blocks[-1] - 0.1) < 1e-6  # mientras suena la traducida, el volumen baja
     loop.enabled = False
     time.sleep(0.1)
-    assert player.blocks[-1] == 0.0  # "pasar mi voz real" apagado: solo la traducida
+    assert player.blocks[-1] == 0.0  # con "pasar mi voz real" desactivado: solo la traducida
     loop.stop()
 
 
@@ -279,8 +280,9 @@ def test_bridge_does_not_start_without_a_virtual_microphone(monkeypatch):
 
 
 def test_every_language_gets_both_genders(monkeypatch):
-    """Mujer y hombre en cada idioma: la de Piper; si Piper no tiene ese género, una de Windows; si tampoco, la del
-    otro género convertida (prosody.change_gender)."""
+    """Voz femenina y masculina para cada idioma: la de Piper; si Piper no tiene ese género, una de Windows; si
+    tampoco, la del otro género convertida (prosody.change_gender).
+    """
     from types import SimpleNamespace
 
     from bubble.voice import tts
@@ -300,11 +302,11 @@ def test_every_language_gets_both_genders(monkeypatch):
     voices._windows = Windows([])
     assert voices.voice_for("en", "masculina") == "en_US-ryan-medium"
     assert voices.voice_for("es-AR", "femenina") == "es_AR-daniela-high"
-    assert voices.voice_for("pt", "femenina") == "pt_BR-faber-medium~femenina"  # hecha a partir de la masculina
+    assert voices.voice_for("pt", "femenina") == "pt_BR-faber-medium~femenina"  # generada a partir de la masculina
     assert voices.voice_for("ko", "masculina") == "ko_KR-kss-medium~masculina"
-    assert voices.voice_for("tl", "femenina") == "id_ID-news_tts-medium"  # el tagalo, con la voz indonesia
+    assert voices.voice_for("tl", "femenina") == "id_ID-news_tts-medium"  # el tagalo usa la voz indonesia
     voices._windows = Windows([SimpleNamespace(name="Microsoft Maria", language="pt-BR", gender="femenina")])
-    assert voices.voice_for("pt", "femenina") == "windows:Microsoft Maria"  # una de verdad, si Windows la tiene
+    assert voices.voice_for("pt", "femenina") == "windows:Microsoft Maria"  # una voz real, si Windows la tiene
     assert voices.voice_for("pt", "masculina") == "pt_BR-faber-medium"
     monkeypatch.setattr(tts, "_has_modules", lambda family: family not in ("ja", "th"))
     assert voices.voice_for("ja") is None and voices.voice_for("th") is None  # (sin sus paquetes ni voz de Windows)
@@ -315,17 +317,17 @@ def test_the_other_gender_sounds_like_one():
 
     rate = 22050
     t = np.arange(int(rate * 1.2)) / rate
-    pitch = 220 * (1 + 0.03 * np.sin(2 * np.pi * 3 * t))  # una "voz" de mujer, con algo de melodía
+    pitch = 220 * (1 + 0.03 * np.sin(2 * np.pi * 3 * t))  # una "voz" femenina, con algo de melodía
     phase = 2 * np.pi * np.cumsum(pitch) / rate
     woman = (0.3 * sum(np.sin(k * phase) / k for k in range(1, 12))).astype(np.float32)
     man = prosody.change_gender(woman, rate, "masculina")
     assert len(man) == len(woman)  # misma duración
-    assert 100 < prosody.median_pitch(man, rate) < 130  # tono de hombre
+    assert 100 < prosody.median_pitch(man, rate) < 130  # tono masculino
 
 
 # ---------------------------------------------------------------- el botón para hablar: tocar o mantener
 class _RealTimeMic:
-    """Micrófono falso al ritmo real (silencio: lo que importa es cuándo termina de grabar)."""
+    """Micrófono simulado a ritmo real (silencio: lo relevante es cuándo termina la grabación)."""
 
     def recorder(self, **_options):
         return self
@@ -344,7 +346,7 @@ class _RealTimeMic:
 
 
 class _ScriptedVad:
-    """Hay voz hasta `speech_until` segundos después de crearlo."""
+    """Hay voz hasta `speech_until` segundos después de su creación."""
 
     def __init__(self, speech_until: float) -> None:
         import time as _time
@@ -375,8 +377,8 @@ def test_tap_listens_until_you_stop_talking():
     started = _time.monotonic()
     audio, early = _speaker(held_for=0.1, speech_s=1.0)._record()
     took = _time.monotonic() - started
-    assert audio is not None and early is not None  # lo dicho ya se leyó en la pausa: no hay que leerlo de nuevo
-    # 1 s hablando + la pausa: como lo último suena terminado ("dale, vamos."), no se espera todo el silencio
+    assert audio is not None and early is not None  # lo dicho ya se leyó en la pausa: no hace falta leerlo de nuevo
+    # 1 s de habla más la pausa: como lo último suena terminado ("dale, vamos."), no se espera todo el silencio
     assert 1.1 <= took <= 1.9
 
 
@@ -411,14 +413,16 @@ def test_only_the_latest_synthetic_voices_stay_loaded(monkeypatch):
     voices = tts.Voices(use_process=False)  # (sin el proceso aparte: se cargan en este)
     catalog = {n: {"files": {f"{n}.onnx": {}, f"{n}.onnx.json": {}}} for n in "abcd"}
     monkeypatch.setattr(voices, "catalog", lambda: catalog)
-    for name in "abca":  # "a" se vuelve a usar: pasa a ser la más reciente
+    for name in "abca":  # "a" se reutiliza: pasa a ser la más reciente
         voices._load_here(name)
     voices._load_here("d")
-    assert list(voices._loaded) == ["c", "a", "d"]  # "b", la menos usada hace más tiempo, se liberó
+    assert list(voices._loaded) == ["c", "a", "d"]  # "b", la que hace más tiempo no se usa, se liberó
 
 
 def test_piper_voices_load_in_another_process_without_freezing(monkeypatch):
-    """Cargar una voz congelaba la ventana ~2 s (onnxruntime no suelta el candado de Python): va en otro proceso."""
+    """Cargar una voz bloqueaba la ventana ~2 s (onnxruntime no libera el bloqueo global de Python): se hace en otro
+    proceso.
+    """
     import threading
     import time
 
@@ -443,7 +447,7 @@ def test_piper_voices_load_in_another_process_without_freezing(monkeypatch):
         worst[0], last = max(worst[0], now - last), now
     try:
         assert speech[0] is not None and len(speech[0].audio) > speech[0].sample_rate * 0.5
-        assert worst[0] < 0.3  # antes: 1,6 a 1,9 s sin responder
+        assert worst[0] < 0.3  # sin la mejora tardaba 1,6 a 1,9 s en responder
         assert voices._process is not None and not voices._process.failed
     finally:
         if voices._process is not None:
@@ -451,8 +455,9 @@ def test_piper_voices_load_in_another_process_without_freezing(monkeypatch):
 
 
 def test_a_pause_in_the_middle_of_your_sentence_does_not_cut_it():
-    """Tu voz (modo directo): hablás, pausa de 0,8 s y seguís. Si lo último sonó a medias ("…y"), es una sola frase;
-    si sonó terminado, son dos (y la primera sale enseguida)."""
+    """Voz del jugador (modo directo): habla, pausa de 0,8 s y continúa. Si lo último sonó incompleto ("…y"), es una
+    sola frase; si sonó terminado, son dos (y la primera sale enseguida).
+    """
 
     def finals(text):
         captions = []

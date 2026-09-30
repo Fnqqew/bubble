@@ -22,7 +22,7 @@ def test_tutorial_steps_use_hotkey_and_actions():
     for s in actions:
         s.action()
     assert calls == ["calibrar"]
-    # Nombra lo que existe en la ventana nueva (no botones viejos).
+    # Nombra solo los elementos que existen en la ventana actual.
     text = " ".join(s.title + s.body for s in steps)
     assert "Probar captura" not in text and "Tono al enviar" not in text and "Ctrl+Enter" in text
 

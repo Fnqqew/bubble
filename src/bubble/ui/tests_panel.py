@@ -1,15 +1,17 @@
-"""La página «Pruebas»: probar todo sin jugar, ver cuánto tarda cada paso y enseñarle a Bubble cómo hablás.
+"""La página «Pruebas» permite probar todo sin jugar, medir cuánto tarda cada paso y enseñarle a Bubble cómo habla el
+jugador.
 
-- Tu micrófono: leés una frase y te dice si va a andar bien, normal o mal para traducir (y qué cambiar).
-- Tu voz traducida: hablás y ves qué entendió, cómo lo dijiste (pregunta, grito…), cómo lo tradujo y cuánto tardó cada
-  paso. Si algo salió mal, lo corregís y lo guardás: Bubble aprende tus palabras y cómo querés sonar.
-- Chat a voz: escribís como en la barra del juego y escuchás cómo lo dice.
-- Lo que te dicen: una voz sintética dice una frase en inglés, como si fuera otro jugador, y ves el subtítulo.
-- Tu equipo: lo que Bubble detectó de tu PC (memoria, micrófonos, tu cuenta de Claude, internet) y qué revisar.
-- Cuánto tarda en tu PC: cómo va a andar Bubble en esta computadora.
-- Lo que aprendió: cuánto sabe de tu voz, y un botón para borrarlo.
+- Micrófono: el jugador lee una frase y se le indica si la calidad es buena, normal o mala para traducir, y qué conviene
+  cambiar.
+- Voz traducida: el jugador habla y ve qué se entendió, cómo lo dijo (pregunta, grito, etc.), cómo se tradujo y cuánto
+  tardó cada paso. Si hay un error, puede corregirlo y guardarlo: Bubble aprende sus palabras y su forma de hablar.
+- Chat a voz: se escribe como en la barra del juego y se escucha cómo se lee.
+- Lo que te dicen: una voz sintética dice una frase en inglés, como si fuera otro jugador, y se muestra el subtítulo.
+- Equipo: lo que Bubble detectó de la PC (memoria, micrófonos, cuenta de Claude, internet) y qué conviene revisar.
+- Rendimiento: cómo funcionará Bubble en esta computadora.
+- Lo aprendido: cuánto sabe Bubble de la voz del jugador, con un botón para borrarlo.
 
-Todo suena solo en tus auriculares: nada le llega a Roblox.
+Todo suena solo en los auriculares: nada llega a Roblox.
 """
 
 from __future__ import annotations
@@ -49,10 +51,10 @@ class TestsPanel:
         self.voice = app.voice_panel
         self._busy = False
         self._buttons: list[ttk.Button] = []
-        self._last_speech = None  # la última voz traducida (para volver a escucharla)
+        self._last_speech = None  # última voz traducida (para poder reescucharla)
         self._mine_target = ""
         self._chat_target = ""
-        self.equipment = None  # «Tu equipo» (se arma con la página)
+        self.equipment = None  # página «Tu equipo» (se asigna al armarla)
 
     # ------------------------------------------------------------ armado
     def build_page(self, page) -> None:
@@ -62,7 +64,7 @@ class TestsPanel:
         my_language = self.app.config.user.language
 
         box = widgets.card(page, "Tu micrófono", "Leé la frase en voz alta, como cuando jugás, y te digo si tu "
-                                                 "micrófono anda bien.")
+                                                 "micrófono funciona bien.")
         ttk.Label(box, text=f"«{sentence_for(my_language)}»", font="SunValleyBodyStrongFont", wraplength=440,
                   justify="left").pack(anchor="w")
         row = ttk.Frame(box)
@@ -88,8 +90,8 @@ class TestsPanel:
         row.pack(fill="x", pady=(6, 0))
         self._button(row, "▶ Escuchar", self._play_last).pack(side="left")
         self._button(row, "✓ Guardar (aprende esto)", self._approve_mine).pack(side="left", padx=8)
-        widgets.muted(box, "Si entendí o traduje algo mal, corregilo arriba y guardalo. Así aprendo tus "
-                           "palabras y cómo querés sonar, y lo que ya dijiste sale al toque la próxima vez.")
+        widgets.muted(box, "Si entendí o traduje algo mal, corregilo arriba y guardalo. Así aprendo tus palabras y "
+                           "cómo querés sonar, y lo que ya dijiste sale al instante la próxima vez.")
 
         box = widgets.card(page, "Chat a voz", "Como Ctrl+Enter en el juego: escribís y lo digo en voz.")
         self.chat_text = tk.StringVar(value="dale, esperame en la torre que ya voy")
@@ -119,7 +121,7 @@ class TestsPanel:
 
         box = self.pc_box = widgets.card(page, "Cuánto tarda en tu PC", "Mide cuánto tarda cada paso de tu voz "
                                                                         "traducida con Basic, en tu PC.")
-        # Con Pro, esto (Basic) queda difuminado: la voz va por la nube (se prueba en ✦ Pro › Comparar con mi voz).
+        # Con Pro, esta sección (Basic) se difumina: la voz pasa por la nube (se prueba en ✦ Pro › Comparar con mi voz).
         self.pc_note = ttk.Label(box.master, text="🔒  Esto mide Basic. Con Pro la voz va por la nube: probala "
                                                   "en la página Pro, en «Comparar con mi voz»", font="SunValleyCaptionFont",
                                  foreground=colors["muted"])
@@ -141,7 +143,7 @@ class TestsPanel:
         self.refresh_learned()
 
     def apply_plan(self, animate: bool = True) -> None:
-        """Con Pro, «Cuánto tarda en tu PC» (mide Basic) queda difuminado y bloqueado, con su cartelito."""
+        """Con Pro, «Cuánto tarda en tu PC» (mide Basic) se difumina y se bloquea, con su aviso."""
         on = pro.active()
         widgets.dim(self.pc_box, on, animate, reason="pro")
         if on and not self.pc_note.winfo_manager():
@@ -166,14 +168,14 @@ class TestsPanel:
         self.app.events.put(("call", action))
 
     def _run(self, work: Callable[[], None], needs_claude: bool = False, needs_models: bool = True) -> None:
-        """Hace `work` en otro hilo (con los modelos de voz cargados), de a una prueba por vez."""
+        """Ejecuta `work` en otro hilo (con los modelos de voz cargados), una prueba por vez."""
         if self._busy:
             return
         if needs_claude and not (self.app.ready and self.app.translator is not None):
             self.app._set_status("Esperá a que me conecte con Claude (lo ves arriba a la derecha).")
             return
         if needs_claude:
-            self.voice._open_voice_lane()  # el carril rápido de la voz (si ya estaba abierto, no hace nada)
+            self.voice._open_voice_lane()  # abre el carril rápido de voz (si ya está abierto, no hace nada)
         self._busy = True
         for button in self._buttons:
             widgets.set_enabled(button, False)
@@ -187,7 +189,7 @@ class TestsPanel:
                 self._ui(lambda: self.app._set_status(NO_VOICE_PACK))
             except Exception as exc:  # noqa: BLE001 - se muestra
                 log.exception("Falló una prueba")
-                message = f"La prueba falló: {exc}"  # `exc` deja de existir al salir del except
+                message = f"La prueba falló: {exc}"  # `exc` se elimina al salir del except
                 self._ui(lambda: self.app._set_status(message))
             finally:
                 self._ui(self._done)
@@ -203,7 +205,7 @@ class TestsPanel:
     def _done(self) -> None:
         self._busy = False
         for button in self._buttons:
-            widgets.set_enabled(button, True)  # (los de una tarjeta difuminada quedan bloqueados)
+            widgets.set_enabled(button, True)  # (los de una tarjeta difuminada siguen bloqueados)
         self.refresh_learned()
 
     def _voices(self):
@@ -252,7 +254,7 @@ class TestsPanel:
             self._ui(lambda: (self.mic_rating.configure(text=text, foreground=widgets.palette()[color]),
                               self.mic_details.configure(text=details)))
             if report.rating == "bien":
-                self._ui(self.app.hide_mic_tip)  # tu micrófono anda bien: el cartel de Inicio ya no hace falta
+                self._ui(self.app.hide_mic_tip)  # el micrófono funciona bien: el aviso de Inicio ya no es necesario
 
         self._run(work)
 
@@ -408,7 +410,7 @@ class TestsPanel:
                 measure()
             except Exception as exc:  # noqa: BLE001 - se muestra en la tarjeta (antes quedaba «Midiendo…»)
                 log.exception("Falló la medición de la PC")
-                failed(f"Algo falló al medir ({exc}). Probá otra vez y, si sigue, contalo en Soporte.")
+                failed(f"Algo falló al medir ({exc}). Probá otra vez y, si sigue, avisanos en Soporte.")
 
         def measure() -> None:
             final = self.voice.my_asr()
@@ -424,7 +426,7 @@ class TestsPanel:
             count = int(len(sample.audio) * 16000 / sample.sample_rate)
             audio = np.interp(np.linspace(0, len(sample.audio) - 1, count), np.arange(len(sample.audio)),
                               sample.audio).astype(np.float32)
-            final.transcribe(audio, language=language)  # la primera vez es más lenta: no cuenta
+            final.transcribe(audio, language=language)  # la primera ejecución es más lenta: no se cuenta
             started = time.perf_counter()
             final.transcribe(audio, language=language, hint=self.voice.profile.hint)
             understand = time.perf_counter() - started

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Callable, Literal, Protocol
 
 Direction = Literal["incoming", "outgoing"]
-# translate = otro idioma; adapt = mismo idioma pero con jerga de otro país.
+# translate: traduce a otro idioma; adapt: mantiene el idioma pero adapta la jerga a la de otro país.
 Mode = Literal["translate", "adapt"]
 DeltaCallback = Callable[[str], None]
 
@@ -40,19 +40,21 @@ class TranslationRequest:
     context: tuple[ChatLine, ...] = ()
     target_region: str = ""
     mode: Mode = "translate"
-    # Jerga detectada localmente, como pista para Claude: ("kkkk", "pt-BR", "laughter").
+    # Jerga detectada localmente, usada como pista para Claude: ("kkkk", "pt-BR", "laughter").
     slang_hints: tuple[tuple[str, str, str], ...] = ()
-    # Nivel de informalidad de lo que enviás: 1 = neutro/formal ... 5 = jerga nativa.
+    # Nivel de informalidad del mensaje: 1 = neutro/formal ... 5 = jerga nativa.
     tone: int = 3
-    # Se va a decir en voz (voz sintética): palabras completas, sin abreviaturas de chat, en la escritura del idioma.
+    # Indica que el texto se va a reproducir en voz sintética: palabras completas, sin abreviaturas de chat y con la
+    # escritura propia del idioma.
     spoken: bool = False
-    # Viene de reconocer una voz (Whisper): puede tener palabras mal entendidas y le falta puntuación (¿? ¡!).
+    # Indica que el texto proviene de reconocimiento de voz (Whisper): puede contener palabras mal reconocidas y carece
+    # de signos de puntuación (¿? ¡!).
     from_speech: bool = False
-    # Cómo lo dijo (la entonación): "question" (subió al final) o "exclaim" (con énfasis). Whisper no lo marca.
+    # Entonación con que se dijo: "question" (sube al final) o "exclaim" (con énfasis). Whisper no la registra.
     intonation: str = ""
-    # Cómo querés sonar: pares (lo que dijiste, cómo quedó bien) que aprobaste en la página Pruebas.
+    # Estilo deseado: pares (texto original, versión aprobada) confirmados por el jugador en la página Pruebas.
     examples: tuple[tuple[str, str], ...] = ()
-    # Tus palabras y nombres (de tu perfil de voz): Whisper puede haberlos escuchado mal.
+    # Palabras y nombres del perfil de voz del jugador, que Whisper puede haber reconocido mal.
     vocabulary: tuple[str, ...] = ()
 
 

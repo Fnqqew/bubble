@@ -34,9 +34,9 @@ from .prompt import SYSTEM_PROMPT, OutputFilter, build_user_prompt
 from .router import SENT
 
 log = logging.getLogger(__name__)
-hidden_processes.install()  # sin ventanas negras de claude.exe
-KEEP_WARM_AFTER_S = 240  # el caché del prompt dura 5 minutos
-SHRINK_AFTER_S = 300  # las sesiones de más se cierran tras este tiempo sin pedidos que se superpongan
+hidden_processes.install()  # evita ventanas de consola de claude.exe
+KEEP_WARM_AFTER_S = 240  # el caché del prompt expira a los 5 minutos
+SHRINK_AFTER_S = 300  # las sesiones sobrantes se cierran tras este tiempo sin pedidos superpuestos
 
 
 class ProviderError(RuntimeError):
@@ -44,7 +44,7 @@ class ProviderError(RuntimeError):
 
 
 def _session_dir() -> Path:
-    # Carpeta vacía propia: Claude Code no levanta CLAUDE.md ni archivos de ningún proyecto.
+    # Carpeta vacía propia: Claude Code no carga CLAUDE.md ni archivos de ningún proyecto.
     base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".cache")
     path = Path(base) / "Bubble" / "claude-session"
     path.mkdir(parents=True, exist_ok=True)
@@ -56,8 +56,8 @@ class _Session:
         self.options = options
         self.client: ClaudeSDKClient | None = None
         self.turns = 0
-        self.refreshing = False  # ya se está abriendo la que la reemplaza
-        self.retired = False  # ya hay otra en su lugar: se cierra apenas quede libre
+        self.refreshing = False  # ya se está abriendo su reemplazo
+        self.retired = False  # ya existe su reemplazo: se cierra al quedar libre
 
     async def open(self) -> None:
         client = ClaudeSDKClient(options=self.options)
@@ -84,7 +84,8 @@ class UsageStats:
     cost_by_model: dict[str, float] = field(default_factory=dict)
     # rate_limit_type ("five_hour", "seven_day", ...) -> utilization (0.0 a 1.0)
     utilization: dict[str, float] = field(default_factory=dict)
-    # Los totales de cada ResultMessage son acumulados de la sesión: se guarda el último para sumar diferencias.
+    # Los totales de cada ResultMessage son acumulados de la sesión: se guarda el último para sumar solo las
+    # diferencias.
     _last_by_session: dict[str, dict[str, float]] = field(default_factory=dict)
 
     def add_result(self, message: ResultMessage) -> None:
@@ -120,12 +121,13 @@ class UsageStats:
 
 class ClaudeSubscriptionProvider:
     name = "claude"
-    reports_sent = True  # avisa (SENT) cuando el pedido sale: la espera de turno no cuenta como sesión colgada
+    reports_sent = True  # avisa (SENT) al enviar el pedido: la espera de turno no cuenta como sesión bloqueada
 
     def __init__(self, config: ClaudeConfig, system_prompt: str = SYSTEM_PROMPT, model: str = "",
                  min_sessions: int = 1, thinking: bool = True, name: str = "claude") -> None:
-        """`model`: otro modelo que el configurado (la voz usa uno más rápido). `thinking=False`: responde sin
-        pensar antes (para traducir no hace falta y la primera palabra llega antes)."""
+        """`model`: modelo distinto del configurado (la voz usa uno más rápido). `thinking=False`: responde sin
+        razonamiento previo, innecesario para traducir y reduce la latencia de la primera palabra.
+        """
         self.config = config
         self.name = name
         self.model = model or config.model
@@ -142,12 +144,12 @@ class ClaudeSubscriptionProvider:
             skills=[],
             max_turns=1,
             include_partial_messages=True,
-            # El texto viene de otros jugadores: nunca expandir @rutas ni /comandos.
+            # El texto proviene de otros jugadores: nunca se expanden @rutas ni /comandos.
             verbatim_prompts=True,
             cwd=_session_dir(),
             env={
                 "CLAUDE_AGENT_SDK_CLIENT_APP": f"bubble/{__version__}",
-                # Sin tráfico no esencial: evita una llamada extra a Haiku por cada mensaje (gasto sin beneficio).
+                # Sin tráfico no esencial: evita una llamada adicional a Haiku por mensaje, sin beneficio.
                 "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
             },
             stderr=lambda line: log.debug("claude: %s", line),
@@ -157,17 +159,18 @@ class ClaudeSubscriptionProvider:
         self._all: set[_Session] = set()
         self._retired: set[_Session] = set()
         self._replacing: set[asyncio.Task] = set()
-        # Mantener "caliente" el prompt cacheado mientras esta función diga que se está jugando.
+        # Mantiene el prompt cacheado activo mientras esta función indique que hay una partida en curso.
         self.keep_warm_when: Callable[[], bool] | None = None
         self._last_used = time.monotonic()
-        self._last_crowded = 0.0  # cuándo llegó un pedido con todas las sesiones ocupadas
+        self._last_crowded = 0.0  # momento en que llegó un pedido con todas las sesiones ocupadas
         self._opening = 0
         self._keepalive: asyncio.Task | None = None
 
     async def start(self) -> None:
-        """Arranca con una sesión: cada una es un claude.exe de 150 a 300 MB, y como los mensajes que llegan juntos
-        van en un mismo pedido, casi siempre alcanza. Si llegan pedidos con todas ocupadas se abren más (hasta
-        `pool_size`), y las que sobran se cierran solas después de un rato tranquilo."""
+        """Arranca con una sesión: cada una es un claude.exe de 150 a 300 MB y, como los mensajes simultáneos se
+        envían en un mismo pedido, normalmente alcanza. Si llegan pedidos con todas ocupadas se abren más (hasta
+        `pool_size`), y las sobrantes se cierran solas tras un período de poca actividad.
+        """
         error: BaseException | None = None
         for _attempt in range(2):
             session = _Session(self._options)
@@ -188,7 +191,7 @@ class ClaudeSubscriptionProvider:
         self._keepalive = asyncio.get_running_loop().create_task(self._keep_warm())
 
     async def warm_up(self) -> None:
-        """Un pedido mínimo: deja el prompt en el caché de este modelo, así el primer pedido de verdad no espera."""
+        """Pedido mínimo que deja el prompt en el caché de este modelo, para que el primer pedido real no espere."""
         try:
             async for _ in self.stream(TranslationRequest("ok", "en", "incoming")):
                 pass
@@ -223,7 +226,7 @@ class ClaudeSubscriptionProvider:
         self._idle.put_nowait(session)
 
     async def _shrink(self) -> None:
-        """Después de un rato sin pedidos superpuestos, queda una sola sesión abierta (menos memoria)."""
+        """Tras un período sin pedidos superpuestos, queda una sola sesión abierta para reducir memoria."""
         if len(self._all) <= self.min_sessions or time.monotonic() - self._last_crowded < SHRINK_AFTER_S:
             return
         while len(self._all) > self.min_sessions and not self._idle.empty():
@@ -232,8 +235,9 @@ class ClaudeSubscriptionProvider:
             await self._close_quietly(session)
 
     async def _keep_warm(self) -> None:
-        """El caché del prompt vence a los 5 minutos: si el chat está callado mientras jugás, la siguiente
-        traducción tardaría más. Un pedido mínimo cada ~4 minutos de silencio lo mantiene vivo."""
+        """El caché del prompt expira a los 5 minutos: si el chat permanece en silencio durante la partida, la
+        siguiente traducción tardaría más. Un pedido mínimo cada ~4 minutos de silencio lo mantiene activo.
+        """
         while True:
             await asyncio.sleep(30)
             await self._shrink()
@@ -264,7 +268,7 @@ class ClaudeSubscriptionProvider:
                 yield text
 
     async def stream_batch(self, requests: list[TranslationRequest]) -> AsyncIterator[tuple[int, str]]:
-        """Traduce varios mensajes en un solo pedido; devuelve (índice, fragmento) a medida que llegan."""
+        """Traduce varios mensajes en un solo pedido y devuelve (índice, fragmento) a medida que llegan."""
         self._last_used = time.monotonic()
         if self._idle.empty():
             self._grow()
@@ -278,7 +282,7 @@ class ClaudeSubscriptionProvider:
             yield SENT, ""
             streamed = False
             fallback_text: list[str] = []
-            output = OutputFilter(len(requests))  # solo lo que viene dentro de <tN>...</tN>
+            output = OutputFilter(len(requests))  # solo el contenido de <tN>...</tN>
             async for message in session.client.receive_response():
                 if isinstance(message, StreamEvent):
                     event = message.event
@@ -310,8 +314,8 @@ class ClaudeSubscriptionProvider:
             else:
                 self._idle.put_nowait(session)
                 if session.turns >= self.config.session_max_turns and not session.refreshing:
-                    # Historial largo: se abre la que la reemplaza MIENTRAS esta sigue atendiendo. Antes se cerraba
-                    # primero y, con una sola sesión, el pedido siguiente esperaba a que arranque otro claude.exe.
+                    # Historial largo: el reemplazo se abre MIENTRAS esta sesión sigue atendiendo. Con una sola sesión,
+                    # cerrarla primero obligaba al pedido siguiente a esperar el arranque de otro claude.exe.
                     session.refreshing = True
                     self._spawn(self._refresh(session))
 
@@ -340,11 +344,11 @@ class ClaudeSubscriptionProvider:
         self._idle.put_nowait(new)
         self._all.discard(old)
         self._retired.add(old)
-        old.retired = True  # si está libre, se cierra cuando alguien la saque de la fila
+        old.retired = True  # si está libre, se cierra cuando se la retire de la cola
 
     async def _replace(self, old: _Session) -> None:
-        # La sesión vieja puede estar colgada (por eso se reemplaza) y cerrarla también puede colgarse: se cierra
-        # aparte, con límite, y la nueva se abre sin esperarla. Antes el pool se iba vaciando y todo fallaba.
+        # La sesión vieja puede estar bloqueada (por eso se reemplaza) y su cierre también: se cierra aparte, con límite
+        # de tiempo, y la nueva se abre sin esperarla. De otro modo el pool se vaciaba progresivamente y todo fallaba.
         self._all.discard(old)
         closing = asyncio.get_running_loop().create_task(self._close_quietly(old))
         self._replacing.add(closing)

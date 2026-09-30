@@ -1,6 +1,7 @@
-"""Bubble 3.7: la voz traducida suena pareja de una frase a la otra (mismo tono y volumen) y con tu expresión, en todos
-los idiomas con voz femenina y masculina; la nube reconoce los idiomas que no mezcla; las palabras de Roblox; y la
-ventana no se traba. Sin conectarse de verdad."""
+"""Bubble 3.7: la voz traducida suena pareja de una frase a la otra (mismo tono y volumen) y conserva la expresión del
+jugador, en todos los idiomas con voz femenina y masculina; la nube reconoce los idiomas que no mezcla; se incorporan
+las palabras de Roblox; y la ventana ya no se bloquea. Sin conectarse de verdad.
+"""
 
 import math
 import threading
@@ -16,7 +17,7 @@ RATE = 22050
 
 def voice(pitch: float = 200.0, seconds: float = 1.2, level: float = 0.3, rise: float = 0.0, pauses: bool = False,
           rate: int = RATE) -> np.ndarray:
-    """Una "voz" sintética: armónicos con algo de melodía (y, si se pide, pausas entre "palabras")."""
+    """Voz sintética: armónicos con algo de melodía y, opcionalmente, pausas entre "palabras"."""
     t = np.arange(int(rate * seconds)) / rate
     melody = pitch * (1 + 0.02 * np.sin(2 * np.pi * 3 * t)) * 2 ** (rise * np.clip(t / seconds - 0.75, 0, 1) * 4 / 12)
     phase = 2 * np.pi * np.cumsum(melody) / rate
@@ -33,31 +34,32 @@ def semitones(a: float, b: float) -> float:
 # ---------------------------------------------------------------- mismo tono y volumen entre frases
 def test_every_sentence_ends_up_at_the_same_volume():
     polish = prosody.Polish()
-    quiet = polish.apply(voice(level=0.08), RATE, "nube")  # (hasta 14 dB más: más que eso sería subir ruido)
+    quiet = polish.apply(voice(level=0.08), RATE, "nube")  # hasta 14 dB más; subir más amplificaría ruido
     loud = polish.apply(voice(level=0.9), RATE, "nube")
     assert prosody.level_db(quiet, RATE) == pytest.approx(prosody.TARGET_DB, abs=1)
     assert prosody.level_db(loud, RATE) == pytest.approx(prosody.TARGET_DB, abs=1)
-    assert np.max(np.abs(loud)) <= 0.97  # sin saturar
+    assert np.max(np.abs(loud)) <= 0.97  # sin saturación
 
 
 def test_a_sentence_that_came_out_higher_is_brought_back_to_the_voice_pitch():
-    """La nube varía sola: la misma voz salía a 100 Hz en una frase y a 250 Hz en la siguiente (medido)."""
+    """La nube varía el tono entre frases: la misma voz salía a 100 Hz en una y a 250 Hz en la siguiente."""
     polish = prosody.Polish()
     for _ in range(3):
-        polish.apply(voice(200), RATE, "una-voz")  # la voz de siempre
+        polish.apply(voice(200), RATE, "una-voz")  # la voz habitual
     odd = polish.apply(voice(250), RATE, "una-voz")  # 3,9 semitonos más aguda
-    assert abs(semitones(prosody.median_pitch(odd, RATE), 200)) < 1.0  # casi del todo (del todo sonaría plano)
-    other_voice = polish.apply(voice(250), RATE, "otra-voz")  # cada voz tiene su tono: esta no se toca
+    # casi por completo; igualarla del todo sonaría plana
+    assert abs(semitones(prosody.median_pitch(odd, RATE), 200)) < 1.0
+    other_voice = polish.apply(voice(250), RATE, "otra-voz")  # cada voz tiene su tono; esta no se modifica
     assert abs(semitones(prosody.median_pitch(other_voice, RATE), 250)) < 0.3
-    far = polish.apply(voice(500), RATE, "una-voz")  # a más de una octava: es un error al medir, no se toca
+    far = polish.apply(voice(500), RATE, "una-voz")  # a más de una octava: es un error de medición, no se modifica
     assert abs(semitones(prosody.median_pitch(far, RATE), 500)) < 0.5
 
 
 def test_cloud_voices_are_evened_out_from_their_first_sentence():
-    """Cada voz de la nube trae su tono medido de antemano: la primera frase ya se empareja."""
+    """Cada voz de la nube trae su tono medido de antemano, de modo que la primera frase ya se empareja."""
     import bubble.cloud.speak  # noqa: F401 - (carga los tonos de las voces de la nube)
 
-    first = prosody.POLISH.apply(voice(240), RATE, "aura-2-apollo-en")  # Apollo: 141 Hz de costumbre
+    first = prosody.POLISH.apply(voice(240), RATE, "aura-2-apollo-en")  # Apollo: 141 Hz habitual
     assert semitones(prosody.median_pitch(first, RATE), 240) < -6  # bajó casi hasta su tono
 
 
@@ -77,7 +79,7 @@ def test_how_you_said_it_changes_how_it_sounds():
     soft = polish.apply(voice(200), RATE, "", "soft")
     assert semitones(prosody.median_pitch(shout, RATE), prosody.median_pitch(calm, RATE)) > 1.5  # más aguda
     assert prosody.level_db(shout, RATE) > prosody.level_db(calm, RATE) + 3  # y más fuerte
-    assert prosody.level_db(soft, RATE) < prosody.level_db(calm, RATE) - 3  # bajito, más suave
+    assert prosody.level_db(soft, RATE) < prosody.level_db(calm, RATE) - 3  # baja, más suave
 
 
 def test_a_question_rises_at_the_end_even_with_voices_that_do_not():
@@ -86,7 +88,7 @@ def test_a_question_rises_at_the_end_even_with_voices_that_do_not():
     f0, voiced = prosody.pitch_track(asked, RATE)
     tail, body = f0[voiced][-12:], f0[voiced][:-30]
     assert semitones(np.median(tail), np.median(body)) > 1.5
-    already = voice(200, seconds=1.5, rise=4)  # ya sube (la voz de la nube, con "?"): no se toca de más
+    already = voice(200, seconds=1.5, rise=4)  # ya sube (voz de la nube con "?"): no se corrige de más
     f0, voiced = prosody.pitch_track(prosody.Polish().apply(already, RATE, "", "question"), RATE)
     assert semitones(np.median(f0[voiced][-12:]), np.median(f0[voiced][:-30])) < 5.5
 
@@ -103,7 +105,7 @@ def test_the_cloud_voice_is_evened_out_while_it_arrives():
     out += shaper.finish()
     joined = np.concatenate(out)
     assert len(joined) == len(arriving)  # no se pierde nada
-    assert len(out) >= 2  # y se entrega de a tramos (no espera la frase entera)
+    assert len(out) >= 2  # y se entrega por tramos, sin esperar la frase entera
     assert abs(semitones(prosody.median_pitch(joined, 24000), 200)) < 0.8
     assert prosody.level_db(joined, 24000) == pytest.approx(prosody.TARGET_DB, abs=1.5)
 
@@ -111,10 +113,10 @@ def test_the_cloud_voice_is_evened_out_while_it_arrives():
 def test_a_voice_without_pauses_still_starts_before_the_end():
     shaper = prosody.Streaming(prosody.Polish(), 24000, "", "")
     out = []
-    joined_voice = voice(200, seconds=2.0, rate=24000)  # ligada, sin ningún silencio
+    joined_voice = voice(200, seconds=2.0, rate=24000)  # continua, sin ningún silencio
     for start in range(0, len(joined_voice), 2400):
         out.append(len(shaper.feed(joined_voice[start:start + 2400])))
-    assert sum(out) >= 1  # algo salió antes del final
+    assert sum(out) >= 1  # salió audio antes del final
     assert sum(len(piece) for piece in shaper.finish()) < len(joined_voice)
 
 
@@ -133,7 +135,7 @@ def test_the_cloud_ends_single_words_with_your_sign():
 
 
 def test_direct_mode_passes_your_expression_to_the_voice():
-    """En el modo directo la expresión se perdía: la voz sonaba igual aunque gritaras."""
+    """En el modo directo la expresión se perdía: la voz sonaba igual aunque el jugador gritara."""
     from bubble.voice.live import Caption
     from bubble.voice.pipelines import DirectVoice
 
@@ -173,7 +175,8 @@ def test_direct_mode_passes_your_expression_to_the_voice():
 
 
 def test_the_translation_is_said_in_two_parts_at_most():
-    """Cada pedido a la voz de la nube sale con otro tono: oración por oración parecía que cambiaba de persona."""
+    """Cada pedido a la voz de la nube sale con otro tono, de modo que oración por oración parecía cambiar de persona.
+    """
     from bubble.voice.pipelines import Sentences
 
     parts = []
@@ -210,7 +213,7 @@ def _say(listener, text, language, confidence):
 
 
 def test_a_language_the_cloud_mixes_badly_is_heard_again_with_its_language(monkeypatch):
-    """Mezclando idiomas, la nube escribía el coreano en japonés, el polaco en ruso, el vietnamita en hindi…"""
+    """Al mezclar idiomas, la nube escribía el coreano en japonés, el polaco en ruso, el vietnamita en hindi, etc."""
     from bubble.cloud import deepgram
     from bubble.voice.asr import Heard
 
@@ -229,9 +232,9 @@ def test_a_clear_phrase_is_not_heard_twice(monkeypatch):
     listener, captions, _done, calls, fake = _listener(lambda: None)
     monkeypatch.setattr(deepgram.DeepgramClip, "transcribe", fake)
     _say(listener, "wait for me at the tower", "en", 0.98)
-    assert calls == [] and captions[-1].language == "en" and captions[-1].final  # (no se paga dos veces)
+    assert calls == [] and captions[-1].language == "en" and captions[-1].final  # no se paga dos veces
     mine = deepgram.DeepgramListener("clave", lambda c: None, source_factory=None, language="es", recheck=True)
-    assert not mine.recheck  # tu voz: tu idioma ya se sabe
+    assert not mine.recheck  # voz del jugador: su idioma ya se conoce
 
 
 def test_roblox_words_are_prioritized_for_the_cloud():
@@ -245,7 +248,7 @@ def test_roblox_words_are_prioritized_for_the_cloud():
 
 # ---------------------------------------------------------------- la ventana no se traba
 def test_looking_for_roblox_does_not_walk_every_window_each_time(monkeypatch):
-    """Se pregunta muchas veces por segundo; con otro hilo ocupado, recorrer las ~250 ventanas tardaba 1 s."""
+    """Se consulta muchas veces por segundo; con otro hilo ocupado, recorrer las ~250 ventanas tardaba 1 s."""
     from bubble import win32
 
     searches = []
@@ -259,7 +262,7 @@ def test_looking_for_roblox_does_not_walk_every_window_each_time(monkeypatch):
     assert len(searches) == 1
     monkeypatch.setattr(win32, "_window", [1234, time.monotonic() - win32.WINDOW_KEEP_S - 1])
     win32.find_roblox_window()
-    assert len(searches) == 2  # cada tanto se vuelve a buscar
+    assert len(searches) == 2  # se vuelve a buscar cada cierto tiempo
 
 
 def test_the_heavy_parts_load_while_the_splash_is_showing(monkeypatch):
@@ -275,7 +278,7 @@ def test_the_heavy_parts_load_while_the_splash_is_showing(monkeypatch):
 
 
 def test_tab_asks_for_the_new_language_right_away_and_the_next_one_too(monkeypatch, tmp_path):
-    """Con Tab, la traducción esperaba lo mismo que al escribir (650 ms) y recién ahí se pedía."""
+    """Con Tab, la traducción esperaba lo mismo que al escribir (650 ms) antes de pedirse."""
     import tkinter as tk
 
     monkeypatch.setenv("APPDATA", str(tmp_path))
@@ -284,7 +287,8 @@ def test_tab_asks_for_the_new_language_right_away_and_the_next_one_too(monkeypat
     root = tk.Tk()
     root.withdraw()
     asked = []
-    monkeypatch.setattr(ComposeBar, "visible", property(lambda self: True))  # (sin mostrarla ni sacarte del juego)
+    # sin mostrarla ni sacar al jugador del juego
+    monkeypatch.setattr(ComposeBar, "visible", property(lambda self: True))
     try:
         bar = ComposeBar(root, lambda *key: asked.append(key), lambda *a, **k: None, lambda: None)
         bar.targets, bar.index, bar.tone = ["en", "pt", "fr"], 0, 3
@@ -293,8 +297,8 @@ def test_tab_asks_for_the_new_language_right_away_and_the_next_one_too(monkeypat
         deadline = time.monotonic() + 0.4
         while time.monotonic() < deadline and not asked:
             root.update()
-        assert asked == [("vamos a farmear", "pt", 3)]  # enseguida (antes: 650 ms)
+        assert asked == [("vamos a farmear", "pt", 3)]  # de inmediato (650 ms con la espera de escritura)
         bar.show_preview(("vamos a farmear", "pt", 3), "let's go farm", "done")
-        assert asked[-1] == ("vamos a farmear", "fr", 3)  # recorriendo con Tab: el siguiente ya se pide
+        assert asked[-1] == ("vamos a farmear", "fr", 3)  # al recorrer con Tab, el siguiente ya se pide
     finally:
         root.destroy()

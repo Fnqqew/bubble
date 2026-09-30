@@ -34,7 +34,7 @@ async def test_stalled_session_is_retried_instead_of_failing():
         async def stream(self, request):
             self.requests.append(request)
             if len(self.requests) == 1:
-                await asyncio.sleep(10)  # sesión colgada: nunca responde
+                await asyncio.sleep(10)  # sesión bloqueada: nunca responde
             for word in self.reply.split(" "):
                 yield word + " "
 
@@ -48,7 +48,7 @@ async def test_slow_but_streaming_answer_is_not_cut_at_the_first_token_limit():
     class Slow(FakeProvider):
         async def stream(self, request):
             yield "hola "
-            await asyncio.sleep(0.2)  # ya empezó a responder: tiene el tiempo completo
+            await asyncio.sleep(0.2)  # ya empezó a responder: dispone del tiempo completo
             yield "amigo"
 
     routed = await Router([Slow()], timeout_s=2.0, first_token_s=0.1).translate(REQUEST)

@@ -1,4 +1,4 @@
-"""Descarga (una sola vez) de los modelos de voz a %LOCALAPPDATA%\\Bubble\\models."""
+"""Descarga única de los modelos de voz en %LOCALAPPDATA%\\Bubble\\models."""
 
 from __future__ import annotations
 
@@ -18,7 +18,9 @@ def models_dir() -> Path:
 
 
 def download(url: str, target: Path, label: str = "", progress: Progress | None = None) -> Path:
-    """Baja `url` a `target` si todavía no está (a un archivo temporal primero: una descarga cortada no queda a medias)."""
+    """Descarga `url` en `target` si aún no existe. Escribe primero en un archivo temporal para que una descarga
+    interrumpida no deje un archivo incompleto.
+    """
     if target.exists() and target.stat().st_size > 0:
         return target
     target.parent.mkdir(parents=True, exist_ok=True)

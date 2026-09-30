@@ -1,4 +1,4 @@
-"""Cache LRU de traducciones para mensajes cortos y repetidos ("gg", "hi", "wanna trade?")."""
+"""Caché LRU de traducciones para mensajes cortos y repetidos ("gg", "hi", "wanna trade?")."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class TranslationCache:
         self._items: OrderedDict[tuple[str, str], str] = OrderedDict()
 
     def cacheable(self, text: str) -> bool:
-        # Los mensajes largos dependen del contexto: no se cachean.
+        # Los mensajes largos dependen del contexto, por lo que no se almacenan en la caché.
         return 0 < len(normalize(text).split(" ")) <= self.max_words
 
     def get(self, text: str, target_lang: str) -> str | None:

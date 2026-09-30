@@ -1,7 +1,8 @@
-"""Subtítulos de voz: cada frase con quién la dice, el original mientras habla y la traducción apenas llega.
+"""Subtítulos de voz: cada frase con su hablante, el original mientras se dice y la traducción en cuanto llega.
 
-Recibe las frases de `LiveListener` (que se van completando) y pide la traducción cuando la frase es definitiva. La
-traducción llega de a pedazos y se muestra así, palabra por palabra. Lo que ya está en tu idioma no se subtitula.
+Recibe las frases de `LiveListener` a medida que se completan y pide la traducción cuando la frase es definitiva. La
+traducción llega en fragmentos y se muestra palabra por palabra. Lo que ya está en el idioma del jugador no se
+subtitula.
 """
 
 from __future__ import annotations
@@ -15,11 +16,11 @@ from typing import Callable
 
 from .live import Caption
 
-KEEP = 3  # frases a la vista
-MINE = -1  # "voz" de las frases que dijiste vos
+KEEP = 3  # frases visibles
+MINE = -1  # "voz" de las frases dichas por el jugador
 NOTICE = -2  # avisos de Bubble en el juego (ej. "Roblox está usando otro micrófono")
-SHOW_S = 7.0  # cuánto queda cada frase después de la última novedad (una larga, más: ver CaptionBoard.show_for)
-READ_CHARS_PER_S = 14  # lo que se alcanza a leer por segundo
+SHOW_S = 7.0  # tiempo visible tras la última novedad (más si es larga: ver CaptionBoard.show_for)
+READ_CHARS_PER_S = 14  # caracteres legibles por segundo
 
 
 @dataclass
@@ -29,16 +30,16 @@ class Line:
     language: str
     original: str
     translation: str = ""
-    final: bool = False  # el original ya es el definitivo
+    final: bool = False  # el original es el definitivo
     done: bool = False  # la traducción terminó
     updated: float = 0.0
     heard_at: float = 0.0
-    asked: str = ""  # el texto que se mandó a traducir
-    generation: int = 0  # cada pedido de traducción nuevo invalida los pedazos de los anteriores
+    asked: str = ""  # texto enviado a traducir
+    generation: int = 0  # cada pedido nuevo invalida los fragmentos de los anteriores
 
 
-# translate(texto, idioma, voz, al_llegar_un_pedazo, al_terminar(traducción o None si falló, native=ya estaba en
-# tu idioma), cómo lo dijo: "question", "shout"…)
+# translate(texto, idioma, voz, al_llegar_un_fragmento, al_terminar(traducción o None si falló, native=ya estaba en el
+# idioma del jugador), entonación: "question", "shout"…)
 Translate = Callable[[str, str, int, Callable[[str], None], Callable[[str | None], None], str], None]
 
 
@@ -48,12 +49,13 @@ class CaptionBoard:
                  on_translated: Callable[[Line], None] = lambda _line: None,
                  is_native: Callable[[str, str], bool] | None = None) -> None:
         self.my_language = my_language.split("-")[0].lower()
-        # ¿Esto ya está en tu idioma? (mirando las palabras, no solo lo que dijo el reconocimiento). Se revisa ANTES de
-        # mostrar: antes se mostraba y recién se sacaba al querer traducirlo, y se veían frases en español.
+        # ¿Ya está en el idioma del jugador? Se evalúa por las palabras, no solo por el idioma que detectó el
+        # reconocimiento. Se revisa antes de mostrar la frase para que no aparezcan frases en español que luego habría
+        # que retirar.
         self.is_native = is_native
         self.translate = translate
         self.on_change = on_change
-        self.on_translated = on_translated  # una frase quedó traducida (para el registro de la ventana)
+        self.on_translated = on_translated  # frase traducida (para el registro de la ventana)
         self._own_ids = -1
         self.keep = keep
         self.show_s = show_s
@@ -61,7 +63,7 @@ class CaptionBoard:
         self._lock = threading.Lock()
 
     def caption(self, caption: Caption) -> None:
-        """Novedad de una frase (se puede llamar desde cualquier hilo)."""
+        """Novedad de una frase (puede llamarse desde cualquier hilo)."""
         now = time.monotonic()
         language = caption.language.split("-")[0].lower()
         with self._lock:
@@ -69,7 +71,7 @@ class CaptionBoard:
             native = language == self.my_language or (
                 self.is_native is not None and bool(caption.text) and self.is_native(caption.text, language))
             if not caption.text or native:
-                # Nada que mostrar (no era voz) o ya está en tu idioma.
+                # Nada que mostrar (no era voz) o ya está en el idioma del jugador.
                 if line:
                     self.lines.remove(line)
                     self._changed()
@@ -84,10 +86,11 @@ class CaptionBoard:
             line.updated = now
             ask = False
             if caption.final and not line.final:
-                # Texto definitivo: si ya se está traduciendo casi lo mismo (se pidió antes, en la pausa), sirve.
+                # Texto definitivo: si ya se está traduciendo casi lo mismo (pedido antes, durante la pausa), se
+                # reutiliza.
                 ask = not (line.asked and same_words(line.asked, caption.text))
             elif caption.stable and not line.asked:
-                ask = True  # se adelanta: la frase suena terminada, no hace falta esperar el texto definitivo
+                ask = True  # se adelanta: la frase suena terminada, no hace falta esperar al texto definitivo
             line.final = caption.final
             if ask:
                 line.asked, line.generation = caption.text, line.generation + 1
@@ -113,7 +116,8 @@ class CaptionBoard:
             if generation != line.generation:
                 return
             if native:
-                # Claude confirmó que ya estaba en tu idioma (Whisper lo había detectado como otro): no se subtitula.
+                # Claude confirmó que ya estaba en el idioma del jugador (Whisper lo había detectado como otro): no se
+                # subtitula.
                 if line in self.lines:
                     self.lines.remove(line)
                 changed = True
@@ -135,7 +139,7 @@ class CaptionBoard:
             self.on_translated(finished)
 
     def mine(self, original: str, translation: str, language: str) -> None:
-        """Tu voz traducida (lo que escuchan los demás), para que veas qué salió."""
+        """Voz del jugador traducida (lo que escuchan los demás), para que pueda verificar el resultado."""
         with self._lock:
             self._own_ids -= 1
             now = time.monotonic()
@@ -151,7 +155,7 @@ class CaptionBoard:
         with self._lock:
             self._own_ids -= 1
             now = time.monotonic()
-            later = now + seconds - self.show_s  # se ve más que un subtítulo común
+            later = now + seconds - self.show_s  # se muestra más tiempo que un subtítulo común
             self.lines.append(Line(self._own_ids, NOTICE, "", "", text, True, True, later, now))
             self.lines = self.lines[-self.keep:]
         self._changed()
@@ -160,8 +164,7 @@ class CaptionBoard:
         self.on_change()
 
     def show_for(self, line: Line) -> float:
-        """Cuánto queda a la vista: lo de siempre, o lo que tarda en leerse si es larga (antes, una traducción larga
-        se iba antes de terminar de leerla)."""
+        """Tiempo que permanece visible: el valor habitual, o el que requiere leerla si es larga."""
         return max(self.show_s, len(line.translation or line.original) / READ_CHARS_PER_S + 2.0)
 
     def visible(self, now: float | None = None) -> list[Line]:
@@ -176,7 +179,7 @@ def _normal(text: str) -> str:
 
 
 def same_words(a: str, b: str) -> bool:
-    """¿Dicen lo mismo? (sin fijarse en mayúsculas ni puntuación, y tolerando alguna palabra distinta)."""
+    """Indica si dicen lo mismo, sin distinguir mayúsculas ni puntuación y tolerando alguna palabra distinta."""
     a, b = _normal(a), _normal(b)
     return a == b or difflib.SequenceMatcher(None, a, b).ratio() >= 0.88
 

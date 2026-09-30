@@ -1,4 +1,5 @@
-"""Captura una ventana propia con PrintWindow (no mira la pantalla: nunca sale lo que hay detrás)."""
+"""Captura una ventana propia con PrintWindow; no depende de la pantalla, por lo que nunca incluye lo que haya detrás.
+"""
 import ctypes
 from ctypes import wintypes
 
@@ -33,5 +34,5 @@ def print_window(hwnd: int) -> Image.Image:
 
 
 def show_quietly(hwnd: int) -> None:
-    """Muestra la ventana sin activarla (no le saca el foco a lo que estés usando)."""
+    """Muestra la ventana sin activarla, para no quitar el foco a la aplicación en uso."""
     ctypes.windll.user32.ShowWindow(hwnd, 4)  # SW_SHOWNOACTIVATE

@@ -1,19 +1,20 @@
-"""Lo que Bubble aprende de cómo hablás, para entenderte mejor y traducir más rápido cuanto más lo usás.
+"""Lo que Bubble aprende de la forma de hablar del jugador para entenderlo mejor y traducir más rápido cuanto más se usa.
 
-- Tus palabras (tus nombres, tu jerga, las que corregiste) y tus frases (solo las que
-  confirmaste vos): se le pasan a Claude, que con eso entiende qué quisiste decir aunque Whisper haya escuchado otra
-  cosa. A Whisper NO: con una lista de palabras o frases de ejemplo largas, en frases cortas ("hola") inventaba o
-  repetía ("Hola Hola Hola", "Podla"); medido. Whisper recibe solo un ejemplo fijo y corto (voice/speech.py).
-- Cuánto sube tu voz al preguntar y cómo suena tu grito (si lo aprendió): cada uno pregunta y grita distinto.
-- Cómo querés sonar: las traducciones que aprobaste o corregiste en Pruebas; Claude las usa de modelo.
-- Frases ya traducidas: si volvés a decir lo mismo ("dale, esperame"), sale al instante, sin preguntarle a Claude.
-- Tu voz de siempre (tono y volumen): para darse cuenta cuando exclamás o gritás.
-- Cuánto tarda cada paso, para mostrarlo en Pruebas.
+- Palabras (nombres, jerga, correcciones) y frases (solo las confirmadas por el jugador): se envían a Claude, que así
+  interpreta lo que se quiso decir aunque Whisper haya escuchado otra cosa. No se envían a Whisper: con listas largas de
+  palabras o frases de ejemplo, en frases cortas ("hola") inventaba o repetía ("Hola Hola Hola", "Podla"). Whisper
+  recibe solo un ejemplo fijo y corto (voice/speech.py).
+- Cuánto sube la voz al preguntar y cómo suena el grito (si se aprendió): cada persona pregunta y grita distinto.
+- Estilo de traducción: las traducciones aprobadas o corregidas en Pruebas, que Claude usa de modelo.
+- Frases ya traducidas: si el jugador repite lo mismo ("dale, esperame"), la traducción sale de inmediato, sin consultar
+  a Claude.
+- Voz habitual (tono y volumen): permite detectar cuándo el jugador exclama o grita.
+- Duración de cada paso, para mostrarla en Pruebas.
 
-Solo se aprende lo seguro: nada con palabras repetidas ni cosas que no son palabras ("yonna kiona giona"). Lo que se
-había aprendido así antes se limpia solo al abrir (ver `_clean`).
+Solo se aprende lo seguro: nada con palabras repetidas ni con secuencias que no son palabras ("yonna kiona giona"). Lo
+aprendido así en versiones anteriores se limpia al abrir (ver `_clean`).
 
-Se guarda en %LOCALAPPDATA%\\Bubble\\perfil_voz.json (solo en tu PC). Se borra desde la página Pruebas.
+Se guarda en %LOCALAPPDATA%\\Bubble\\perfil_voz.json, solo en el equipo del jugador. Se borra desde la página Pruebas.
 """
 
 from __future__ import annotations
@@ -32,13 +33,12 @@ MAX_PHRASES = 40
 MAX_EXAMPLES = 8
 EXAMPLES_IN_PROMPT = 6
 MAX_SAVED = 400
-SAVE_UP_TO_WORDS = 8  # frases más largas dependen del contexto: no se reusan
-MIN_MELODIES = 5  # con menos frases no se sabe cómo hablás normalmente
+SAVE_UP_TO_WORDS = 8  # las frases más largas dependen del contexto: no se reutilizan
+MIN_MELODIES = 5  # con menos frases no se conoce el habla habitual
 MAX_WORDS = 120
 WORDS_FOR_CLAUDE = 60
-# Una pregunta tiene que SUBIR: antes podía quedar negativo y todo era pregunta. Y subir de verdad: con 0,5 semitonos
-# (lo que había aprendido «Entrenar tu voz») las afirmaciones que suben un poquito al final, muy comunes al hablar
-# rioplatense, salían traducidas como preguntas.
+# Una pregunta debe subir el tono, y de forma apreciable: con 0,5 semitonos las afirmaciones que suben un poco al final,
+# muy comunes en el habla rioplatense, se traducían como preguntas.
 QUESTION_RISE_RANGE = (1.5, 4.0)
 _WORDS = re.compile(r"\w+", re.UNICODE)
 
@@ -49,15 +49,17 @@ def default_path() -> Path:
 
 
 def phrase_key(text: str) -> str:
-    """Mismas palabras = misma frase (sin mayúsculas ni signos), pero una pregunta no es lo mismo que una afirmación, ni
-    un grito lo mismo que algo dicho tranquilo."""
+    """Mismas palabras = misma frase (sin mayúsculas ni signos), pero una pregunta no equivale a una afirmación, ni un
+    grito a algo dicho con calma.
+    """
     words = " ".join(_WORDS.findall(text.casefold()))
     return words + ("?" if "?" in text else "") + ("!" if "!" in text else "")
 
 
 def looks_clean(text: str) -> bool:
-    """¿Se puede aprender? No si repite palabras seguidas ("Hola Hola Hola", "comandas, comandas") ni si casi nada son
-    palabras conocidas ("yonna kiona giona giona"): eso es Whisper inventando, no vos hablando."""
+    """Indica si la frase puede aprenderse. No si repite palabras seguidas ("Hola Hola Hola", "comandas, comandas") ni
+    si casi ninguna es una palabra conocida ("yonna kiona giona giona"): eso es Whisper inventando, no habla real.
+    """
     from ..translate.langdetect import is_gaming, known_anywhere
 
     words = [w.casefold() for w in _WORDS.findall(text)]
@@ -68,7 +70,7 @@ def looks_clean(text: str) -> bool:
     half = len(words) // 2
     if half >= 2 and words[:half] == words[half:2 * half]:
         return False  # "como andas como andas"
-    # La lista de palabras comunes es chica ("torre" no está): solo se rechaza si casi nada es conocido.
+    # La lista de palabras comunes es pequeña ("torre" no figura): solo se rechaza si casi ninguna es conocida.
     unknown = [w for w in words if not (known_anywhere(w) or is_gaming(w) or w.isdigit())]
     return len(words) < 3 or len(unknown) < 0.8 * len(words)
 
@@ -94,7 +96,9 @@ class VoiceProfile:
             self.save()
 
     def _clean(self) -> bool:
-        """Saca lo que se aprendió mal (versiones anteriores aprendían sin revisar). True si cambió algo."""
+        """Elimina lo aprendido incorrectamente (versiones anteriores aprendían sin validar). Devuelve True si
+        cambió algo.
+        """
         before = json.dumps(self.data, sort_keys=True, ensure_ascii=False)
         self.data["phrases"] = {lang: [p for p in phrases if looks_clean(p)]
                                 for lang, phrases in self.data["phrases"].items()}
@@ -115,16 +119,21 @@ class VoiceProfile:
 
     # ------------------------------------------------------------ Whisper y Claude: tus palabras
     def hint(self, language: str) -> str:
-        """Ejemplo para Whisper en ese idioma: uno fijo y corto, de cómo se habla (voseo, jerga, ¿? ¡!). Nada de lo
-        aprendido: con eso Whisper inventaba en las frases cortas (medido)."""
+        """Ejemplo para Whisper en ese idioma: fijo y corto, con rasgos del habla (voseo, jerga, ¿? ¡!). No incluye
+        nada de lo aprendido: con eso Whisper inventaba en las frases cortas.
+        """
         return EXAMPLES.get(language.split("-")[0].lower(), "")
 
     def vocabulary(self, language: str) -> tuple[str, ...]:
-        """Tus palabras y nombres, para Claude: así entiende qué quisiste decir si Whisper escuchó otra cosa."""
+        """Palabras y nombres del jugador, para Claude: le permiten interpretar lo que se quiso decir si Whisper
+        escuchó otra cosa.
+        """
         return tuple(self.data["words"].get(language.split("-")[0].lower(), [])[-WORDS_FOR_CLAUDE:])
 
     def learn_words(self, found: list[str], language: str) -> None:
-        """Palabras tuyas (nombres, jerga, las que Whisper no te entendía). Las comunes ("que", "ese") no hacen falta."""
+        """Palabras propias del jugador (nombres, jerga, las que Whisper no reconocía). No hacen falta las comunes
+        ("que", "ese").
+        """
         found = [word.strip() for word in found if len(word.strip()) > 2 and not _common(word.strip())]
         if not found:
             return
@@ -151,7 +160,7 @@ class VoiceProfile:
         return tuple((said, wanted) for said, wanted in pairs)
 
     def approve(self, said: str, wanted: str, target: str, language: str) -> None:
-        """Lo que dijiste (corregido si hacía falta) y cómo tenía que quedar: se aprende todo."""
+        """Lo que dijo el jugador (corregido si hizo falta) y el resultado esperado: se aprende todo."""
         said, wanted = said.strip(), wanted.strip()
         if not said or not wanted:
             return
@@ -188,21 +197,23 @@ class VoiceProfile:
         with self._lock:
             known = self.data["melody"]
             count = known.get("count", 0)
-            weight = 1 / (count + 1) if count < 20 else 0.05  # promedio, y después se va adaptando de a poco
+            weight = 1 / (count + 1) if count < 20 else 0.05  # promedio, y luego se adapta gradualmente
             for key, value in (("pitch", melody.pitch), ("level", melody.level), ("effort", melody.effort)):
                 known[key] = known.get(key, value) * (1 - weight) + value * weight
             known["count"] = count + 1
         self.save()
 
     def usual(self) -> tuple[float, float, float] | None:
-        """(tono, volumen, esfuerzo) de tu voz de siempre; None si todavía no se sabe."""
+        """(tono, volumen, esfuerzo) de la voz habitual; None si aún no se conoce."""
         known = self.data["melody"]
         if known.get("count", 0) < MIN_MELODIES or "effort" not in known:
             return None
         return known["pitch"], known["level"], known["effort"]
 
     def intonation(self, melody: Melody | None) -> str:
-        """Cómo lo dijiste, con tus umbrales si ya los aprendió (si no, los de todos)."""
+        """Describe cómo se dijo la frase, con los umbrales del jugador si ya se aprendieron (si no, los
+        generales).
+        """
         if not melody:
             return ""
         calibration = dict(self.data["calibration"])
@@ -219,7 +230,7 @@ class VoiceProfile:
         self.save()
 
     def set_models(self, scores, chosen: str) -> None:
-        """Cuánto te entendió cada modelo con tus grabaciones y cuál quedó."""
+        """Puntaje de comprensión de cada modelo con las grabaciones del jugador y cuál quedó elegido."""
         with self._lock:
             self.data["models"] = {"puntajes": {s.name: {"accuracy": round(s.accuracy, 3), "seconds": round(s.seconds, 2)}
                                                 for s in scores}, "elegido": chosen}

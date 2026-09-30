@@ -1,5 +1,6 @@
-"""Tu clave del servicio de la nube, guardada cifrada con Windows (DPAPI): solo tu usuario de Windows puede leerla. No
-queda en texto plano en ningún archivo."""
+"""Clave del servicio en la nube, guardada cifrada con Windows (DPAPI): solo el usuario de Windows que la guardó puede
+leerla. No queda en texto plano en ningún archivo.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ class _Blob(ctypes.Structure):
 def _blob(data: bytes) -> _Blob:
     buffer = ctypes.create_string_buffer(data, len(data))
     blob = _Blob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_char)))
-    blob._keep = buffer  # que no se libere antes de usarlo
+    blob._keep = buffer  # evita que se libere antes de usarlo
     return blob
 
 

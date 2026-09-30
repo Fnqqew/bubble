@@ -1,13 +1,13 @@
-"""Escucha en vivo: lo que suena en el juego → frases con quién las dice, el texto mientras hablan y el final.
+"""Escucha en vivo: convierte el audio del juego en frases con su hablante, el texto mientras hablan y el texto final.
 
 Tres pasos, en hilos separados para que el audio nunca espere:
 
-1. Captura + detector de voz (Silero): cada 32 ms, ¿hay alguien hablando? Una frase empieza con un poco de voz y
-   termina con un silencio corto (o si es muy larga, en su pausa más marcada).
-2. Mientras la persona habla, cada ~0,4 s se transcribe lo que va (modelo rápido) para mostrarlo ya.
-3. Cuando termina, se transcribe con el modelo preciso y se reconoce la voz (Voz 1, Voz 2…).
+1. Captura y detector de voz (Silero): cada 32 ms determina si alguien habla. Una frase empieza con un poco de voz y
+   termina con un silencio corto (o, si es muy larga, en su pausa más marcada).
+2. Mientras la persona habla, cada ~0,4 s se transcribe lo acumulado con el modelo rápido para mostrarlo de inmediato.
+3. Al terminar, se transcribe con el modelo preciso y se reconoce la voz (Voz 1, Voz 2…).
 
-Cada cambio se avisa con `on_caption(Caption)`: la misma frase (mismo `id`) se va actualizando hasta `final`.
+Cada cambio se notifica con `on_caption(Caption)`: la misma frase (mismo `id`) se actualiza hasta que llega `final`.
 """
 
 from __future__ import annotations
@@ -36,43 +36,43 @@ BLOCK = FRAME * 3  # ~96 ms por lectura del dispositivo
 @dataclass(frozen=True)
 class Caption:
     id: int
-    start: float  # posición en el audio escuchado (segundos desde que empezó a escuchar)
+    start: float  # posición en el audio escuchado (segundos desde el inicio de la escucha)
     end: float
     text: str = ""
     language: str = ""
-    speaker: int = 0  # 0 = todavía no se sabe quién es
+    speaker: int = 0  # 0 = hablante aún desconocido
     final: bool = False
-    stable: bool = False  # hizo una pausa y la frase suena terminada: el texto casi seguro no cambia
-    intonation: str = ""  # "question" (la voz subió al final) | "exclaim" | "": Whisper no pone ¿? ni ¡!
+    stable: bool = False  # hubo una pausa y la frase parece terminada: el texto casi no cambiará
+    intonation: str = ""  # "question" (la voz sube al final) | "exclaim" | "": Whisper no agrega ¿? ni ¡!
     sure: bool = False  # se entendió con seguridad
 
 
 @dataclass
 class Settings:
-    start_prob: float = 0.5  # probabilidad de voz para empezar una frase
-    keep_prob: float = 0.35  # por debajo de esto es silencio
-    start_frames: int = 2  # ~64 ms de voz seguida para empezar
+    start_prob: float = 0.5  # probabilidad de voz para iniciar una frase
+    keep_prob: float = 0.35  # por debajo de este valor se considera silencio
+    start_frames: int = 2  # ~64 ms de voz continua para iniciar
     end_silence_s: float = 0.45  # silencio que cierra la frase
-    # Una pausa más corta alcanza si la frase ya suena terminada (". ? !") o si ya es larga: sale antes.
+    # Basta una pausa más corta si la frase ya parece terminada (". ? !") o ya es larga, para que salga antes.
     quick_end_s: float = 0.22
-    quick_min_s: float = 1.0  # pero no en frases muy cortas: un pedazo corto no alcanza para saber el idioma
-    # Un pedazo corto que no se entendió claro ("no, pará," y una pausa) espera más: seguramente la frase sigue, y
-    # solo se entiende bien junto con lo que viene.
+    quick_min_s: float = 1.0  # no se aplica a frases muy cortas: un fragmento breve no basta para detectar el idioma
+    # Un fragmento corto que no se entendió con claridad ("no, pará," y una pausa) espera más: probablemente la frase
+    # continúa y solo se entiende bien junto con lo que sigue.
     short_s: float = 1.0
     short_end_silence_s: float = 0.9
     long_after_s: float = 2.5
-    max_seconds: float = 8.0  # más largo que esto se corta en la pausa más marcada
-    split_overlap_s: float = 1.5  # la frase siguiente arranca un poco antes del corte (ver `drop_overlap`)
+    max_seconds: float = 8.0  # una frase más larga se corta en la pausa más marcada
+    split_overlap_s: float = 1.5  # la frase siguiente comienza un poco antes del corte (ver `drop_overlap`)
     pre_roll_s: float = 0.2
     min_speech_s: float = 0.25
     partial_every_s: float = 0.6
     first_partial_s: float = 0.45
-    speaker_after_s: float = 1.0  # con esto ya se intenta saber quién es
-    # En estos idiomas el modelo rápido entiende casi igual que el preciso: si su última lectura abarcó toda la
-    # frase, esa es la versión final (sale ~0,5 s antes). En los demás (hindi, ruso…) el preciso hace falta.
+    speaker_after_s: float = 1.0  # a partir de aquí se intenta identificar al hablante
+    # En estos idiomas el modelo rápido entiende casi igual que el preciso: si su última lectura abarcó toda la frase,
+    # esa es la versión final (sale ~0,5 s antes). En los demás (hindi, ruso…) el modelo preciso es necesario.
     fast_final_languages: tuple[str, ...] = ("en",)
-    # Tu voz: en una pausa no se corta la frase hasta leer cómo termina lo que dijiste (se lee apenas empieza la
-    # pausa). Si quedó a medias ("y…", "porque…", "el…"), se espera hasta `unfinished_end_s`.
+    # Voz del jugador: en una pausa no se corta la frase hasta leer cómo termina lo dicho (la lectura comienza al
+    # iniciarse la pausa). Si quedó inconclusa ("y…", "porque…", "el…"), se espera hasta `unfinished_end_s`.
     wait_for_tail: bool = False
     unfinished_end_s: float = 1.5
 
@@ -86,14 +86,15 @@ def _plain(word: str) -> str:
 
 def drop_overlap(previous: str, text: str) -> str:
     """Una frase larga se corta con un poco de audio repetido (Whisper suele perder las últimas palabras de un audio
-    cortado a mitad de oración). Acá se sacan del comienzo de `text` las palabras que ya estaban al final de
-    `previous`."""
+    cortado a mitad de oración). Aquí se eliminan del comienzo de `text` las palabras que ya estaban al final de
+    `previous`.
+    """
     before = [_plain(word) for word in previous.split()]
     words = text.split()
     after = [_plain(word) for word in words]
     for start in range(max(0, len(before) - 10), len(before)):
         tail = before[start:]
-        # Una sola palabra repetida cuenta si es larga ("where"); "a" o "the" pueden coincidir de casualidad.
+        # Una sola palabra repetida cuenta si es larga ("where"); "a" o "the" pueden coincidir por casualidad.
         if (len(tail) >= 2 or len(tail[0]) >= 4) and after[:len(tail)] == tail:
             return " ".join(words[len(tail):])
     return text
@@ -108,18 +109,18 @@ class _Utterance:
         self.speech_frames = 0
         self.last_speech_sample = start_sample + len(audio)
         self.probs: list[float] = []
-        self.partial_samples = 0  # cuánto audio tenía la última transcripción parcial
-        self.want_tail = False  # empezó un silencio: conviene leer ya cómo termina lo que dijo
+        self.partial_samples = 0  # audio de la última transcripción parcial
+        self.want_tail = False  # comenzó un silencio: conviene leer ya cómo termina lo dicho
         self.overlaps = 0  # número de la frase anterior con la que comparte audio (frases largas cortadas)
         self.tail: tuple[Heard, int] | None = None  # última lectura hecha en una pausa y cuánto audio abarcó
         self.sentence_done = False  # lo último leído termina como una oración completa
-        self.unfinished = False  # lo último leído quedó a medias ("y…", "porque…"): seguramente sigue
-        self.tail_pending = False  # se está leyendo cómo termina (empezó una pausa)
+        self.unfinished = False  # lo último leído quedó inconcluso ("y…", "porque…"): probablemente continúa
+        self.tail_pending = False  # se está leyendo cómo termina (comenzó una pausa)
         self.clear = False  # lo último leído se entendió con seguridad
         self.language = ""
         self.speaker = 0
         self.text = ""
-        self.far = False  # fuera del radio de escucha: no se entiende ni se muestra
+        self.far = False  # fuera del radio de escucha: no se transcribe ni se muestra
 
     def audio(self) -> np.ndarray:
         if len(self.chunks) > 1:
@@ -146,10 +147,11 @@ class LiveListener:
         earshot=None,
         noise_filter: bool = False,
     ) -> None:
-        """`hint`: ejemplo de cómo se habla, para Whisper (texto o función idioma → texto). `judge`: función que dice
-        cómo lo dijo esa voz (tu perfil: con tu voz de siempre y tus umbrales); sin eso, se compara cada voz del juego
-        con cómo viene hablando. `earshot`: radio de escucha (voice/hearing.py): las voces lejanas no se entienden.
-        `noise_filter`: lo que suena a ruido y no a alguien hablando no se muestra."""
+        """`hint`: ejemplo de cómo se habla, para Whisper (texto o función idioma → texto). `judge`: función que
+        evalúa cómo lo dijo esa voz (perfil del jugador: su voz habitual y sus umbrales); sin ella, se compara
+        cada voz del juego con su propio patrón. `earshot`: radio de escucha (voice/hearing.py): las voces
+        lejanas no se entienden. `noise_filter`: lo que suena a ruido y no a una persona hablando no se muestra.
+        """
         self.final_asr = final_asr
         self.partial_asr = partial_asr
         self.speakers = speakers
@@ -157,30 +159,32 @@ class LiveListener:
         self.source_factory = source_factory
         self.on_error = on_error
         self.settings = settings or Settings()
-        self.muted_until = 0.0  # mientras suena tu propia voz traducida por los parlantes, no se escucha
+        self.muted_until = 0.0  # mientras suena la voz traducida del jugador por los parlantes, no se escucha
         self._vad = vad or StreamingVad()
-        self.language = language.split("-")[0].lower() if language else None  # si se sabe (tu voz), no se detecta
-        # Tu idioma: pesa más al detectar (el español rioplatense a veces sale como portugués), así lo que se dice
-        # en tu idioma no se subtitula.
+        # si se conoce (voz del jugador), no se detecta
+        self.language = language.split("-")[0].lower() if language else None
+        # Idioma del jugador: pesa más al detectar (el español rioplatense a veces se detecta como portugués), de modo
+        # que lo dicho en ese idioma no se subtitula.
         self.native = native.split("-")[0].lower()
         self.hint = hint
         self.judge = judge
-        self.clean = clean  # tu micrófono (no el juego): el ruido que se vuelve texto se descarta más estricto
+        # micrófono del jugador (no el juego): el ruido convertido en texto se descarta con más rigor
+        self.clean = clean
         self.earshot = earshot
         self.noise_filter = noise_filter
-        self._usual: dict[int, Usual] = {}  # cómo habla cada voz del juego (para notar sus gritos)
+        self._usual: dict[int, Usual] = {}  # cómo habla cada voz del juego (para detectar sus gritos)
         self._running = threading.Event()
         self._wake = threading.Condition()
         self._lock = threading.Lock()
         self._numbers = iter(range(1, 1 << 30))
-        self._samples = 0  # audio recibido en total
-        self._recent = np.zeros(0, dtype=np.float32)  # lo último antes de una frase (para no cortar el comienzo)
+        self._samples = 0  # total de audio recibido
+        self._recent = np.zeros(0, dtype=np.float32)  # audio previo a una frase (para no cortar el comienzo)
         self._loud = 0
         self._silence = 0
         self._current: _Utterance | None = None
         self._finished: list[_Utterance] = []
         self._final_texts: dict[int, str] = {}
-        self._languages: dict[str, float] = {}  # idiomas que se vienen escuchando (pesan más al detectar)
+        self._languages: dict[str, float] = {}  # idiomas escuchados hasta ahora (pesan más al detectar)
         self._threads: list[threading.Thread] = []
 
     @property
@@ -205,7 +209,7 @@ class LiveListener:
     def _capture(self) -> None:
         try:
             audio_io.com_ready()
-            # Búfer de ~0,5 s: si la PC está ocupada un instante (el juego, el OCR), no se pierde audio.
+            # Búfer de ~0,5 s: si la PC se ocupa un instante (juego, OCR), no se pierde audio.
             with self.source_factory().recorder(samplerate=SAMPLE_RATE, channels=1, blocksize=SAMPLE_RATE // 2) as recorder:
                 while self.running:
                     self.feed(audio_io.to_mono(recorder.record(numframes=BLOCK)))
@@ -215,16 +219,16 @@ class LiveListener:
             self._running.clear()
 
     def feed(self, samples: np.ndarray) -> None:
-        """Audio nuevo (mono, 16 kHz). Separado de la captura para poder probarlo sin dispositivos."""
+        """Audio nuevo (mono, 16 kHz). Está separado de la captura para poder probarlo sin dispositivos."""
         samples = np.asarray(samples, dtype=np.float32).ravel()
         if time.monotonic() < self.muted_until:
-            # Suena tu propia voz traducida: no se escucha (y lo que se venía escuchando se descarta).
+            # Suena la voz traducida del jugador: no se escucha y se descarta lo acumulado.
             with self._lock:
                 self._samples += len(samples)
                 self._current, self._loud, self._recent = None, 0, np.zeros(0, dtype=np.float32)
             return
         probs = self._vad.feed(samples)
-        # El detector trabaja de a 32 ms: se recorre el audio al mismo paso.
+        # El detector trabaja en bloques de 32 ms: el audio se recorre al mismo paso.
         offset = len(samples) - len(probs) * FRAME
         pending, samples = samples[:max(0, offset)], samples[max(0, offset):]
         if len(pending):
@@ -269,7 +273,7 @@ class LiveListener:
             short_and_unclear = current.speech_frames * FRAME / SAMPLE_RATE < s.short_s and not current.clear
             end = s.short_end_silence_s if short_and_unclear else s.end_silence_s
             if s.wait_for_tail and (current.unfinished or current.tail_pending or current.want_tail):
-                end = s.unfinished_end_s  # todavía no se sabe cómo terminó, o quedó a medias: se espera más
+                end = s.unfinished_end_s  # aún no se sabe cómo terminó, o quedó inconcluso: se espera más
                 quick = quick and not current.unfinished
             if silence >= end or (quick and silence >= s.quick_end_s):
                 self._close(current)
@@ -297,7 +301,7 @@ class LiveListener:
         if utterance.speech_frames * FRAME / SAMPLE_RATE >= s.min_speech_s:
             self._finished.append(utterance)
         if len(rest):
-            # Sigue hablando: lo que queda es el comienzo de la frase siguiente (misma persona, casi seguro).
+            # Sigue hablando: lo que queda es el comienzo de la frase siguiente (casi seguro del mismo hablante).
             follow = _Utterance(next(self._numbers), utterance.start_sample + len(audio) - len(rest), rest)
             follow.speech_frames = int(len(rest) / FRAME)
             follow.last_speech_sample = utterance.start_sample + len(audio)
@@ -356,7 +360,7 @@ class LiveListener:
             if tail or (first and seconds >= s.first_partial_s) or (not first and new >= s.partial_every_s):
                 audio = current.audio().copy()
                 if first and self.earshot is not None and not self.earshot.hears(speech_level(audio)):
-                    current.far = True  # suena lejos: ni se lee ni se muestra (y no gasta procesador)
+                    current.far = True  # suena lejos: no se transcribe ni se muestra (y no consume procesador)
                     return None
                 current.partial_samples = current.samples
                 current.want_tail = False
@@ -371,7 +375,9 @@ class LiveListener:
                        utterance.speaker, final, stable, intonation, sure)
 
     def _intonation(self, audio: np.ndarray, speaker: int = 0, learn: bool = False) -> str:
-        """Cómo lo dijo, comparado con cómo habla esa voz normalmente (tu perfil, o lo escuchado de esa voz)."""
+        """Cómo lo dijo, comparado con cómo habla esa voz normalmente (perfil del jugador o lo escuchado de esa
+        voz).
+        """
         tune = melody(audio)
         if tune is None:
             return ""
@@ -384,12 +390,12 @@ class LiveListener:
         return kind
 
     def _prior(self, strength: float) -> dict[str, float]:
-        """Peso de cada idioma al detectarlo: los que se vienen escuchando valen más (con poco audio, Whisper duda)."""
+        """Peso de cada idioma al detectarlo: los escuchados hasta ahora valen más (con poco audio, Whisper duda)."""
         total = sum(self._languages.values()) or 1.0
         prior = {language: 1.0 + strength * count / total for language, count in self._languages.items()}
         if self.native:
             prior[self.native] = prior.get(self.native, 1.0) + 1.0
-        # En Roblox lo más común es el inglés: con acento o con ruido, Whisper lo confundía con otros idiomas.
+        # En Roblox lo más común es el inglés: con acento o ruido, Whisper lo confundía con otros idiomas.
         prior["en"] = prior.get("en", 1.0) + 0.5
         return prior
 
@@ -416,13 +422,13 @@ class LiveListener:
                 utterance.clear = still_quiet and heard.no_speech < 0.35 and heard.logprob > -0.8
                 utterance.tail = (heard, len(audio))
         if not utterance.language and heard.language_prob >= 0.7 and len(audio) >= SAMPLE_RATE:
-            utterance.language = heard.language  # ya se sabe el idioma: las próximas pasadas no lo detectan
+            utterance.language = heard.language  # idioma conocido: las pasadas siguientes no lo detectan
         if (self.speakers and not utterance.speaker
                 and len(audio) >= self.settings.speaker_after_s * SAMPLE_RATE):
             utterance.speaker = self.speakers.peek(audio)
         utterance.text = heard.text
         stable = tail and utterance.sentence_done
-        # Se avisa aunque la frase ya haya terminado: el texto final se calcula en este mismo hilo, después.
+        # Se notifica aunque la frase ya haya terminado: el texto final se calcula después, en este mismo hilo.
         self.on_caption(self._caption(utterance, heard.text, heard.language, final=False, stable=stable,
                                       intonation=self._intonation(audio) if stable else ""))
 
@@ -446,7 +452,7 @@ class LiveListener:
             heard = self.final_asr.transcribe(audio, language=self.language, prior=self._prior(0.5), retry_beam=5,
                                               hint=self.hint, clean=self.clean)
         if self.speakers:
-            # Si no alcanza el audio para reconocer la voz, queda la que se supo mientras hablaba (o "Voz").
+            # Si el audio no alcanza para reconocer la voz, se conserva la identificada mientras hablaba (o "Voz").
             utterance.speaker = self.speakers.identify(audio, hint=utterance.speaker)
         text = heard.text if heard else ""
         if text and self.noise_filter:
@@ -461,7 +467,7 @@ class LiveListener:
             self._final_texts.pop(next(iter(self._final_texts)))
         if not text:
             if utterance.partial_samples:
-                # Se había mostrado algo mientras hablaba: se retira.
+                # Se había mostrado texto mientras hablaba: se retira.
                 self.on_caption(self._caption(utterance, "", utterance.language, final=True))
             return
         for language in self._languages:

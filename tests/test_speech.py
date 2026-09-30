@@ -1,4 +1,6 @@
-"""Cómo se dijo: pausas, preguntas, gritos; lo que aprende de tu voz; y las pruebas de micrófono y de PC."""
+"""Cómo se dijo: pausas, preguntas y gritos; lo que aprende el perfil de la voz del jugador; y las pruebas de micrófono
+y de PC.
+"""
 
 import numpy as np
 
@@ -10,7 +12,7 @@ RATE = 16000
 
 
 def tone(start_hz, end_hz, seconds=1.2, level=0.2, noise=0.0):
-    """Una "voz" (tono con armónicos) que va de un tono a otro."""
+    """Voz sintética (tono con armónicos) que varía de una frecuencia a otra."""
     t = np.arange(int(seconds * RATE)) / RATE
     freq = np.linspace(start_hz, end_hz, len(t))
     phase = 2 * np.pi * np.cumsum(freq) / RATE
@@ -23,7 +25,7 @@ def tone(start_hz, end_hz, seconds=1.2, level=0.2, noise=0.0):
 
 def test_a_phrase_left_hanging_waits_for_more():
     assert sounds_unfinished("fui a la tienda y", "es")
-    assert sounds_unfinished("Esperame porque.", "es-AR")  # Whisper pone un punto igual
+    assert sounds_unfinished("Esperame porque.", "es-AR")  # Whisper agrega igualmente el punto
     assert sounds_unfinished("I was gonna say that,", "en")
     assert not sounds_unfinished("Dale, vamos a la torre.", "es")
     assert sounds_finished("¿Vamos a la torre?", "es") and not sounds_finished("vamos a la", "es")
@@ -51,7 +53,7 @@ def test_profile_learns_your_words_and_translations(tmp_path):
     profile.learn_phrase("che, ¿vamos a farmear al lobby?", "es-AR")
     assert "farmear" in profile.hint("es")
     profile.approve("dale, esperame", "okay, wait for me", "en", "es")
-    assert profile.saved("Dale esperame", "en") == "okay, wait for me"  # sin signos ni mayúsculas: la misma frase
+    assert profile.saved("Dale esperame", "en") == "okay, wait for me"  # sin signos ni mayúsculas: es la misma frase
     assert profile.examples("en") == (("dale, esperame", "okay, wait for me"),)
     again = VoiceProfile(tmp_path / "perfil.json")  # queda guardado
     assert again.saved("dale, esperame", "en") == "okay, wait for me"
@@ -81,7 +83,7 @@ def test_mic_check_rates_good_quiet_and_noisy_microphones():
     report = analyze_mic(quiet, sentence, sentence)
     assert report.rating == "mal" and any("bajo" in tip for tip in report.tips)
     assert analyze_mic(noisy, sentence, sentence).rating in ("mal", "normal")
-    assert analyze_mic(good, "che viene a la torre", sentence).rating == "normal"  # entendió solo una parte
+    assert analyze_mic(good, "che viene a la torre", sentence).rating == "normal"  # reconoció solo una parte
     assert word_error_rate("hola che", "hola che") == 0 and word_error_rate("hola che", "") == 1
 
 
@@ -97,12 +99,13 @@ def test_your_own_question_and_shout_thresholds_are_used(tmp_path):
     for _ in range(5):
         profile.learn_melody(Melody(0.0, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0))
     question = Melody(1.7, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0)
-    assert profile.intonation(question) == ""  # con el umbral de todos (2 semitonos) no parecía pregunta
+    assert profile.intonation(question) == ""  # con el umbral general (2 semitonos) no se detecta como pregunta
     profile.calibrate({"question_rise": 1.6, "shout_db": 5.0})  # esta persona sube poco la voz al preguntar
-    assert profile.intonation(question) == "question"  # con el suyo, sí
-    profile.calibrate({"question_rise": 0.5})  # (lo que aprendía «Entrenar tu voz»: casi todo era pregunta)
+    assert profile.intonation(question) == "question"  # con su umbral calibrado, sí
+    # valor que aprendía «Entrenar tu voz»: casi todo se detectaba como pregunta
+    profile.calibrate({"question_rise": 0.5})
     statement = Melody(0.8, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0)
-    assert profile.intonation(statement) == ""  # una afirmación que sube un poquito al final no es pregunta
+    assert profile.intonation(statement) == ""  # una afirmación que sube levemente al final no es pregunta
 
 
 def test_whisper_echoes_and_copies_are_undone():
@@ -112,7 +115,7 @@ def test_whisper_echoes_and_copies_are_undone():
     assert collapse_echo("Dale. Dale. Dale.") == "Dale."
     assert collapse_echo("comandas, comandas, comandas") == "comandas"
     assert collapse_echo("Como andas? Como andas?") == "Como andas?"
-    assert collapse_echo("no no no wait for me") == "no no no wait for me"  # hay más: no se toca
+    assert collapse_echo("no no no wait for me") == "no no no wait for me"  # hay más repeticiones: no se modifica
     example = "¿Vamos a la torre? ¡Dale, esperame! ¿Alguien viene conmigo a farmear?"
     assert copied_from("¿Alguien viene conmigo a farmear?", example)
     assert not copied_from("Hola, ¿cómo andás?", example)
@@ -129,7 +132,7 @@ def test_only_clean_things_are_learned_and_old_junk_is_removed(tmp_path):
                  "yonna kiona giona giona giona kiona giona?"):
         assert not looks_clean(junk), junk
     path = tmp_path / "perfil.json"
-    path.write_text(json.dumps({  # así quedaba un perfil con la versión anterior
+    path.write_text(json.dumps({  # formato de un perfil de la versión anterior
         "phrases": {"es": ["Hola, ¿cómo te va?", "Hola Hola Hola", "comandas, comandas, comandas"]},
         "saved": {"en|hola hola hola": "Hey hey, hey", "en|dale esperame": "wait for me",
                   "en|yonna kiona giona giona giona kiona giona?": "Yonna, kiona"},
@@ -139,8 +142,8 @@ def test_only_clean_things_are_learned_and_old_junk_is_removed(tmp_path):
     profile = VoiceProfile(path)
     assert profile.data["phrases"]["es"] == ["Hola, ¿cómo te va?"]
     assert profile.data["saved"] == {"en|dale esperame": "wait for me"}
-    assert profile.vocabulary("es") == ("tradear", "lauti")  # las comunes no hacen falta
-    assert profile.data["calibration"]["question_rise"] == 1.5  # una pregunta tiene que subir
-    assert profile.hint("es") and "lauti" not in profile.hint("es")  # a Whisper, solo el ejemplo fijo
+    assert profile.vocabulary("es") == ("tradear", "lauti")  # las palabras comunes no se incluyen
+    assert profile.data["calibration"]["question_rise"] == 1.5  # una pregunta debe subir el tono
+    assert profile.hint("es") and "lauti" not in profile.hint("es")  # a Whisper solo se le envía el ejemplo fijo
     profile.remember("Hola Hola Hola", "en", "Hey hey hey")
     assert profile.saved("hola hola hola", "en") is None

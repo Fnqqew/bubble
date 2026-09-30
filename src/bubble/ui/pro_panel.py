@@ -1,10 +1,11 @@
-"""La página «✦ Pro»: Bubble Pro, la voz entendida y hablada en la nube (Deepgram) con tu propia cuenta.
+"""La página «✦ Pro»: Bubble Pro, con voz entendida y hablada en la nube (Deepgram) mediante la cuenta propia del
+jugador.
 
 1. Qué cambia de Basic a Pro (lado a lado) y el interruptor (en el juego: Ctrl+P en la barra para escribir).
 2. Las voces de Pro: personalidad (alegre, canchera o tranquila) y una prueba.
-3. Tu clave: se prueba y se guarda cifrada (cloud/keys.py).
-4. Cuánto se usó este mes y cómo se ahorra.
-5. «Comparar con mi voz»: lo que entiende tu PC y lo que entiende la nube, y cuánto tarda cada uno.
+3. La clave: se prueba y se guarda cifrada (cloud/keys.py).
+4. Consumo del mes y cómo ahorrar.
+5. «Comparar con mi voz»: lo que entiende la PC y lo que entiende la nube, y cuánto tarda cada una.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ COMPARISON = (
     ("Voces que hablan por vos", "Las de tu PC", "Naturales y con personalidad (hay acento argentino)"),
     ("Tu voz traducida", "Suena cuando está lista", "Empieza a sonar en ~0,35 s"),
     ("Tu procesador", "Trabaja para la voz", "Queda libre para Roblox"),
-    ("Costo", "Gratis", "Pagás lo que usás: unos 0,35 US$ por hora de voz, y arrancás con 200 US$ gratis"),
+    ("Costo", "Gratis", "Pagás lo que usás: unos 0,35 US$ por hora de voz, y empezás con 200 US$ gratis"),
 )
 INTRO = (("Entiende a todos, aunque hablen rápido o mezclen idiomas, y habla por vos con voces que suenan de "
           "verdad. La traducción sigue siendo con tu cuenta de Claude."))
@@ -49,13 +50,13 @@ SAMPLE = {"es": "¡Buenísimo! Esperame en la torre, ya voy.", "en": "Nice! Wait
 
 
 def _gold(label: ttk.Label) -> ttk.Label:
-    """Un texto de Pro: siempre dorado, también en Basic (ver app_view.recolor)."""
+    """Texto de Pro: siempre dorado, también en Basic (ver app_view.recolor)."""
     label.gold = True
     return label
 
 
 def _money(value: float, decimals: int = 2) -> str:
-    """Número con coma decimal (como se escribe en español)."""
+    """Número con coma decimal (formato español)."""
     return f"{value:.{decimals}f}".replace(".", ",")
 
 
@@ -70,7 +71,7 @@ class ProPanel:
         self.key_var = tk.StringVar()
         self.built = False
         self._busy = False
-        self._locked: list[tuple[ttk.Frame, ttk.Label]] = []  # tarjetas de Pro y su cartelito
+        self._locked: list[tuple[ttk.Frame, ttk.Label]] = []  # tarjetas de Pro y su cartel de bloqueo
 
     def build_page(self, page) -> None:
         from ..cloud.speak import PERSONALITIES
@@ -87,8 +88,8 @@ class ProPanel:
         self.switch.pack(side="left")
         self.plan_label = ttk.Label(row, text="", font="SunValleyCaptionFont", foreground=colors["muted"])
         self.plan_label.pack(side="right")
-        widgets.muted(hero, "En el juego, Ctrl+P en la barra para escribir te pasa de Basic a Pro al toque.")
-        # Sin Claude: Pro es lo que traduce (con créditos), así que Basic queda bloqueado hasta que conectes Claude.
+        widgets.muted(hero, "En el juego, Ctrl+P en la barra para escribir te cambia de Basic a Pro al instante.")
+        # Sin Claude, Pro es lo que traduce (con créditos), por lo que Basic queda bloqueado hasta conectar Claude.
         self.no_claude = ttk.Frame(hero)
         row = ttk.Frame(self.no_claude)
         row.pack(fill="x")
@@ -102,7 +103,7 @@ class ProPanel:
                   foreground=colors["warn"], wraplength=460, justify="left").pack(anchor="w", pady=(6, 0))
 
         box = widgets.card(page, "Basic y Pro")
-        # Con Pro, lo de Basic queda difuminado (así no se confunde qué está andando).
+        # Con Pro activo, lo de Basic se muestra difuminado para no confundir qué está en uso.
         self.comparison_note = _gold(ttk.Label(box, text="", font="SunValleyCaptionFont", foreground=gold))
         grid = self.comparison = ttk.Frame(box)
         grid.pack(fill="x")
@@ -136,9 +137,9 @@ class ProPanel:
 
         box = widgets.card(page, "Tu clave de Deepgram", "Pro usa tu propia cuenta de Deepgram, así que pagás "
                                                          "solo lo que usás.")
-        widgets.muted(box, "1. Creá tu cuenta (es gratis y te regalan 200 US$). 2. En Deepgram, entrá a «API "
-                           "Keys», tocá «Create a New API Key» y copiala. 3. Pegala acá. Queda guardada "
-                           "cifrada y solo tu usuario de Windows la puede leer.")
+        widgets.muted(box, "1. Creá tu cuenta (es gratis e incluye 200 US$). 2. En Deepgram, entrá a «API Keys», "
+                           "tocá «Create a New API Key» y copiala. 3. Pegala acá. Queda guardada cifrada y solo tu "
+                           "usuario de Windows la puede leer.")
         row = ttk.Frame(box)
         row.pack(fill="x", pady=(8, 0))
         ttk.Button(row, text="Crear cuenta en Deepgram", command=lambda: webbrowser.open(pro.SIGNUP_URL)).pack(
@@ -176,7 +177,7 @@ class ProPanel:
         self.refresh()
 
     def _pro_only(self, page, title: str, subtitle: str = ""):
-        """Una tarjeta que solo se usa con Pro: en Basic queda difuminada y bloqueada (ver apply_plan)."""
+        """Tarjeta de uso exclusivo de Pro: en Basic se muestra difuminada y bloqueada (ver apply_plan)."""
         box = widgets.card(page, title, subtitle)
         note = ttk.Label(box.master, text="", font="SunValleyCaptionFont")
         note.pack(anchor="w", before=box, pady=(0, 2))
@@ -184,18 +185,19 @@ class ProPanel:
         return box
 
     def apply_plan(self, animate: bool = True) -> None:
-        """En Basic, lo de Pro se ve pero difuminado y no se puede tocar ni probar (así nada anda a medias); en Pro,
-        se desbloquea con una animación."""
+        """En Basic, lo de Pro se ve difuminado y no se puede usar ni probar, para que nada funcione a medias; en
+        Pro se desbloquea con una animación.
+        """
         if not self.built:
-            return  # (la página se arma la primera vez que la abrís: ahí se aplica)
+            return  # (la página se arma al abrirla por primera vez; ahí se aplica)
         on = pro.active()
         colors = widgets.palette()
         for box, note in self._locked:
             widgets.dim(box, not on, animate)
             note.configure(text="✦  Incluido en tu plan Pro" if on else "🔒  Solo en Pro · activalo arriba",
                            foreground=pro.gold() if on else colors["muted"])
-        # Lo de Basic se ve difuminado (como lo de Pro en Basic): con Pro activado (queda en pausa) y sin Claude (se
-        # usa recién cuando lo conectes). Son dos motivos distintos: se libera cuando no queda ninguno.
+        # Lo de Basic se muestra difuminado (igual que lo de Pro en Basic) por dos motivos distintos: Pro activado
+        # (Basic queda en pausa) y falta de Claude (se usará al conectarlo). Se libera cuando no queda ninguno.
         without_claude = self.app.cloud_translation
         widgets.dim(self.comparison, on, animate, only=self._basic_cells, reason="pro")
         widgets.dim(self.comparison, without_claude, animate, only=self._basic_cells, reason="sin_claude")
@@ -214,7 +216,7 @@ class ProPanel:
     def refresh(self) -> None:
         self.enabled_var.set(pro.active())
         if not self.built:
-            return  # la página se arma la primera vez que la abrís
+            return  # la página se arma al abrirla por primera vez
         from ..cloud.keys import load_key
 
         has_key = bool(load_key())
@@ -223,7 +225,7 @@ class ProPanel:
         elif not has_key:
             self.key_state.configure(text="Todavía no hay una clave.")
         locked = self.app.cloud_translation  # sin Claude, Pro no se apaga (es lo que traduce: ver app.set_pro)
-        self.switch.state(["!disabled"] if has_key else ["disabled"])  # (lo demás: ver apply_plan)
+        self.switch.state(["!disabled"] if has_key else ["disabled"])  # (el resto: ver apply_plan)
         self.enabled_var.set(pro.active())
         self.plan_label.configure(text="Pro traduce sin Claude" if locked else "Estás usando Pro" if pro.active() else
                                   ("Estás usando Basic" if has_key else "Primero guardá tu clave (abajo)"))
@@ -299,7 +301,9 @@ class ProPanel:
 
     # ------------------------------------------------------------ probar la voz de Pro
     def _try_voice(self) -> None:
-        """Una frase con la voz de Pro (la personalidad elegida), en tus auriculares. Anda aunque estés en Basic."""
+        """Reproduce una frase con la voz de Pro (la personalidad elegida) en los auriculares del jugador. Funciona
+        también en Basic.
+        """
         if self._busy:
             return
         self._busy = True

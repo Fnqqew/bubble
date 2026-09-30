@@ -12,15 +12,15 @@ outgoing_language = "auto"
 #   2 = Amable: natural y cálido, palabras completas
 #   3 = Casual: relajado, solo jerga muy conocida
 #   4 = Gamer: abreviaturas y jerga comunes de los jugadores de ese idioma
-#   5 = Jerga nativa: como escribe un pibe gamer de ese país
+#   5 = Jerga nativa: como escribe un jugador joven de ese país
 tone = 3
 # En qué idioma se ve Bubble. "auto" = el de Windows. Ejemplos: "es", "en", "pt", "ja".
 ui_language = "auto"
-# Bajar e instalar solo las versiones nuevas, cuando no estás jugando.
+# Descargar e instalar automáticamente las versiones nuevas, cuando no estás jugando.
 auto_update = false
 
 [translation]
-# Líneas recientes del chat que se mandan como contexto (mejora la precisión).
+# Líneas recientes del chat que se envían como contexto (mejora la precisión).
 context_lines = 6
 # Mensajes cortos (<= esta cantidad de palabras) se guardan en cache.
 cache_max_words = 6
@@ -36,16 +36,16 @@ adapt_slang = false
 # Usa la suscripción de Claude con la que iniciaste sesión en Claude Code.
 # Alias: "opus", "sonnet", "haiku", o un ID completo como "claude-opus-5-5".
 model = "opus"
-# La voz (lo que decís y lo que te dicen) y las burbujas van por su propia sesión, sin pensar antes de responder.
-# "haiku": tu voz se traduce en ~0,75 s (con Opus ~1,9 s), casi con la misma calidad (medido). "" = el mismo que `model`.
+# La voz (lo que decís y lo que te dicen) y las burbujas usan su propia sesión, sin razonamiento previo.
+# "haiku": la voz se traduce en unos 0,75 s (con Opus, 1,9 s) con una calidad muy similar. "" = el mismo que `model`.
 voice_model = "haiku"
 # low = más rápido. medium/high = más razonamiento (más lento).
 effort = "low"
 # Sesiones de Claude abiertas como máximo (se abren solas si llegan pedidos juntos y se cierran al rato).
 pool_size = 3
-# Cada N traducciones la sesión se renueva (se abre la nueva antes de cerrar la vieja: no hay espera).
+# Cada N traducciones la sesión se renueva (la nueva se abre antes de cerrar la anterior, sin esperas).
 session_max_turns = 15
-# Ruta a claude.exe. Vacío = se busca solo (PATH, instalador nativo o extensión de VS Code).
+# Ruta a claude.exe. Vacío = se busca automáticamente (PATH, instalador nativo o extensión de VS Code).
 cli_path = ""
 
 [roblox]
@@ -61,13 +61,13 @@ display_mode = "inline"
 # Traducir también las burbujas de texto sobre la cabeza de los jugadores.
 translate_bubbles = true
 bubble_interval_s = 0.06
-# Cada cuántos segundos se mira si el chat cambió (es barato: solo se lee con OCR cuando cambia).
+# Cada cuántos segundos se revisa si el chat cambió (consume poco: el OCR solo se ejecuta cuando hay cambios).
 poll_interval_s = 0.08
 # Rendimiento: "auto" se adapta a tu procesador (mide lo que cuesta cada lectura y la espacia para no quitarle
-# rendimiento a Roblox); "alta", "media" o "baja" lo fijan a mano. Los intervalos de arriba son el ritmo base.
+# rendimiento a Roblox); "alta", "media" o "baja" lo fijan manualmente. Los intervalos de arriba son el ritmo base.
 performance = "auto"
 # Capturar la pantalla con la placa de video (DXGI: AMD, NVIDIA o Intel). Usa mucho menos CPU; si falla, se
-# usa la captura normal sola.
+# usa automáticamente la captura normal.
 gpu_capture = true
 # Segundos que cada traducción queda visible en el overlay.
 overlay_seconds = 20
@@ -85,17 +85,17 @@ ocr_language = ""
 # Instalar la parte de voz:  .venv\Scripts\python.exe -m pip install -e ".[voz]"
 # Subtítulos de lo que te dicen por el chat de voz (se escucha lo que suena en la PC).
 subtitles = false
-# Tu voz traducida para los demás. speak_mode: "boton" (mientras apretás push_to_talk) o "directo" (sin botón).
+# Tu voz traducida para los demás. speak_mode: "boton" (mientras presionás push_to_talk) o "directo" (sin botón).
 speak = false
 speak_mode = "boton"
 push_to_talk = "mouse5"
 # Cómo suena: "femenina" o "masculina", y la velocidad (1.0 = normal).
 gender = "femenina"
 speed = 1.0
-# Escuchar vos también tu voz traducida (en tus auriculares, un poco más bajo).
+# Escuchar también tu voz traducida en tus auriculares, a menor volumen.
 hear_myself = true
 # Tu micrófono real (vacío = el predeterminado de Windows). Con el micrófono virtual (VB-Cable) instalado, Bubble lo
-# pasa al virtual junto con la voz traducida; en Roblox elegís «CABLE Output».
+# envía al virtual junto con la voz traducida; en Roblox elegís «CABLE Output».
 mic = ""
 pass_my_voice = true
 # Reconocimiento de voz (texto final): "auto" (según tu procesador), "tiny", "base" o "small".
@@ -109,10 +109,11 @@ earshot = "normal"
 # página «✦ Pro» (ahí se pega la clave, que se guarda cifrada: no va en este archivo).
 enabled = false
 provider = "deepgram"
-# Quién habla (Voz 1, Voz 2…): lo hace tu PC gratis; con true lo hace la nube (más preciso con voces pisadas;
+# Quién habla (Voz 1, Voz 2…): lo hace tu PC gratis; con true lo hace la nube (más preciso con voces superpuestas;
 # Deepgram lo cobra aparte, ~0,12 US$ por hora de voz).
 diarize = false
-# Las voces de la nube para tu voz traducida y el chat a voz, y su personalidad: "alegre", "canchera" o "tranquila".
+# Las voces de la nube para tu voz traducida y el chat a voz, y su personalidad:
+# "alegre", "canchera" (Expresiva) o "tranquila".
 voices = true
 personality = "canchera"
 

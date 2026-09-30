@@ -1,4 +1,4 @@
-"""Lee el chat de Roblox periódicamente: captura → OCR → mensajes visibles (con ubicación) y nuevos."""
+"""Lee el chat de Roblox periódicamente: captura, OCR y mensajes visibles (con su ubicación) y nuevos."""
 
 from __future__ import annotations
 
@@ -25,10 +25,10 @@ log = logging.getLogger(__name__)
 
 
 def fingerprint_changed(a: bytes, b: bytes) -> int:
-    """Cantidad de píxeles distintos entre dos huellas (muchísimos si no se pueden comparar).
+    """Cantidad de píxeles distintos entre dos huellas (un valor muy alto si no se pueden comparar).
 
-    Se cuentan píxeles y no un porcentaje: un mensaje corto que aparece en un lugar vacío del chat cambia
-    muy poco de la imagen, pero tiene que notarse igual.
+    Se cuentan píxeles y no un porcentaje: un mensaje corto que aparece en un lugar vacío del chat modifica muy poco
+    la imagen, pero debe detectarse igualmente.
     """
     if not a or len(a) != len(b):
         return 1 << 30
@@ -36,10 +36,11 @@ def fingerprint_changed(a: bytes, b: bytes) -> int:
 
 
 def text_fingerprint(image: Image.Image) -> bytes:
-    """Huella barata del texto del chat, sobre la captura sin preparar: dónde hay letras blancas puras (el texto de
-    los mensajes), en bloques de 3x3. El fondo (cielo, pasto, una pared clara que pasa detrás cuando el fondo del
-    chat se desvanece) casi nunca es blanco puro: moverse con la cámara no la cambia. Alcanza para saber si el chat
-    cambió: leer con OCR cuesta ~50 ms; esto ~1 ms."""
+    """Huella barata del texto del chat, calculada sobre la captura sin preparar: marca dónde hay letras blancas puras
+    (el texto de los mensajes), en bloques de 3x3. El fondo (cielo, pasto, una pared clara que pasa detrás cuando el
+    fondo del chat se desvanece) casi nunca es blanco puro, así que mover la cámara no la altera. Basta para saber
+    si el chat cambió: leer con OCR cuesta ~50 ms; esto ~1 ms.
+    """
     white = np.asarray(image.convert("RGB")).min(axis=2) >= WHITE_TEXT
     height, width = white.shape[0] // 3 * 3, white.shape[1] // 3 * 3
     blocks = white[:height, :width].reshape(height // 3, 3, width // 3, 3).any(axis=(1, 3))
@@ -47,23 +48,24 @@ def text_fingerprint(image: Image.Image) -> bytes:
 
 
 def _uncovered_bands(image: Image.Image, items: list[ChatItem]) -> list[tuple[int, int]]:
-    """Franjas con letras blancas que no salieron como mensaje (ni aviso del sistema)."""
+    """Franjas con letras blancas que no salieron como mensaje ni como aviso del sistema."""
     bands = []
     for top, bottom in white_text_bands(image):
         center = (top + bottom) / 2
-        # Una lectura dudosa no cuenta como cubierta: se vuelve a leer para confirmarla (o descartarla).
+        # Una lectura dudosa no cuenta como cubierta: se vuelve a leer para confirmarla o descartarla.
         if not any(row.top - 4 <= center <= row.bottom + 4 for item in items if not item.uncertain for row in item.rows):
             bands.append((top, bottom))
     return bands
 
 
 def _uncovered(image: Image.Image, items: list[ChatItem]) -> bool:
-    """Hay una línea con letras blancas que no salió como mensaje: la lectura quedó incompleta."""
+    """Indica si hay una línea con letras blancas que no salió como mensaje, es decir, si la lectura quedó incompleta.
+    """
     return bool(_uncovered_bands(image, items))
 
 
 def _moved_rows(rows, dy: int):
-    """Filas leídas en un recorte, llevadas a la posición en la captura entera."""
+    """Filas leídas en un recorte, desplazadas a su posición en la captura completa."""
     return [replace(row, top=row.top + dy, words=tuple(replace(word, top=word.top + dy) for word in row.words))
             for row in rows]
 
@@ -74,19 +76,20 @@ def _grab_fingerprint(region: Rect) -> tuple[Image.Image, bytes]:
 
 
 def _ink_blocks(prepared: Image.Image, block: int = 8) -> np.ndarray:
-    """Tinta (oscuridad) promedio de cada fila en bloques de `block` px de ancho."""
+    """Tinta (oscuridad) promedio de cada fila, en bloques de `block` px de ancho."""
     ink = 255.0 - np.asarray(prepared, dtype=np.float32)
     width = ink.shape[1] // block * block
     return ink[:, :width].reshape(ink.shape[0], -1, block).mean(axis=2)
 
 
 def estimate_shift(before: Image.Image, after: Image.Image, max_shift: int = 90) -> int:
-    """Cuántos píxeles se movió verticalmente el texto del chat (negativo: subió, llegó un mensaje nuevo).
+    """Desplazamiento vertical del texto del chat, en píxeles (negativo: subió porque llegó un mensaje nuevo).
 
     Compara las dos imágenes preparadas (letras oscuras sobre blanco) reducidas a bloques de 8 px de ancho: cada
-    línea del chat tiene otro texto, así que solo coinciden en el desplazamiento correcto (comparar solo cuánta
-    tinta hay por fila no alcanza: líneas de largo parecido se confunden). Toma unos milisegundos: así las
-    traducciones se mueven con el chat al instante, sin esperar el OCR. Devuelve 0 si no hay un desplazamiento claro.
+    línea del chat tiene un texto distinto, por lo que solo coinciden con el desplazamiento correcto (comparar
+    únicamente la tinta por fila no alcanza: las líneas de largo parecido se confunden). Toma unos milisegundos, de
+    modo que las traducciones siguen al chat de inmediato, sin esperar al OCR. Devuelve 0 si no hay un
+    desplazamiento claro.
     """
     a, b = _ink_blocks(before), _ink_blocks(after)
     height = len(a)
@@ -94,8 +97,8 @@ def estimate_shift(before: Image.Image, after: Image.Image, max_shift: int = 90)
         return 0
 
     def error(x: np.ndarray, y: np.ndarray) -> float:
-        # Solo las filas que mejor coinciden: el mensaje nuevo que apareció (o el que se fue) no tiene con qué
-        # coincidir y no debe pesar.
+        # Se consideran solo las filas que mejor coinciden: el mensaje nuevo (o el que salió) no tiene con qué coincidir
+        # y no debe influir.
         rows = np.sort(np.abs(x - y).mean(axis=1))
         return float(rows[: max(1, int(len(rows) * 0.8))].mean())
 
@@ -115,12 +118,12 @@ def estimate_shift(before: Image.Image, after: Image.Image, max_shift: int = 90)
 
 @dataclass
 class ChatFrame:
-    """Lo que se ve del chat en una captura: la imagen, dónde está en pantalla y sus mensajes."""
+    """Lo visible del chat en una captura: la imagen, su ubicación en pantalla y sus mensajes."""
 
     image: Image.Image
     region: Rect
     items: list[ChatItem]
-    # Hasta dónde llega el texto del chat (dentro de la imagen): las traducciones no pasan de ahí. 0 = no se sabe.
+    # Límite derecho del texto del chat (dentro de la imagen); las traducciones no lo superan. 0 = desconocido.
     text_right: float = 0.0
 
 
@@ -143,16 +146,16 @@ class ChatWatcher:
         self.on_message = on_message
         self.on_error = on_error
         self.on_frame = on_frame
-        # Apenas el chat se desplaza (llegó un mensaje y todo subió), antes de leerlo con OCR: las traducciones
-        # se mueven con él al instante en vez de quedar corridas una línea hasta la próxima lectura.
+        # Se invoca apenas el chat se desplaza (llegó un mensaje y todo subió), antes del OCR: las traducciones lo
+        # siguen de inmediato en lugar de quedar desfasadas una línea hasta la próxima lectura.
         self.on_shift = on_shift
         self.interval_s = interval_s
-        # Con `pacer`, la espera entre lecturas se adapta a lo que cuesta cada lectura en esta PC.
+        # Con `pacer`, la espera entre lecturas se ajusta al costo de cada lectura en esta PC.
         self.pacer = pacer
         self._task: asyncio.Task | None = None
         self._wrap_region: Rect | None = None
         self._wrap_right = 0.0
-        self._text_right = 0.0  # lo más a la derecha que llegó un mensaje (también con el chat sin fondo)
+        self._text_right = 0.0  # posición más a la derecha de un mensaje (también con el chat sin fondo)
         self._last_parsed: list[ChatItem] | None = None
         self._last_region: Rect | None = None
         self._last_fingerprint: bytes = b""
@@ -161,7 +164,7 @@ class ChatWatcher:
         self._incomplete_since = 0.0
 
     RETRY_S = 0.4  # relectura de una lectura incompleta
-    RETRY_SLOW_S = 2.0  # si sigue incompleta hace rato (texto que no es un mensaje), de a poco
+    RETRY_SLOW_S = 2.0  # si la lectura sigue incompleta (texto que no es un mensaje), espaciada
 
     def _should_retry(self, now: float) -> bool:
         if not self._incomplete_since:
@@ -170,12 +173,13 @@ class ChatWatcher:
         return now - self._last_read_at >= wait
 
     async def _read(self, image: Image.Image, prepared: Image.Image, region: Rect) -> list[ChatItem]:
-        """Lee el chat. Si su fondo oscuro se desvaneció (texto directo sobre el juego), se lee también con otra
-        preparación y se suman los mensajes que solo salieron en esa."""
+        """Lee el chat. Si el fondo oscuro se desvaneció (texto directo sobre el juego), lo lee también con otra
+        preparación y agrega los mensajes que solo aparecen en esa.
+        """
         rows = await self.ocr.recognize(prepared)
         faded = looks_faded(image)
-        # Borde donde Roblox corta las líneas largas: el más a la derecha visto en esta región (solo con el fondo
-        # oscuro: sobre el juego, un borde de un árbol leído como texto lo correría).
+        # Borde donde Roblox corta las líneas largas: el más a la derecha visto en esta región. Solo se actualiza con
+        # fondo oscuro: sobre el juego, el borde de un árbol leído como texto lo desplazaría.
         if region != self._wrap_region:
             self._wrap_region, self._wrap_right, self._text_right = region, 0.0, 0.0
         if not faded:
@@ -184,9 +188,9 @@ class ChatWatcher:
         parsed = parse_chat_items(rows, self.tracker.is_known_name, image.width, wrap, image.height)
         bands = await asyncio.to_thread(_uncovered_bands, image, parsed)
         if bands:
-            # Renglones con texto que el OCR no devolvió: pasa sobre todo con dos mensajes idénticos seguidos (el
-            # OCR de Windows devuelve uno solo; la otra traducción se apagaba o quedaba corrida un renglón). Se lee
-            # cada franja sola: así sale.
+            # Renglones con texto que el OCR no devolvió: ocurre sobre todo con dos mensajes idénticos seguidos (el OCR
+            # de Windows devuelve uno solo, y la otra traducción se ocultaba o quedaba desfasada un renglón). Leer cada
+            # franja por separado lo resuelve.
             found = []
             heights = sorted(row.height for item in parsed for row in item.rows) or [18.0]
             reach = heights[len(heights) // 2] * 0.8  # un renglón entero alrededor del centro (no media letra)
@@ -201,16 +205,16 @@ class ChatWatcher:
             if extra:
                 parsed = sorted(parsed + extra, key=lambda item: item.top)
         if faded and await asyncio.to_thread(_uncovered, image, parsed):
-            # Solo si a la primera lectura le faltó algo: la segunda cuesta otro OCR entero.
+            # Solo si la primera lectura quedó incompleta: la segunda cuesta otro OCR completo.
             other = await asyncio.to_thread(binarize_local_background, image)
             extra = parse_chat_items(await self.ocr.recognize(other), self.tracker.is_known_name, image.width, wrap)
             missing = [item for item in extra if not any(abs(item.top - known.top) < 9 for known in parsed)]
             for item in missing:
-                item.uncertain = True  # puede ser texto mal leído: un mensaje nuevo así se confirma con otra lectura
+                item.uncertain = True  # posible texto mal leído: un mensaje nuevo así se confirma con otra lectura
             parsed = sorted(parsed + missing, key=lambda item: item.top)
         if faded:
-            # Sin el fondo oscuro el OCR se equivoca mucho más (letras sobre el agua, el pasto...): un mensaje nuevo
-            # se traduce cuando se lee igual en otra captura (una fracción de segundo después).
+            # Sin el fondo oscuro el OCR falla mucho más (letras sobre el agua, el pasto, etc.): un mensaje nuevo se
+            # traduce solo cuando otra captura, una fracción de segundo después, lo lee igual.
             for item in parsed:
                 item.uncertain = True
         return parsed
@@ -235,21 +239,21 @@ class ChatWatcher:
             try:
                 region = await asyncio.to_thread(self.region_provider)
                 if region is None or region.width < 20 or region.height < 20:
-                    self.on_frame(None)  # saliste de Roblox: se ocultan las traducciones
+                    self.on_frame(None)  # se salió de Roblox: se ocultan las traducciones
                     await asyncio.sleep(0.5)
                     continue
                 mark = reading_mark()
                 if mark is None:
-                    await asyncio.sleep(0.05)  # estás sacando una captura: las traducciones se ven en ella
+                    await asyncio.sleep(0.05)  # se está tomando una captura: las traducciones aparecen en ella
                     continue
                 watch = Stopwatch()
                 image, fingerprint = await asyncio.to_thread(watch.cpu, _grab_fingerprint, region)
                 if not still_readable(mark):
                     continue
                 now = time.monotonic()
-                # Si el texto del chat no cambió (mismas letras), no hace falta volver a leerlo. Pero una lectura
-                # incompleta (hay letras que no salieron como mensaje: fondo complicado detrás del chat) se repite cada
-                # tanto: con la cámara moviéndose, la próxima suele salir bien.
+                # Si el texto del chat no cambió (mismas letras), no hace falta volver a leerlo. Una lectura incompleta
+                # (hay letras que no salieron como mensaje, por un fondo complicado detrás del chat) sí se repite cada
+                # cierto tiempo: con la cámara en movimiento, la siguiente suele salir bien.
                 same = (self._last_parsed is not None and region == self._last_region
                         and fingerprint_changed(self._last_fingerprint, fingerprint) < 6)
                 if same and not self._should_retry(now):
@@ -274,7 +278,7 @@ class ChatWatcher:
                 # Los avisos del sistema del juego no se traducen ni se tapan.
                 items = [item for item in parsed if item.kind == "player"]
                 new = self.tracker.update([item.line for item in items], [item.uncertain for item in items])
-                # Nombres unificados (misma persona aunque el OCR lea su nombre distinto).
+                # Nombres unificados (misma persona aunque el OCR lea su nombre de forma distinta).
                 for item, canonical, origin, uid in zip(items, self.tracker.visible, self.tracker.visible_origins,
                                                         self.tracker.visible_ids):
                     item.speaker, item.origin, item.uid = canonical.speaker, origin, uid

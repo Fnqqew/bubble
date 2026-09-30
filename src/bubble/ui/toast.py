@@ -1,5 +1,7 @@
-"""Avisos cortos dentro del juego ("✦ Bubble Pro activado"): una pastilla arriba al centro que aparece, se queda un
-momento y se desvanece. No toma el foco ni tapa los clics (es una ventana con transparencia real, ver layered.py)."""
+"""Avisos cortos dentro del juego ("✦ Bubble Pro activado"): una pastilla en la parte superior central que aparece,
+permanece un momento y se desvanece. No toma el foco ni bloquea los clics (es una ventana con transparencia real, ver
+layered.py).
+"""
 
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ STAR = "✦"
 
 
 def symbol_font(size: int):
-    """La letra de símbolos de Windows (la del chat no tiene ✦ y salía un cuadradito)."""
+    """Fuente de símbolos de Windows; la del chat no incluye ✦ y se mostraba un recuadro vacío."""
     from PIL import ImageFont
 
     try:
@@ -73,7 +75,7 @@ class Toast:
         x = area.left + (area.width - image.width) // 2
         y = area.top + int(area.height * 0.1)
         self.window.hide()
-        self.window.update(image, x, y)  # aparece desvaneciéndose (layered.py)
+        self.window.update(image, x, y)  # aparece con fundido (layered.py)
         self._job = self.root.after(HOLD_MS, self._fade_out)
 
     def _fade_out(self, step: int = 0, steps: int = 12) -> None:

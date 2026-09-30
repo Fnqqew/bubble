@@ -1,7 +1,8 @@
-"""La voz: subtítulos de lo que te dicen y tu voz traducida para los demás (página «Voz» de la ventana).
+"""La voz: subtítulos de lo que dicen los demás jugadores y la voz del jugador traducida para que los demás la escuchen
+(página «Voz» de la ventana).
 
-Todo el audio se procesa en tu PC (Whisper para entender, Piper para hablar); Claude solo traduce el texto. Para que
-los demás te escuchen, Bubble habla por un micrófono virtual, como Soundpad (ver voice/bridge.py).
+Todo el audio se procesa en la PC (Whisper para reconocer, Piper para hablar); Claude solo traduce el texto. Para que
+los demás escuchen al jugador, Bubble habla por un micrófono virtual, como Soundpad (ver voice/bridge.py).
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ SAMPLES = {
 NO_VOICE_PACK = 'Falta instalar la parte de voz: .venv\\Scripts\\python.exe -m pip install -e ".[voz]"'
 
 
-WARM_DELAY_MS = 600  # con Tab: la voz se prepara cuando dejás de cambiar de idioma
+WARM_DELAY_MS = 600  # con Tab: la voz se prepara cuando se deja de cambiar de idioma
 OUT_OF_GAME_S = 3.0  # fuera del juego más que esto, las voces del juego no se escuchan
 
 
@@ -47,23 +48,23 @@ class VoicePanel:
         self.app = app
         self.config = app.config.voice
         self.models = None  # (whisper final, whisper rápido o None, voces conocidas)
-        self._kind = ""  # "nube" o "pc": con qué se armaron la escucha y tu voz (si cambia, se rearman)
-        self._warm_after = None  # preparar la voz del idioma elegido (con Tab), un momento después
+        self._kind = ""  # "nube" o "pc": con qué se armaron la escucha y la voz (si cambia, se rearman)
+        self._warm_after = None  # preparar la voz del idioma elegido (con Tab) poco después
         self._cloud_warned = 0.0
-        self._cloud_voices = None  # las voces de la nube (Bubble Pro), sobre las de tu PC
-        self._out_of_game = 0.0  # desde cuándo no estás en el juego (para pausar la escucha)
+        self._cloud_voices = None  # voces de la nube (Bubble Pro), con prioridad sobre las de la PC
+        self._out_of_game = 0.0  # desde cuándo el jugador no está en el juego (pausa la escucha)
         from ..voice.hearing import Earshot
 
-        self.earshot = Earshot(self.config.earshot)  # radio de escucha (voice/hearing.py): se mantiene entre rearmados
+        self.earshot = Earshot(self.config.earshot)  # radio de escucha (voice/hearing.py): se conserva entre rearmados
         self.voices = None
         self.out = None  # la voz sintética (ver voice/pipelines.py)
-        self.bridge = None  # tu micrófono pasando al virtual (voice/bridge.py)
+        self.bridge = None  # micrófono real pasando al virtual (voice/bridge.py)
         self.listener = None
-        self.speaker = None  # tu voz: con tecla o directa
+        self.speaker = None  # voz del jugador: con tecla o directa
         self.subtitles = SubtitleView()
         self.board = None  # frases a la vista (ver voice/captions.py)
         self._preparing = False
-        self._samples: dict[tuple, object] = {}  # frases de prueba ya dichas
+        self._samples: dict[tuple, object] = {}  # frases de prueba ya pronunciadas
         self.subtitles_var = tk.BooleanVar(value=self.config.subtitles)
         self.speak_var = tk.BooleanVar(value=self.config.speak)
         self.mode_var = tk.StringVar(value=self.config.speak_mode if self.config.speak_mode in MODES else "boton")
@@ -74,15 +75,16 @@ class VoicePanel:
         self.earshot_var = tk.StringVar(value=self.earshot.radius)
         self._cable_ok = True  # hasta revisar los dispositivos
         self._soundpad = False  # el micrófono de Windows es el virtual (ver voice/devices.py)
-        # El micrófono virtual va a ser el de Windows apenas arranque el puente: mientras tanto no se "arregla" Windows
-        # (antes la revisión de dispositivos lo sacaba y un segundo después se volvía a poner: Roblox notaba el cambio).
+        # El micrófono virtual pasa a ser el de Windows apenas arranca el puente; hasta entonces no se corrige la
+        # configuración de Windows, porque la revisión de dispositivos lo quitaba y un segundo después volvía a ponerse,
+        # y Roblox detectaba el cambio.
         self._soundpad_planned = True
         self._bridge_lock = threading.Lock()
         self.status = None
         self.lang_box = None
         from ..voice.profile import VoiceProfile
 
-        self.profile = VoiceProfile()  # lo que se aprende de cómo hablás (voice/profile.py)
+        self.profile = VoiceProfile()  # lo que se aprende de cómo habla el jugador (voice/profile.py)
         self._tick()
 
     # ------------------------------------------------------------ página «Voz»
@@ -105,7 +107,7 @@ class VoicePanel:
                            self.speak_var, self._toggle_speak)
         from .main_window import AUTO_CHOICE, LANG_CHOICES, _choice, _code
 
-        self.speak_rows = ttk.Frame(box)  # (con tu voz apagada no corresponden: se difuminan)
+        self.speak_rows = ttk.Frame(box)  # (con la voz del jugador apagada no corresponden: se difuminan)
         self.speak_rows.pack(fill="x")
         row = widgets.label_row(self.speak_rows, "Te escuchan en", pady=(12, 2))
         self.lang_box = ttk.Combobox(row, values=[AUTO_CHOICE, *LANG_CHOICES], state="readonly", width=30)
@@ -121,9 +123,9 @@ class VoicePanel:
         self.ptt_label = ttk.Label(row, text=win32.describe_binding(self.config.push_to_talk),
                                    font="SunValleyBodyStrongFont")
         self.ptt_label.pack(side="right", padx=10)
-        widgets.muted(box, "Tocá el botón y hablá. Cuando terminás, lo traduzco y lo digo (también podés "
-                           "mantenerlo apretado mientras hablás). En modo directo no hace falta tocar nada: te "
-                           "escucho mientras estás en Roblox.")
+        widgets.muted(box, "Tocá el botón y hablá. Cuando terminás, lo traduzco y lo digo (también podés mantenerlo "
+                           "presionado mientras hablás). En modo directo no hace falta tocar nada: te escucho "
+                           "mientras estás en Roblox.")
         self.cable_warning = ttk.Label(box, text="", foreground=widgets.palette()["warn"], wraplength=440,
                                        justify="left")
         self.cable_warning.pack(anchor="w", pady=(8, 0))
@@ -142,9 +144,9 @@ class VoicePanel:
                         style="Switch.TCheckbutton").pack(side="left")
         ttk.Button(row, text="Probar voz", command=self._try_voice).pack(side="right")
 
-        box = widgets.card(page, "Micrófono", "Como Soundpad: hablo por un micrófono virtual que junta tu voz "
-                                              "y la traducida. Si abrís Bubble antes que Roblox, Roblox lo "
-                                              "toma solo.")
+        box = widgets.card(page, "Micrófono", "Como Soundpad: hablo por un micrófono virtual que reúne tu voz y la "
+                                              "traducida. Si abrís Bubble antes que Roblox, este lo detecta "
+                                              "automáticamente.")
         row = widgets.label_row(box, "Tu micrófono")
         self.mic_box = ttk.Combobox(row, state="readonly", width=30, values=["Buscando…"])
         self.mic_box.set(self.config.mic or "El predeterminado de Windows")
@@ -154,7 +156,7 @@ class VoicePanel:
         self.cable_button = ttk.Button(row, text="Instalar (gratis)", command=self._install_cable)
         self.cable_label = ttk.Label(row, text="Revisando…", foreground=widgets.palette()["muted"])
         self.cable_label.pack(side="right")
-        self.pass_box = ttk.Frame(box)  # (sin micrófono virtual no hay adónde pasarla: se difumina)
+        self.pass_box = ttk.Frame(box)  # (sin micrófono virtual no hay destino: se difumina)
         self.pass_box.pack(fill="x")
         ttk.Checkbutton(self.pass_box, text="Pasar también mi voz real", variable=self.pass_var,
                         command=self._toggle_pass, style="Switch.TCheckbutton").pack(anchor="w", pady=(10, 0))
@@ -169,9 +171,11 @@ class VoicePanel:
         threading.Thread(target=self._scan_devices, name="bubble-dispositivos", daemon=True).start()
 
     def _update_locks(self, animate: bool = True) -> None:
-        """Lo que no corresponde ahora se difumina y no se puede tocar (así nada se prueba a medias): el radio de
-        escucha sin subtítulos, el idioma y el modo sin tu voz, el botón en modo directo, pasar tu voz real sin
-        micrófono virtual, y la apariencia de los subtítulos (en Ajustes) sin subtítulos."""
+        """Lo que no corresponde en el estado actual se difumina y queda deshabilitado, para evitar pruebas a
+        medias: el radio de escucha sin subtítulos, el idioma y el modo sin la voz del jugador, el botón en modo
+        directo, pasar la voz real sin micrófono virtual, y la apariencia de los subtítulos (en Ajustes) sin
+        subtítulos.
+        """
         if not hasattr(self, "earshot_box"):
             return
         speaking = self.speak_var.get()
@@ -199,10 +203,10 @@ class VoicePanel:
 
             wrong = wrong_defaults()
             if self._soundpad or self._soundpad_planned:
-                wrong = [item for item in wrong if item != "micrófono"]  # el micrófono virtual es a propósito
+                wrong = [item for item in wrong if item != "micrófono"]  # el micrófono virtual es intencional
             if wrong and not self._soundpad:
-                # El instalador del micrófono virtual lo dejó como predeterminado (o Bubble se cerró de golpe): se
-                # vuelve a lo tuyo sin que tengas que hacer nada.
+                # El instalador del micrófono virtual lo dejó como predeterminado (o Bubble se cerró de forma abrupta):
+                # se restauran los dispositivos reales del jugador automáticamente.
                 fixed = restore_real_defaults()
                 if fixed:
                     self._set_status("Dejé Windows como estaba: " + " y ".join(fixed) + ". El micrófono virtual "
@@ -221,8 +225,8 @@ class VoicePanel:
             self._cable_ok = cable
             self._update_locks()
         self.cable_warning.configure(text="" if cable else ("Falta el micrófono virtual, y sin él los demás no "
-                                                            "escuchan tu voz traducida. Instalalo acá abajo, "
-                                                            "tarda un minuto."))
+                                                            "escuchan tu voz traducida. Instalalo más abajo; demora "
+                                                            "un minuto."))
         if wrong:
             self.windows_warning.configure(text=f"Al instalarse, el micrófono virtual quedó como {' y '.join(wrong)} de "
                                                 "Windows, y Discord y los demás no te escuchan.")
@@ -232,10 +236,10 @@ class VoicePanel:
         if cable:
             self.cable_label.configure(text="Instalado ✓", foreground=colors["good"])
             self.cable_button.pack_forget()
-            self.cable_help.configure(text="Listo, no hay que configurar nada. Mientras Bubble está abierto, "
-                                           "los demás te escuchan por el micrófono virtual, con tu voz y la "
-                                           "traducida. Cuando lo cerrás, vuelve el tuyo. Abrí Bubble antes que "
-                                           "Roblox y acordate de tener el micrófono prendido en el juego.")
+            self.cable_help.configure(text="Ya está: no hay que configurar nada. Mientras Bubble está abierto, los "
+                                           "demás te escuchan por el micrófono virtual, con tu voz y la traducida. "
+                                           "Cuando lo cerrás, vuelve el tuyo. Abrí Bubble antes que Roblox y recordá "
+                                           "tener el micrófono activado en el juego.")
         else:
             self.cable_label.configure(text="No instalado", foreground=colors["warn"])
             self.cable_button.pack(side="right", padx=(0, 10))
@@ -244,25 +248,28 @@ class VoicePanel:
 
     # ------------------------------------------------------------ arranque (cuando la app ya tiene Claude listo)
     def early_start(self) -> None:
-        """Apenas abre Bubble (sin esperar a Claude): el micrófono virtual pasa a ser el de Windows. Roblox elige su
-        micrófono al abrirse, así que tiene que estar listo antes. Y se vigila cuál usa Roblox, para avisarte."""
+        """Al abrir Bubble (sin esperar a Claude), el micrófono virtual pasa a ser el de Windows. Roblox elige su
+        micrófono al abrirse, así que debe estar listo antes. También se vigila cuál usa Roblox, para avisar al
+        jugador.
+        """
         threading.Thread(target=self._start_soundpad, name="bubble-soundpad", daemon=True).start()
         threading.Thread(target=self._watch_roblox_mic, name="bubble-microfono-roblox", daemon=True).start()
 
     def start(self) -> None:
-        # Como Soundpad: con el micrófono virtual instalado, mientras Bubble está abierto tu voz pasa por él y es el
-        # micrófono de Windows. Sin importar si usás el botón, el modo directo o Ctrl+Enter.
+        # Como Soundpad: con el micrófono virtual instalado, mientras Bubble está abierto la voz del jugador pasa por él
+        # y es el micrófono de Windows, sin importar si se usa el botón, el modo directo o Ctrl+Enter.
         threading.Thread(target=self._start_soundpad, name="bubble-soundpad", daemon=True).start()
         if self.app.translator is not None:
-            self.app.translator.examples_for = self.profile.examples  # cómo querés sonar (página Pruebas)
-            self.app.translator.vocabulary_for = self._vocabulary_for_claude  # tus palabras, para Claude
+            self.app.translator.examples_for = self.profile.examples  # estilo de voz elegido (página Pruebas)
+            self.app.translator.vocabulary_for = self._vocabulary_for_claude  # vocabulario del jugador, para Claude
         if not (self.config.subtitles or self.config.speak):
             return
         if load_state().get("voice_loading"):
-            # La última vez Bubble se cerró mientras cargaba la voz: esta vez no se carga sola, así la ventana abre.
+            # La última vez Bubble se cerró mientras cargaba la voz: esta vez no se carga automáticamente, para que la
+            # ventana abra.
             update_state(voice_loading=False)
-            self._set_status("La última vez Bubble se cerró mientras preparaba la voz, así que la dejé en "
-                             "pausa. Para probar de nuevo, apagá y prendé el interruptor.")
+            self._set_status("La última vez Bubble se cerró mientras preparaba la voz, así que la dejé en pausa. "
+                             "Para probar de nuevo, apagá y volvé a encender el interruptor.")
             return
         self._prepare(self._apply)
 
@@ -270,15 +277,16 @@ class VoicePanel:
         for part in (self.listener, self.speaker, self.bridge):
             if part:
                 part.stop()
-        self._route_mic(False, wait=True)  # al cerrar Bubble, Windows vuelve a tu micrófono
+        self._route_mic(False, wait=True)  # al cerrar Bubble, Windows vuelve al micrófono real
         if self._preparing:
-            update_state(voice_loading=False)  # cerraste Bubble a mitad de la descarga: no fue un error
+            update_state(voice_loading=False)  # Bubble se cerró a mitad de la descarga: no es un error
 
     def pause(self) -> None:
-        """Se cerró Roblox o se refrescó: se apaga la escucha y tu voz, y se olvida la partida (las voces vuelven a
-        numerarse desde 1). Los modelos quedan cargados: retomar con `start()` es rápido. El micrófono virtual sigue:
-        si Windows volviera a tu micrófono, el próximo Roblox arrancaría con ese (antes pasaba eso y no te
-        escuchaban)."""
+        """Se cerró Roblox o se refrescó: se apagan la escucha y la voz del jugador, y se olvida la partida (las
+        voces vuelven a numerarse desde 1). Los modelos quedan cargados, por lo que retomar con `start()` es
+        rápido. El micrófono virtual se mantiene: si Windows volviera al micrófono real, el próximo Roblox
+        arrancaría con ese y no escucharía al jugador.
+        """
         for part in (self.listener, self.speaker):
             if part:
                 part.stop()
@@ -290,7 +298,7 @@ class VoicePanel:
         self.app.events.put(("voice_status", text))
 
     def _prepare(self, then) -> None:
-        """Carga (y la primera vez descarga) el reconocimiento de voz, sin trabar la ventana."""
+        """Carga (y descarga la primera vez) el reconocimiento de voz, sin bloquear la ventana."""
         if self.models is not None:
             then()
             return
@@ -307,12 +315,12 @@ class VoicePanel:
                 if self.config.model not in ("", "auto"):
                     final = self.config.model
                 if self._cloud_key():
-                    # Bubble Pro: la voz se entiende en la nube; el reconocimiento de tu PC queda de respaldo y se carga
-                    # recién si hace falta (arranca al instante y no ocupa memoria).
+                    # Bubble Pro: la voz se reconoce en la nube; el reconocimiento de la PC queda de respaldo y se carga
+                    # solo si hace falta (arranca al instante y no ocupa memoria).
                     models = (LazyWhisper(final, 4), LazyWhisper(quick, 2) if quick else None, SpeakerTracker())
                 else:
-                    self._set_status("Preparando la voz… La primera vez se descarga (puede ser medio giga) y "
-                                     "queda en tu PC.")
+                    self._set_status("Preparando la voz… La primera vez se descarga (puede pesar 500 MB) y queda en "
+                                     "tu PC.")
                     update_state(voice_loading=True)  # si el proceso se cae acá, el próximo arranque no la carga sola
                     models = (FastWhisper(final, 4), FastWhisper(quick, 2) if quick else None, SpeakerTracker())
                     update_state(voice_loading=False)
@@ -331,7 +339,7 @@ class VoicePanel:
         threading.Thread(target=work, name="bubble-voz-prepara", daemon=True).start()
 
     def _ensure_bridge(self):
-        """El puente con tu micrófono (si hay micrófono virtual): tu voz real pasa al virtual en vivo."""
+        """El puente con el micrófono real (si hay micrófono virtual): la voz real pasa al virtual en vivo."""
         with self._bridge_lock:
             if self.bridge is not None and self.bridge.running:
                 return self.bridge
@@ -351,11 +359,11 @@ class VoicePanel:
                 return
         except Exception:  # noqa: BLE001 - sin la parte de voz instalada
             log.warning("No se pudo preparar el micrófono virtual", exc_info=True)
-        self._soundpad_planned = False  # sin puente no hay modo Soundpad: Windows tiene que quedar con tu micrófono
+        self._soundpad_planned = False  # sin puente no hay modo Soundpad: Windows debe quedar con el micrófono real
         self._scan_devices()
 
     def _ensure_out(self):
-        """La voz sintética y, si hay micrófono virtual, el puente con tu micrófono."""
+        """La voz sintética y, si hay micrófono virtual, el puente con el micrófono real."""
         if self.out is not None:
             return self.out
         from ..voice.pipelines import VoiceOut
@@ -366,8 +374,10 @@ class VoicePanel:
         return self.out
 
     def _route_mic(self, on: bool, wait: bool = False) -> None:
-        """Modo Soundpad: mientras Bubble está conectado, el micrófono de Windows (el que abre Roblox) es el virtual, y
-        Bubble le pasa tu voz real. Si el puente con tu micrófono no arrancó, no se cambia: te quedarías mudo."""
+        """Modo Soundpad: mientras Bubble está conectado, el micrófono de Windows (el que abre Roblox) es el
+        virtual, y Bubble le pasa la voz real del jugador. Si el puente con el micrófono real no arrancó, no se
+        cambia: el jugador quedaría mudo.
+        """
         if on == self._soundpad:
             return
         self._soundpad = on
@@ -378,7 +388,7 @@ class VoicePanel:
 
             try:
                 if on:
-                    time.sleep(1.0)  # que el puente arranque (si falla, se apaga solo)
+                    time.sleep(1.0)  # esperar a que el puente arranque (si falla, se apaga solo)
                     if bridge is None or not bridge.running:
                         self._soundpad = self._soundpad_planned = False
                         log.warning("El puente con tu micrófono no arrancó: Windows queda con tu micrófono")
@@ -400,7 +410,7 @@ class VoicePanel:
         return real_microphone(self.config.mic)
 
     def _apply(self) -> None:
-        """Prende o apaga cada parte según los interruptores."""
+        """Activa o desactiva cada parte según los interruptores."""
         from ..voice.captions import CaptionBoard
         from ..voice.live import LiveListener
         from ..voice.pipelines import DirectVoice, VoiceSpeaker
@@ -414,7 +424,7 @@ class VoicePanel:
         key = self._cloud_key()
         kind = "nube" if key else "pc"
         if kind != self._kind:
-            # Se prendió o se apagó Bubble Pro: la escucha y tu voz se arman de nuevo con lo que corresponde.
+            # Se activó o desactivó Bubble Pro: la escucha y la voz del jugador se rearman según corresponda.
             for part in (self.listener, self.speaker):
                 if part:
                     part.stop()
@@ -441,7 +451,7 @@ class VoicePanel:
 
         direct = self.config.speak_mode == "directo"
         if self.speaker is not None and isinstance(self.speaker, DirectVoice) != direct:
-            self.speaker.stop()  # cambiaste de modo
+            self.speaker.stop()  # cambio de modo
             self.speaker = None
         if self.speak_var.get():
             if self.speaker is None and direct:
@@ -464,7 +474,8 @@ class VoicePanel:
                 binding = win32.parse_binding(self.config.push_to_talk)
                 stream = None
                 if key:
-                    # Pro: tu voz va a la nube mientras mantenés el botón; cuando terminás, ya está entendida.
+                    # Pro: la voz del jugador se envía a la nube mientras mantiene el botón; al terminar, ya está
+                    # reconocida.
                     from ..cloud.deepgram import DeepgramListener
                     from ..voice.pipelines import StreamedTurn
 
@@ -526,7 +537,7 @@ class VoicePanel:
         self._try_voice()  # se escucha cómo suena (y queda cargada)
 
     def set_gender(self, gender: str) -> None:
-        """Voz de mujer u hombre (desde esta página o desde la barra del juego)."""
+        """Voz femenina o masculina (desde esta página o desde la barra del juego)."""
         self.config.gender = gender
         self.gender_var.set(gender)
         save_setting("voice", "gender", gender)
@@ -578,8 +589,9 @@ class VoicePanel:
         HotkeyCaptureDialog(self.app.root, done)
 
     def _voices_now(self):
-        """Las voces que suenan ahora: las de la nube con Bubble Pro (más naturales, con personalidad), las de tu PC en
-        Basic. Las de la nube usan las de tu PC para los idiomas que no tienen."""
+        """Las voces activas: las de la nube con Bubble Pro (más naturales, con personalidad) y las de la PC en
+        Basic. Las de la nube usan las de la PC en los idiomas que no cubren.
+        """
         from ..voice.tts import Voices
 
         self.voices = self.voices or Voices()
@@ -617,8 +629,9 @@ class VoicePanel:
         threading.Thread(target=work, name="bubble-voz-precarga", daemon=True).start()
 
     def _try_voice(self) -> None:
-        """Una frase de prueba en tus auriculares (no le llega a Roblox). La frase se guarda: la segunda vez suena al
-        instante."""
+        """Una frase de prueba en los auriculares del jugador (no llega a Roblox). La frase se guarda: la segunda
+        vez suena al instante.
+        """
 
         def work() -> None:
             try:
@@ -663,14 +676,14 @@ class VoicePanel:
         threading.Thread(target=work, name="bubble-instalar-cable", daemon=True).start()
 
     def fix_windows(self) -> None:
-        """Tu micrófono y tu parlante de siempre, otra vez como predeterminados de Windows."""
+        """El micrófono y el parlante reales del jugador, otra vez como predeterminados de Windows."""
 
         def work() -> None:
             try:
                 from ..voice.devices import restore_real_defaults
 
                 fixed = restore_real_defaults()
-                self._set_status("Listo: Windows vuelve a usar " + " y ".join(fixed) + "." if fixed
+                self._set_status("Hecho: Windows vuelve a usar " + " y ".join(fixed) + "." if fixed
                                  else "Windows ya usaba tus dispositivos de siempre.")
             except Exception as exc:  # noqa: BLE001
                 self._set_status(f"No lo pude cambiar ({exc}). Hacelo en la configuración de sonido de Windows.")
@@ -685,7 +698,7 @@ class VoicePanel:
     # ------------------------------------------------------------ lo que te dicen: frase → traducción → subtítulo
     def _translate_heard(self, text: str, language: str, speaker: int, on_piece, on_done, intonation: str = "") -> None:
         if self._is_my_language(text, language):
-            on_done(None, native=True)  # en tu idioma: no se traduce (se ve el original, o nada)
+            on_done(None, native=True)  # en el idioma del jugador: no se traduce (se ve el original, o nada)
             return
 
         async def translate() -> None:
@@ -702,8 +715,9 @@ class VoicePanel:
         self.app.runner.submit(translate())
 
     def _is_my_language(self, text: str, language: str) -> bool:
-        """¿Ya está en tu idioma? Tu idioma no se traduce nunca. Whisper a veces confunde el español rioplatense con
-        portugués o italiano: además de lo que dice Whisper, se miran las palabras."""
+        """¿Ya está en el idioma del jugador? Ese idioma nunca se traduce. Whisper a veces confunde el español
+        rioplatense con portugués o italiano: además de lo que detecta Whisper, se analizan las palabras.
+        """
         from ..translate.langdetect import foreign_words, native_by_words, without_gaming
 
         mine = self.app.config.user.language.split("-")[0].lower()
@@ -717,18 +731,19 @@ class VoicePanel:
 
     # ------------------------------------------------------------ tu voz: texto en tu idioma → (traducción, idioma)
     def _translate_mine(self, text: str, intonation: str = "", on_sentence=None) -> tuple[str, str] | None:
-        """Tu frase → (traducción, idioma). `on_sentence(oración, idioma)`: cada oración apenas está traducida (para
-        empezar a decirla ya; ver pipelines.Sentences)."""
+        """Frase del jugador → (traducción, idioma). `on_sentence(oración, idioma)`: se invoca con cada oración
+        apenas está traducida (para empezar a pronunciarla de inmediato; ver pipelines.Sentences).
+        """
         from ..voice.pipelines import Sentences
 
         translator = self.app.translator
         target = translator.outgoing_target()
-        voice = translator.voice_locale(target)  # (con la región que elegiste, si elegiste una)
+        voice = translator.voice_locale(target)  # (con la región elegida, si hay una)
         marks = set(intonation.split("+")) if intonation else set()
         key = text + ("?" if "question" in marks and "?" not in text else "") + (
             "!" if marks & {"shout", "exclaim"} and "!" not in text else "")
         saved = self.profile.saved(key, target)
-        if saved:  # ya lo dijiste antes: sale al instante
+        if saved:  # ya se dijo antes: sale al instante
             translator.remember_target(target)
             self.app.tracker.mark_sent(saved)
             if on_sentence:
@@ -749,9 +764,10 @@ class VoicePanel:
         return result.translation, voice
 
     def my_asr(self):
-        """Con qué se entiende TU voz: con Bubble Pro, la nube (y si falla, tu PC); si no, el modelo de siempre ("small"
-        en esta PC). Los grandes locales (large-v3-turbo) con este método repetían las palabras cortas y tardaban 2 s:
-        se probó y se sacó (ver asr.py)."""
+        """Con qué se reconoce la voz del jugador: con Bubble Pro, la nube (y si falla, la PC); si no, el modelo
+        habitual ("small" en esta PC). Los modelos locales grandes (large-v3-turbo) repetían las palabras cortas
+        y tardaban 2 s con este método (ver asr.py).
+        """
         key = self._cloud_key()
         if key:
             from ..cloud.deepgram import DeepgramClip, WithFallback
@@ -776,26 +792,30 @@ class VoicePanel:
         return tracker.names.recent(20) if tracker is not None else []
 
     def _my_keyterms(self) -> list[str]:
-        """Palabras que la nube tiene que entenderte bien: las tuyas (lo que aprendió de vos), los nombres de los
-        jugadores del chat (como se dicen) y la jerga de juego."""
+        """Palabras que la nube debe reconocer correctamente: las aprendidas del jugador, los nombres de los
+        jugadores del chat (tal como se pronuncian) y la jerga de juego.
+        """
         from ..cloud.deepgram import GAME_TERMS, spoken_names
 
         return [*self.profile.vocabulary(self.app.config.user.language)[::-1], *spoken_names(self._chat_names()),
                 *GAME_TERMS]
 
     def _game_keyterms(self) -> list[str]:
-        """Palabras que la nube tiene que entender en las voces del juego: los nombres del chat y la jerga de Roblox."""
+        """Palabras que la nube debe reconocer en las voces del juego: los nombres del chat y la jerga de Roblox."""
         from ..cloud.deepgram import GAME_TERMS, spoken_names
 
         return [*spoken_names(self._chat_names()), *GAME_TERMS]
 
     def _vocabulary_for_claude(self, language: str) -> tuple[str, ...]:
-        """Para Claude, al traducir tu voz: tus palabras y los nombres de los jugadores del chat (si el reconocimiento
-        escuchó mal un nombre, Claude lo corrige por el que suena parecido)."""
+        """Vocabulario para Claude al traducir la voz del jugador: sus palabras y los nombres de los jugadores del
+        chat. Si el reconocimiento entendió mal un nombre, Claude lo corrige por el de sonido más parecido.
+        """
         return (*self.profile.vocabulary(language), *self._chat_names())
 
     def _cloud_failed(self, error) -> None:
-        """La nube falló. Sin conexión: se usa tu PC en esa frase. Sin saldo o con la clave mala: se apaga el Pro."""
+        """Falla de la nube. Sin conexión, se usa el reconocimiento local para esa frase. Sin saldo o con clave
+        inválida, se desactiva Pro.
+        """
         from ..cloud.deepgram import BadKey, NoCredit
 
         fatal = isinstance(error, (BadKey, NoCredit))
@@ -810,20 +830,21 @@ class VoicePanel:
             self._set_status(f"La nube no respondió ({error}). Mientras tanto sigo con tu PC.")
 
     def pro_changed(self) -> None:
-        """(hilo de la ventana) Se prendió o se apagó Bubble Pro, o cambió un ajuste suyo: la escucha y tu voz se
-        rearman con lo que corresponde."""
+        """(hilo de la ventana) Se activó o desactivó Bubble Pro, o cambió uno de sus ajustes: se reconfiguran la
+        escucha y la voz del jugador.
+        """
         self._kind = ""
         if self.out is not None:
             self.out.voices = self._voices_now()
         if self.models is not None and not self._cloud_key():
             for model in self.models[:2]:
                 if model is not None and hasattr(model, "load_soon") and not model.loaded:
-                    model.load_soon()  # volviste a Basic: el reconocimiento de tu PC se carga ya
+                    model.load_soon()  # vuelve a Basic: se carga de inmediato el reconocimiento local
         if self.models is not None and (self.subtitles_var.get() or self.speak_var.get()):
             self._apply()
 
     def _open_voice_lane(self) -> None:
-        """El carril rápido de Claude para la voz (se abre una vez y queda caliente)."""
+        """Carril rápido de Claude para la voz: se abre una sola vez y se mantiene activo."""
         translator = self.app.translator
         if translator is None:
             return
@@ -836,9 +857,10 @@ class VoicePanel:
         self.app.runner.submit(open_lane())
 
     def language_changed(self) -> None:
-        """Elegiste otro idioma para hablar: se deja lista su voz. Con Tab pasás por varios idiomas seguidos: se
-        prepara solo el último, un momento después. Antes se cargaba (y a veces se descargaba) la voz de cada idioma
-        por el que pasabas, dos veces, y la PC se trababa mientras jugabas."""
+        """El jugador eligió otro idioma para hablar: se deja lista su voz. Con Tab se recorren varios idiomas
+        seguidos, por lo que solo se prepara el último, tras una breve espera. Cargar (y a veces descargar) la
+        voz de cada idioma intermedio, dos veces, bloqueaba la PC durante el juego.
+        """
         if self._warm_after is not None:
             self.app.root.after_cancel(self._warm_after)
         self._warm_after = self.app.root.after(WARM_DELAY_MS, self._warm_language)
@@ -849,8 +871,10 @@ class VoicePanel:
             self.out.warm_up(self.app.translator.outgoing_target())
 
     def _watch_roblox_mic(self) -> None:
-        """Cada unos segundos: ¿Roblox está grabando del micrófono de Bubble? Si se abrió antes que Bubble, sigue con
-        tu micrófono de siempre y no escuchan tu voz traducida: se avisa (en la ventana y en el juego), una vez."""
+        """Cada pocos segundos comprueba si Roblox está grabando del micrófono de Bubble. Si Roblox se abrió antes
+        que Bubble, sigue usando el micrófono habitual y los demás no escuchan la voz traducida; se avisa una
+        sola vez, en la ventana y en el juego.
+        """
         from ..voice.devices import is_virtual, roblox_microphone
 
         warned = None
@@ -871,14 +895,14 @@ class VoicePanel:
             if warned == pid:
                 continue
             warned = pid
-            self._set_status(f"Roblox está usando «{name}», así que no escuchan tu voz traducida. En Roblox apretá "
-                             "Esc, andá a Configuración y en «Dispositivo de entrada» elegí «CABLE Output». O "
-                             "cerrá Roblox y abrilo de nuevo.")
+            self._set_status(f"Roblox está usando «{name}», así que no escuchan tu voz traducida. En Roblox presioná "
+                             "Esc, ingresá en Configuración y en «Dispositivo de entrada» elegí «CABLE Output». "
+                             "También podés cerrar Roblox y abrirlo de nuevo.")
             self.app.events.put(("voice_notice", ("Roblox no usa el micrófono de Bubble. En Configuración, "
                                                   "elegí «CABLE Output» como entrada")))
 
     def notice(self, text: str) -> None:
-        """(hilo de la ventana) Un aviso en el juego, donde van los subtítulos."""
+        """(hilo de la ventana) Muestra un aviso en el juego, donde van los subtítulos."""
         if self.board is None:
             from ..voice.captions import CaptionBoard
 
@@ -898,25 +922,26 @@ class VoicePanel:
             self._set_status(f"Tu voz: {text}")
 
     def _playing(self, seconds: float) -> None:
-        # Si tu voz traducida suena en tus parlantes (sin micrófono virtual, o porque la querés escuchar), no se tiene
-        # que subtitular como si fuera de otro.
+        # Si la voz traducida suena en los parlantes del jugador (sin micrófono virtual, o por elección), no debe
+        # subtitularse como si fuera de otra persona.
         out = self.out
         if out and self.listener and (not out.output.is_cable or out.hear_myself):
             self.listener.muted_until = time.monotonic() + seconds + 0.5
         if out and out.output.is_cable:
-            # Bubble no te desmutea: si estás muteado en Roblox, la voz traducida no le llega a nadie. Se avisa.
+            # Bubble no desmutea el micrófono: si el jugador está muteado en Roblox, nadie oye la voz traducida. Se
+            # avisa.
             try:
                 from ..roblox_mic import roblox_muted
 
                 if roblox_muted():
-                    self._set_status("Estás muteado en Roblox. Prendé el micrófono (arriba a la izquierda) "
-                                     "para que te escuchen.")
+                    self._set_status("Tenés el micrófono silenciado en Roblox. Activalo (arriba a la izquierda) para "
+                                     "que te escuchen.")
             except Exception:  # noqa: BLE001 - es solo un aviso
                 pass
 
     # ------------------------------------------------------------ escribir y que se diga en voz (Ctrl+Enter)
     def say(self, pairs: list[tuple[str, str]], original: str) -> None:
-        """Dice las traducciones (idioma, texto) con la voz sintética, en orden. No bloquea."""
+        """Reproduce las traducciones (idioma, texto) con la voz sintética, en orden. No bloquea."""
 
         def work() -> None:
             try:
@@ -937,7 +962,7 @@ class VoicePanel:
 
     # ------------------------------------------------------------ subtítulos en pantalla
     def show(self, original: str, translation: str, language: str) -> None:
-        """Tu voz traducida: se muestra como una frase tuya."""
+        """Voz traducida del jugador: se muestra como una frase propia."""
         if self.board is None:
             from ..voice.captions import CaptionBoard
 
@@ -946,16 +971,16 @@ class VoicePanel:
         self.board.mine(original, translation, language)
 
     def _tick(self) -> None:
-        visible = self.app._in_game()  # con la barra para escribir abierta, los subtítulos siguen
+        visible = self.app._in_game()  # con la barra de escritura abierta, los subtítulos siguen visibles
         if self.speaker is not None and hasattr(self.speaker, "set_listening"):
-            # Traducción directa (sin botón): solo con Roblox al frente. Antes traducía todo lo que decías, también
-            # fuera del juego (en Discord, en el navegador…).
+            # Traducción directa (sin botón): solo con Roblox en primer plano. Evita traducir lo dicho fuera del juego
+            # (Discord, navegador, etc.).
             self.speaker.set_listening(visible)
         now = time.monotonic()
         self._out_of_game = 0.0 if visible else (self._out_of_game or now)
         if self.listener is not None:
-            # Las voces del juego: si hace un rato que no estás en el juego (los subtítulos no se ven), no se escuchan
-            # (con Pro no se pagan; en Basic no gastan procesador). Un Alt+Tab corto no corta nada.
+            # Voces del juego: si el jugador lleva un tiempo fuera del juego (los subtítulos no se ven), no se escuchan:
+            # con Pro no se paga y en Basic no se consume procesador. Un Alt+Tab breve no las interrumpe.
             away = bool(self._out_of_game) and now - self._out_of_game > OUT_OF_GAME_S
             muted = self.listener.muted_until == float("inf")
             if away and not muted:
@@ -965,5 +990,5 @@ class VoicePanel:
         area = self.app._game_area() if visible else None
         lines = self.board.visible() if self.board is not None else []
         self.subtitles.update(lines, area, visible)
-        # Mientras una frase aparece (animación), más seguido; si no, cada 80 ms alcanza.
+        # Más frecuente mientras aparece una frase (animación); si no, cada 80 ms es suficiente.
         self.app.root.after(33 if self.subtitles.animating else 80, self._tick)

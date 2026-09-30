@@ -1,4 +1,4 @@
-"""Imágenes fijas del README: la ventana enmarcada y cómo funciona."""
+"""Imágenes fijas del README: la ventana enmarcada y su funcionamiento."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from bubble.ui.inline import ACCENT, CHAT_FILL, render_pill  # noqa: E402
 
 SCRATCH = Path(sys.argv[1])
 OUT = Path(sys.argv[2])
-S = 2  # todo se dibuja al doble (se ve nítido en pantallas de alta densidad)
+S = 2  # todo se dibuja al doble para que se vea nítido en pantallas de alta densidad
 
 
 def font(name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -26,7 +26,7 @@ def font(name: str, size: int) -> ImageFont.FreeTypeFont:
 
 
 def glow_backdrop(w: int, h: int, blobs, grain: float = 0.0) -> Image.Image:
-    """Fondo oscuro con manchas de luz de color, muy desenfocadas, y un poco de grano."""
+    """Fondo oscuro con manchas de luz de color muy desenfocadas y algo de grano."""
     t = np.linspace(0, 1, h)[:, None, None]
     top, bottom = np.array((16, 18, 25), float), np.array((11, 12, 17), float)
     arr = np.repeat(top + (bottom - top) * t, w, axis=1)
@@ -65,13 +65,13 @@ def drop(canvas: Image.Image, image: Image.Image, x: int, y: int, radius: int, b
 
 
 def card_corners(image: Image.Image, radius: int) -> Image.Image:
-    """Esquinas transparentes: la imagen se ve bien en el tema claro y en el oscuro de GitHub."""
+    """Esquinas transparentes, para que la imagen se vea bien en el tema claro y en el oscuro de GitHub."""
     return rounded(image, radius)
 
 
 # ------------------------------------------------------------------ la ventana
 def interface() -> None:
-    """Dos páginas de la ventana, una delante de la otra (Inicio adelante, Ajustes atrás)."""
+    """Dos páginas de la ventana superpuestas: Inicio al frente y Ajustes detrás."""
     front_raw = Image.open(SCRATCH / "page_oscuro_inicio.png")
     back_raw = Image.open(SCRATCH / "page_oscuro_ajustes.png")
     crop = lambda im: rounded(im.crop((9, 0, im.width - 9, im.height - 9)), 8)  # noqa: E731 - sin bordes invisibles
@@ -89,7 +89,7 @@ def interface() -> None:
 
 # ------------------------------------------------------------------ cómo funciona
 def icon_screen(size: int) -> Image.Image:
-    """Pantalla con renglones de chat: Bubble mira la pantalla."""
+    """Pantalla con renglones de chat, que representa a Bubble leyendo la pantalla."""
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     u = size / 100
@@ -104,7 +104,7 @@ def icon_screen(size: int) -> Image.Image:
 
 
 def icon_translate(size: int) -> Image.Image:
-    """Dos globos de diálogo cruzados con idiomas distintos."""
+    """Dos globos de diálogo cruzados, con idiomas distintos."""
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     u = size / 100
@@ -118,7 +118,7 @@ def icon_translate(size: int) -> Image.Image:
 
 
 def icon_pill(size: int) -> Image.Image:
-    """Una píldora de Bubble (la de verdad) tapando un mensaje."""
+    """La píldora real de Bubble cubriendo un mensaje."""
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     u = size / 100
     d = ImageDraw.Draw(img)

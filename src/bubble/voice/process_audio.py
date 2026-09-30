@@ -1,9 +1,10 @@
-"""El sonido de un solo programa (Roblox): ni YouTube, ni Discord, ni música, ni los avisos de Windows.
+"""Captura el sonido de un único programa (Roblox), excluyendo YouTube, Discord, música y avisos de Windows.
 
-Windows 11 (y 10 desde la versión 20348) deja capturar lo que suena de un proceso ("process loopback"). Se usa por
-COM, a mano con ctypes (como el resto de Bubble): se activa un IAudioClient especial para el proceso de Roblox y se lee
-en bloques de 10 ms. Si Roblox no suena, Windows no manda nada: se completa con silencio, al ritmo real, así el oído de
-Bubble (el detector de voz, los tiempos de las frases) funciona igual que con el parlante entero.
+Windows 11 (y Windows 10 desde la versión 20348) permite capturar el audio de un proceso ("process loopback"). Se usa
+mediante COM, con ctypes (como el resto de Bubble): se activa un IAudioClient específico para el proceso de Roblox y se
+lee en bloques de 10 ms. Si Roblox no emite sonido, Windows no entrega datos: se completa con silencio, al ritmo real,
+de modo que el detector de voz y los tiempos de las frases funcionen igual que con la captura del dispositivo de salida
+completo.
 """
 
 from __future__ import annotations
@@ -81,7 +82,7 @@ class _Handler(ctypes.Structure):
 
 
 def _call(obj: c_void_p, index: int, *args, argtypes=(), restype=HRESULT):
-    """Método `index` de la tabla de un objeto COM."""
+    """Invoca el método `index` de la tabla virtual de un objeto COM."""
     table = ctypes.cast(obj, POINTER(POINTER(c_void_p)))[0]
     return ctypes.WINFUNCTYPE(restype, c_void_p, *argtypes)(table[index])(obj, *args)
 
@@ -92,7 +93,9 @@ def _release(obj: c_void_p | None) -> None:
 
 
 class CompletionHandler:
-    """IActivateAudioInterfaceCompletionHandler hecho en Python: avisa cuando Windows terminó de activar."""
+    """Implementación en Python de IActivateAudioInterfaceCompletionHandler: avisa cuando Windows termina la
+    activación.
+    """
 
     def __init__(self) -> None:
         self.done = threading.Event()
@@ -114,7 +117,7 @@ class CompletionHandler:
 
 
 def _activate(pid: int) -> c_void_p:
-    """Un IAudioClient que escucha solo al proceso `pid` (y a los que abra)."""
+    """Devuelve un IAudioClient que captura solo el proceso `pid` (y los procesos que este abra)."""
     mmdevapi = ctypes.WinDLL("Mmdevapi")
     activate = mmdevapi.ActivateAudioInterfaceAsync
     activate.argtypes = [wintypes.LPCWSTR, POINTER(GUID), POINTER(PROPVARIANT), c_void_p, POINTER(c_void_p)]
@@ -143,7 +146,9 @@ _supported: bool | None = None
 
 
 def _check_supported() -> None:
-    """¿Este Windows deja escuchar un programa suelto? Se prueba una vez, con este mismo proceso (no suena nada)."""
+    """Indica si este Windows permite capturar un único programa. Se comprueba una sola vez, con el proceso actual (no
+    emite sonido).
+    """
     global _supported
     if _supported is None:
         import os
@@ -161,8 +166,9 @@ def _check_supported() -> None:
 
 
 def roblox_audio_pid() -> int:
-    """El proceso de Roblox del que sale su sonido: el que Windows tiene sonando (Mezclador de volumen). Si ninguno
-    tiene sonido todavía, el más nuevo."""
+    """Devuelve el proceso de Roblox que emite el audio: el que Windows tiene sonando (Mezclador de volumen). Si
+    ninguno emite todavía, el más reciente.
+    """
     from .. import win32
 
     ids = win32.roblox_process_ids()
@@ -180,8 +186,9 @@ def roblox_audio_pid() -> int:
 
 
 class RobloxAudio:
-    """El sonido de Roblox, siguiéndolo: Roblox cambia de proceso cuando lo reabrís o pasás a otro juego, y Bubble se
-    quedaba escuchando al de antes (silencio). Cada 2 s se fija cuál suena y, si cambió, se pasa a ese."""
+    """Captura el sonido de Roblox siguiendo su proceso: Roblox cambia de proceso al reabrirse o al cambiar de juego, y
+    escuchar el anterior producía silencio. Cada 2 s se verifica qué proceso suena y, si cambió, se pasa a ese.
+    """
 
     CHECK_S = 2.0
 
@@ -197,12 +204,13 @@ class RobloxAudio:
         return self
 
     def __enter__(self) -> RobloxAudio:
-        _check_supported()  # si Windows no deja escuchar un programa suelto, el error sale acá (se escucha toda la PC)
+        # si Windows no permite capturar un programa, el error se propaga aquí (se captura todo el equipo)
+        _check_supported()
         pid = self.find_pid()
         if pid:
             try:
                 self._switch(pid)
-            except OSError as exc:  # Roblox cerrándose justo ahora: se reintenta en el próximo control
+            except OSError as exc:  # Roblox se está cerrando: se reintenta en el próximo control
                 log.info("No se pudo escuchar a Roblox todavía: %s", exc)
         self._next_check = time.monotonic() + self.CHECK_S
         return self
@@ -239,17 +247,19 @@ class RobloxAudio:
         if time.monotonic() >= self._next_check:
             self._follow()
         if self.current is None:
-            time.sleep(numframes / self.rate)  # Roblox cerrado o cambiando: silencio, al ritmo real
+            time.sleep(numframes / self.rate)  # Roblox cerrado o cambiando de proceso: silencio, al ritmo real
             return np.zeros(numframes, np.float32)
         try:
             return self.current.record(numframes)
         except OSError:
-            self._close()  # se cerró ese proceso: en el próximo control se busca el nuevo
+            self._close()  # el proceso se cerró: en el próximo control se busca el nuevo
             return np.zeros(numframes, np.float32)
 
 
 class ProcessLoopback:
-    """Fuente de audio (como las de soundcard: `recorder()` y `record()`) con solo el sonido de un proceso."""
+    """Fuente de audio (con la interfaz de las de soundcard: `recorder()` y `record()`) que captura solo el sonido de
+    un proceso.
+    """
 
     def __init__(self, pid: int) -> None:
         self.pid = pid
@@ -280,7 +290,9 @@ class ProcessLoopback:
         return False
 
     def record(self, numframes: int) -> np.ndarray:
-        """`numframes` muestras mono, al ritmo real. Lo que Roblox no mandó (no sonaba nada) es silencio."""
+        """Devuelve `numframes` muestras mono, al ritmo real. Lo que Roblox no entregó (sin sonido) se completa con
+        silencio.
+        """
         if not self._t0:
             self._t0 = time.perf_counter()
         due = self._t0 + (self._given + numframes) / self.rate
@@ -297,7 +309,8 @@ class ProcessLoopback:
             self._chunks, self._available = ([rest] if len(rest) else []), len(rest)
         self._given += numframes
         if time.perf_counter() - due > 1.0:
-            self._t0 = time.perf_counter() - self._given / self.rate  # la PC se frenó: se retoma sin atrasarse
+            # el equipo se detuvo: se retoma sin acumular atraso
+            self._t0 = time.perf_counter() - self._given / self.rate
         if len(out) < numframes:
             out = np.concatenate([out, np.zeros(numframes - len(out), np.float32)])
         return out
@@ -349,11 +362,11 @@ class ProcessLoopback:
                     with self._cond:
                         self._chunks.append(block)
                         self._available += count
-                        if self._available > 2 * self.rate:  # más de 2 s atrasado: lo viejo se descarta
+                        if self._available > 2 * self.rate:  # más de 2 s de atraso: se descarta lo antiguo
                             data_all = np.concatenate(self._chunks)[-self.rate:]
                             self._chunks, self._available = [data_all], len(data_all)
                         self._cond.notify_all()
-        except OSError as exc:  # Roblox se cerró, se desconectó el parlante...
+        except OSError as exc:  # Roblox se cerró, se desconectó el dispositivo de salida...
             log.info("Se cortó el audio de Roblox: %s", exc)
             self.error = str(exc)
         finally:

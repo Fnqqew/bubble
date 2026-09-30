@@ -1,12 +1,13 @@
-"""Actualizaciones: Bubble se fija si hay una versión nueva en GitHub y, si querés, se actualiza solo.
+"""Actualizaciones: Bubble verifica si hay una versión nueva en GitHub y, si el usuario lo habilita, se actualiza
+automáticamente.
 
-- Instalado desde el ZIP: baja la versión nueva (el mismo ZIP de «Releases»), se cierra, reemplaza sus archivos y se
-  vuelve a abrir (ver update_helper.py). Tu configuración, lo que aprendió de tu voz y los modelos no se tocan: viven
-  en otra carpeta (%APPDATA% y %LOCALAPPDATA%).
-- Instalado con git (desarrollo): `git pull`, solo si no hay cambios propios sin guardar.
+- Instalado desde el ZIP: descarga la versión nueva (el mismo ZIP de «Releases»), se cierra, reemplaza sus archivos y se
+  vuelve a abrir (ver update_helper.py). La configuración, lo aprendido de la voz del jugador y los modelos no se tocan:
+  se guardan en otras carpetas (%APPDATA% y %LOCALAPPDATA%).
+- Instalado con git (desarrollo): `git pull`, solo si no hay cambios locales sin guardar.
 
-Se revisa al abrir, como mucho una vez cada 12 horas. «Más tarde» no vuelve a preguntar por esa versión hasta el día
-siguiente (mientras tanto queda el link «Actualizar» abajo de la ventana).
+Se verifica al abrir, como máximo una vez cada 12 horas. «Más tarde» no vuelve a consultar por esa versión hasta el día
+siguiente (mientras tanto permanece el enlace «Actualizar» al pie de la ventana).
 """
 
 from __future__ import annotations
@@ -37,11 +38,11 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 CHECK_EVERY_S = 12 * 3600
 LATER_S = 24 * 3600
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-Progress = Callable[[str, float], None]  # (qué está haciendo, 0..1; -1 si no se sabe cuánto falta)
+Progress = Callable[[str, float], None]  # qué hace, de 0 a 1; -1 si se desconoce el total
 
 
 class UpdateError(Exception):
-    """No se puede actualizar solo (el texto se muestra tal cual)."""
+    """No se puede actualizar automáticamente (el texto se muestra tal cual)."""
 
 
 @dataclass
@@ -67,7 +68,7 @@ def is_newer(latest: str, current: str = __version__) -> bool:
 
 
 def install_kind(folder: Path = PROJECT_DIR) -> str:
-    """"git" (una copia de desarrollo), "zip" (la carpeta del ZIP de «Releases») o "" (no se puede actualizar solo)."""
+    """"git" (copia de desarrollo), "zip" (carpeta del ZIP de «Releases») o "" (no admite actualización automática)."""
     if not (folder / "src" / "bubble" / "__init__.py").exists() or not (folder / "pyproject.toml").exists():
         return ""
     return "git" if (folder / ".git").exists() else "zip"
@@ -89,7 +90,7 @@ def plain_notes(markdown: str, limit: int = 900) -> str:
         line = re.sub(r"^[-*]\s+", "• ", line)
         line = line.replace("**", "").replace("`", "")
         previous = lines[-1] if lines else ""
-        # Los textos vienen cortados cada ~100 letras (mensajes de git, Markdown): se juntan de nuevo en párrafos.
+        # Los textos llegan cortados cada ~100 caracteres (mensajes de git, Markdown); se vuelven a unir en párrafos.
         if line and previous and not heading and not line.startswith("• ") and (
                 raw[:1].isspace() or not previous.startswith("• ")):
             lines[-1] = f"{previous} {line}"
@@ -103,14 +104,15 @@ def plain_notes(markdown: str, limit: int = 900) -> str:
 
 # ---------------------------------------------------------------- ¿hay una versión nueva?
 def _git(folder: Path, *args: str, timeout: float = 60) -> subprocess.CompletedProcess:
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}  # nunca te pide nada
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}  # nunca solicita datos al usuario
     return subprocess.run(["git", "-C", str(folder), *args], capture_output=True, text=True, encoding="utf-8",
                           errors="replace", timeout=timeout, env=env, creationflags=NO_WINDOW)
 
 
 def latest_from_github(timeout: float = 10) -> Release | None:
-    """La última versión publicada (None si no hay, o si GitHub no la muestra: con el repositorio privado responde
-    404 a quien no tiene cuenta)."""
+    """La última versión publicada (None si no hay ninguna o si GitHub no la muestra: con el repositorio privado
+    responde 404 a quien no tiene cuenta).
+    """
     request = urllib.request.Request(API_LATEST, headers={"Accept": "application/vnd.github+json",
                                                           "User-Agent": f"Bubble/{__version__}"})
     try:
@@ -128,7 +130,7 @@ def latest_from_github(timeout: float = 10) -> Release | None:
 
 
 def latest_from_git(folder: Path = PROJECT_DIR) -> Release | None:
-    """Con una copia de git: las versiones (etiquetas vX.Y.Z) del repositorio, con tu propia sesión de git."""
+    """Con una copia de git: las versiones (etiquetas vX.Y.Z) del repositorio, usando la sesión de git del usuario."""
     if _git(folder, "fetch", "--tags", "--quiet", "origin").returncode != 0:
         return None
     tags = [tag for tag in _git(folder, "tag", "--list", "v*").stdout.split() if parse_version(tag)]
@@ -154,8 +156,9 @@ def latest(folder: Path = PROJECT_DIR) -> Release | None:
 
 
 def check(force: bool = False, current: str = __version__) -> Release | None:
-    """La versión nueva, si hay (None si estás al día o no se pudo saber). Sin `force`, pregunta como mucho una vez
-    cada 12 horas (si no, usa lo que se supo la última vez)."""
+    """La versión nueva, si existe (None si ya está actualizado o no se pudo determinar). Sin `force`, consulta como
+    máximo una vez cada 12 horas (si no, usa el resultado de la última consulta).
+    """
     from .state import load_state, update_state
 
     saved = load_state().get("update") or {}
@@ -169,7 +172,9 @@ def check(force: bool = False, current: str = __version__) -> Release | None:
 
 
 def should_offer(release: Release) -> bool:
-    """¿Se pregunta sola? (no, si para esta versión tocaste «Más tarde» hace menos de un día)"""
+    """Indica si corresponde ofrecer la actualización por iniciativa propia (no, si para esta versión se eligió «Más
+    tarde» hace menos de un día).
+    """
     from .state import load_state
 
     later = (load_state().get("update") or {}).get("later") or {}
@@ -189,7 +194,7 @@ def work_dir() -> Path:
 
 
 def download(release: Release, folder: Path, progress: Progress, timeout: float = 30) -> Path:
-    """Baja el ZIP de la versión y lo descomprime. Devuelve la carpeta de Bubble que venía adentro."""
+    """Descarga el ZIP de la versión y lo descomprime. Devuelve la carpeta de Bubble que contenía."""
     archive = folder / "bubble.zip"
     request = urllib.request.Request(release.zip_url, headers={"User-Agent": f"Bubble/{__version__}"})
     with urllib.request.urlopen(request, timeout=timeout) as response, archive.open("wb") as out:
@@ -206,19 +211,20 @@ def download(release: Release, folder: Path, progress: Progress, timeout: float 
         with zipfile.ZipFile(archive) as bundle:
             bundle.extractall(target)
     except zipfile.BadZipFile as exc:
-        raise UpdateError("La descarga vino rota: probá de nuevo más tarde.") from exc
+        raise UpdateError("La descarga llegó dañada: probá de nuevo más tarde.") from exc
     roots = [path.parent.parent.parent for path in target.glob("*/src/bubble/__init__.py")]
     if len(roots) != 1 or not (roots[0] / "pyproject.toml").exists():
-        raise UpdateError("La descarga vino rara. Probá de nuevo más tarde.")
+        raise UpdateError("La descarga no es válida. Probá de nuevo más tarde.")
     return roots[0]
 
 
 def prepare(release: Release, progress: Progress, folder: Path = PROJECT_DIR) -> Path:
-    """Deja todo listo para actualizar (lo que se baja, se baja acá, con Bubble abierto) y devuelve la carpeta de
-    trabajo con el plan para update_helper.py."""
+    """Deja todo listo para actualizar (las descargas se hacen aquí, con Bubble abierto) y devuelve la carpeta de
+    trabajo con el plan para update_helper.py.
+    """
     kind = install_kind(folder)
     if not kind:
-        raise UpdateError("Esta copia de Bubble no se puede actualizar sola. Bajá la versión nueva de GitHub.")
+        raise UpdateError("Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.")
     work = work_dir()
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
@@ -242,7 +248,7 @@ def prepare(release: Release, progress: Progress, folder: Path = PROJECT_DIR) ->
                               "descartalos y probá otra vez.")
     else:
         if not release.zip_url:
-            raise UpdateError("No encontré la descarga de esa versión: bajala de GitHub.")
+            raise UpdateError("No se encontró la descarga de esa versión: descargala de GitHub.")
         plan["staged"] = str(download(release, work, progress))
     shutil.copy(Path(__file__).with_name("update_helper.py"), work / "actualizar.py")
     (work / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -251,8 +257,9 @@ def prepare(release: Release, progress: Progress, folder: Path = PROJECT_DIR) ->
 
 
 def launch(work: Path, reopen: bool = True) -> None:
-    """Arranca el que termina la actualización (espera a que Bubble se cierre). Después hay que cerrar Bubble.
-    `reopen`: al terminar, abrir Bubble de nuevo (no, si se actualiza porque lo cerraste)."""
+    """Inicia el proceso que completa la actualización (espera a que Bubble se cierre). Después hay que cerrar Bubble.
+    `reopen`: al terminar, vuelve a abrir Bubble (no, si la actualización se debe a que el usuario lo cerró).
+    """
     plan = json.loads((work / "plan.json").read_text(encoding="utf-8"))
     if not reopen:
         plan["reopen"] = False
@@ -260,13 +267,14 @@ def launch(work: Path, reopen: bool = True) -> None:
     command = [plan["relaunch"][0], str(work / "actualizar.py"), str(work / "plan.json")]
     detached = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: sigue al cerrarse Bubble
     try:
-        subprocess.Popen(command, cwd=str(work), close_fds=True, creationflags=detached | 0x01000000)  # +BREAKAWAY
+        # más CREATE_BREAKAWAY_FROM_JOB
+        subprocess.Popen(command, cwd=str(work), close_fds=True, creationflags=detached | 0x01000000)
     except OSError:
         subprocess.Popen(command, cwd=str(work), close_fds=True, creationflags=detached)
 
 
 def finished() -> dict | None:
-    """Cómo terminó la última actualización (una sola vez: se borra al leerla)."""
+    """Resultado de la última actualización (se lee una sola vez: se borra al leerlo)."""
     from .state import state_path
 
     path = state_path().with_name("actualizacion.json")
@@ -275,5 +283,5 @@ def finished() -> dict | None:
     except (OSError, ValueError):
         return None
     path.unlink(missing_ok=True)
-    shutil.rmtree(work_dir(), ignore_errors=True)  # lo que se bajó (ya no hace falta)
+    shutil.rmtree(work_dir(), ignore_errors=True)  # descarga ya innecesaria
     return result

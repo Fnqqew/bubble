@@ -1,5 +1,7 @@
-"""Tu voz, más rápida y mejor entendida: carril propio con respaldo, idioma que se mantiene, lo que ya está en tu idioma
-no se traduce, palabras de juego, y que esperar turno no cuente como "Claude no responde"."""
+"""La voz del jugador, más rápida y mejor comprendida: carril propio con respaldo, idioma que se mantiene, sin traducir
+lo que ya está en el idioma de destino, palabras propias del juego, y sin que la espera de turno cuente como "Claude
+no responde".
+"""
 
 import asyncio
 
@@ -48,7 +50,7 @@ async def test_a_slow_voice_lane_is_backed_up_by_the_chat_lane(monkeypatch):
     await _open_lane(translator)
     started = asyncio.get_running_loop().time()
     result = await translator.translate_outgoing("vamos", "en", spoken=True, from_speech=True)
-    assert result.translation == "hey (chat)"  # ganó el que respondió primero
+    assert result.translation == "hey (chat)"  # gana el que responde primero
     assert asyncio.get_running_loop().time() - started < 0.8
 
 
@@ -62,12 +64,12 @@ async def test_typed_messages_skip_the_batch_wait():
 async def test_the_language_you_used_is_kept():
     translator, _main, _voice = make(detections={"hi": ("en", 0.9), "oi": ("pt", 0.9)})
     translator.config.user.outgoing_language = "auto"
-    translator._incoming_langs.extend(["pt", "pt", "pt"])  # el chat ahora habla portugués…
-    translator.remember_target("en-US")  # …pero vos venías hablando en inglés
+    translator._incoming_langs.extend(["pt", "pt", "pt"])  # el chat pasa a hablar portugués
+    translator.remember_target("en-US")  # pero el jugador venía hablando en inglés
     assert translator.outgoing_target() == "en"
     translator.remember_target("*")  # "todos los del chat" no es un idioma
     assert translator.outgoing_target() == "en"
-    translator.config.user.outgoing_language = "fr"  # elegido a mano: manda eso
+    translator.config.user.outgoing_language = "fr"  # idioma elegido a mano: tiene prioridad
     assert translator.outgoing_target() == "fr"
 
 
@@ -102,7 +104,7 @@ async def test_waiting_for_a_free_session_is_not_a_stall():
 
         async def stream_batch(self, requests):
             self.requests.extend(requests)
-            await asyncio.sleep(0.3)  # esperando turno (otra frase usa la sesión)
+            await asyncio.sleep(0.3)  # espera su turno (otra frase usa la sesión)
             yield SENT, ""
             yield 0, "hola"
 
@@ -117,7 +119,7 @@ async def test_the_same_words_said_differently_are_not_mixed_up():
     await _open_lane(translator)
     await translator.translate_outgoing("vamos a la torre", "en", spoken=True, from_speech=True, intonation="question")
     await translator.translate_outgoing("vamos a la torre", "en", spoken=True, from_speech=True)
-    assert [r.intonation for r in voice.requests] == ["question", ""]  # la segunda no sale de la memoria
+    assert [r.intonation for r in voice.requests] == ["question", ""]  # la segunda no se toma de la memoria
 
 
 def test_claude_gets_your_words_to_undo_misheard_ones():
@@ -125,7 +127,7 @@ def test_claude_gets_your_words_to_undo_misheard_ones():
                                                 from_speech=True, vocabulary=("Lauti", "Bauti", "tradear")))
     assert "misheard" in text and "Lauti, Bauti, tradear" in text
     plain = build_user_prompt(TranslationRequest("hola", "en", "outgoing", vocabulary=("Lauti",)))
-    assert "Lauti" not in plain  # solo cuando viene de la voz
+    assert "Lauti" not in plain  # solo cuando proviene de la voz
 
 
 async def test_the_same_message_in_chat_and_bubble_is_translated_once():
@@ -135,7 +137,7 @@ async def test_the_same_message_in_chat_and_bubble_is_translated_once():
     bubble = asyncio.create_task(translator.translate_incoming("hello there my friend", "", fast=True))
     from_chat, from_bubble = await asyncio.gather(chat, bubble)
     assert from_chat.translation == from_bubble.translation == "hey (chat)"
-    assert len(main.requests) + len(voice.requests) == 1  # un solo pedido para los dos
+    assert len(main.requests) + len(voice.requests) == 1  # un único pedido para ambos
 
 
 async def test_bubbles_skip_the_chat_batch_and_use_the_fast_lane():
@@ -153,4 +155,4 @@ async def test_short_foreign_messages_with_game_words_are_translated():
         result = await translator.translate_incoming(text, "Player")
         assert result.status == "translated", text
     assert native_by_words("tengo lag", "es") and native_by_words("vamos a hacer pvp", "es")
-    assert not native_by_words("carry me pls", "es")  # "me" y "pls" también se usan en español, "carry" no
+    assert not native_by_words("carry me pls", "es")  # "me" y "pls" también se usan en español; "carry" no

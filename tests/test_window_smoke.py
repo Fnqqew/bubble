@@ -1,4 +1,6 @@
-"""La ventana entera se arma (escondida, sin conectarse ni tocar el micrófono): así un error al arrancar no se escapa."""
+"""La ventana completa se construye oculta, sin conectarse ni acceder al micrófono, para que un error de arranque no
+pase inadvertido.
+"""
 
 import tkinter as tk
 
@@ -16,7 +18,7 @@ def window(monkeypatch, tmp_path):
     for name in ("_connect", "_start_hotkey", "_start_screenshots", "_sync_shortcut", "open_tutorial"):
         monkeypatch.setattr(mw.BubbleWindow, name, lambda self: None)
     monkeypatch.setattr(VoicePanel, "early_start", lambda self: None)
-    monkeypatch.setattr(VoicePanel, "warm_up", lambda self: None)  # (preparar la voz la bajaría: ~60 MB)
+    monkeypatch.setattr(VoicePanel, "warm_up", lambda self: None)  # evita que preparar la voz descargue ~60 MB
     root = tk.Tk()
     root.withdraw()
     root.attributes("-alpha", 0.0)
@@ -56,13 +58,13 @@ def test_bubble_pro_turns_the_window_gold_and_back(window, monkeypatch):
     assert not pro.active() and not window.config.pro.enabled
     assert window.title_label.cget("text") == "Bubble" and window.pro_badge.cget("text") == "BASIC"
     assert "sin saldo" in window.status.cget("text") or "saldo" in window.status.cget("text")
-    assert changes == [True, False]  # la voz se rearmó las dos veces
+    assert changes == [True, False]  # la voz se reconstruyó en ambos cambios
 
 
 def test_pro_needs_a_saved_key(window):
     from bubble import pro
 
-    window.set_pro(True)  # sin clave guardada no se prende
+    window.set_pro(True)  # sin clave guardada, no se activa
     assert not pro.active() and not window.config.pro.enabled
 
 
@@ -104,12 +106,12 @@ def test_pro_options_are_locked_in_basic_and_switching_is_quick(window, monkeypa
     app_view._show_page(window)
     window.root.update()
     cards = [box for box, _note in window.pro_panel._locked]
-    assert cards and all(box.dimmed for box in cards)  # Basic: lo de Pro, bloqueado
+    assert cards and all(box.dimmed for box in cards)  # Basic: funciones de Pro bloqueadas
     assert window.pro_panel.try_button.instate(["disabled"])
     start = time.perf_counter()
     window.set_pro(True)
     window.root.update()
-    assert time.perf_counter() - start < 0.5  # antes ~0,6 s trabada (en esta PC ahora ~0,07 s)
+    assert time.perf_counter() - start < 0.5  # debe completarse en menos de 0,5 s
     assert pro.active() and not any(box.dimmed for box in cards)
     assert not window.pro_panel.try_button.instate(["disabled"])
     window.set_pro(False)
@@ -120,10 +122,10 @@ def test_the_tone_chosen_in_the_bar_is_kept(window):
     from bubble.state import load_state
 
     window.compose.tone = 3
-    window.compose._change_tone(+1)  # ↑ en la barra para escribir
+    window.compose._change_tone(+1)  # ↑ en la barra de escritura
     assert window.config.user.tone == 4
-    assert load_state()["settings"]["user"]["tone"] == 4  # queda para la próxima (antes volvía a casual)
-    assert window.tone.get() == window.tone.cget("values")[3]  # y Ajustes lo muestra
+    assert load_state()["settings"]["user"]["tone"] == 4  # el tono se conserva para la próxima sesión
+    assert window.tone.get() == window.tone.cget("values")[3]  # Ajustes muestra el tono guardado
 
 
 def test_your_pc_check_shows_problems_and_fills_the_card(window):
@@ -131,7 +133,7 @@ def test_your_pc_check_shows_problems_and_fills_the_card(window):
     from bubble.ui import app_view
 
     window.page_var.set("pruebas")
-    app_view._show_page(window)  # (se arma la primera vez que la abrís)
+    app_view._show_page(window)  # la página se construye al abrirla por primera vez
     card = window.tests_panel.equipment
     assert "Revisando" in str(card.state.cget("text"))
     info = system.System(windows="Windows 11", build=26200, threads=8, ram_gb=16, microphones=["Mic"],
@@ -140,7 +142,7 @@ def test_your_pc_check_shows_problems_and_fills_the_card(window):
     window._checking_system = True
     window._on_system(info, system.recommend(info))
     assert window.system_info is info and not window._checking_system
-    assert "sesión iniciada" in str(window.status.cget("text"))  # el problema, a la vista
+    assert "sesión iniciada" in str(window.status.cget("text"))  # el problema queda visible
     assert card.table.winfo_children() and card.advice.winfo_children()
     assert str(card.state.cget("text")) == ""
 
@@ -152,11 +154,11 @@ def test_a_new_version_shows_the_link_and_waits_for_the_match_to_end(window, mon
     release = update.Release("9.9.0", "Algo nuevo")
     offered = []
     monkeypatch.setattr(update, "should_offer", lambda release: True)
-    monkeypatch.setattr(window, "_in_game", lambda: True)  # jugando: no se abre nada encima del juego
+    monkeypatch.setattr(window, "_in_game", lambda: True)  # en juego: no se abre nada sobre el juego
     monkeypatch.setattr(window.root, "after", lambda ms, action: offered.append(ms))
     window._on_update(release, asked=False)
     assert window.update_link.winfo_manager() and "9.9.0" in str(window.update_link.cget("text"))
-    assert window._update_window is None and offered == [30000]  # pregunta de nuevo en un rato
+    assert window._update_window is None and offered == [30000]  # vuelve a preguntar más tarde
     window._on_update(None, asked=True)
     assert not window.update_link.winfo_manager()
     assert "Estás al día" in str(window.status.cget("text"))
@@ -170,26 +172,26 @@ def test_without_claude_pro_translates_and_basic_stays_locked(window, monkeypatc
     monkeypatch.setattr(bubble.cloud.keys, "load_key", lambda: "clave-de-prueba")
     monkeypatch.setattr(window.voice_panel, "pro_changed", lambda: None)
     window.page_var.set("pro")
-    app_view._show_page(window)  # (la página ✦ Pro se arma la primera vez que la abrís)
+    app_view._show_page(window)  # la página ✦ Pro se construye al abrirla por primera vez
     window._ev_claude_access(("gratis", True))  # cuenta gratuita de Claude, con clave de Bubble Pro
     panel = window.pro_panel
-    assert window.cloud_translation and pro.active()  # Pro se activa solo: es lo que traduce
+    assert window.cloud_translation and pro.active()  # Pro se activa solo: es el que traduce
     assert panel.enabled_var.get() and panel.no_claude.winfo_manager()
-    assert panel.comparison.dimmed  # lo de Basic, difuminado
+    assert panel.comparison.dimmed  # las opciones de Basic, atenuadas
     panel.enabled_var.set(False)
-    panel._toggle()  # tocás el interruptor para pasar a Basic
-    assert pro.active() and panel.enabled_var.get()  # vuelve a Pro solo
+    panel._toggle()  # el interruptor pasa a Basic
+    assert pro.active() and panel.enabled_var.get()  # vuelve a Pro automáticamente
     assert "Basic necesitás Claude" in str(window.status.cget("text"))
     shown = []
     monkeypatch.setattr(window.toast, "show", lambda text, gold, area=None: shown.append(text))
     window._toggle_plan_in_game()  # Ctrl+P en el juego
     assert pro.active() and "Basic necesita Claude" in shown[0]
 
-    window._ev_claude_access(("", False))  # conectaste Claude
+    window._ev_claude_access(("", False))  # Claude conectado
     assert not window.cloud_translation and not panel.no_claude.winfo_manager()
-    assert panel.comparison.dimmed  # (sigue difuminado, pero ahora solo porque estás en Pro)
+    assert panel.comparison.dimmed  # sigue atenuado, ahora solo por estar en Pro
     window.set_pro(False)
-    assert not pro.active()  # ahora sí se puede volver a Basic
+    assert not pro.active()  # ahora se puede volver a Basic
     assert not panel.comparison.dimmed and not panel.comparison_note.winfo_manager()
 
 
@@ -198,7 +200,7 @@ def test_without_claude_or_a_key_it_shows_how_to_continue(window, monkeypatch):
 
     opened = []
     monkeypatch.setattr(window, "open_no_claude", lambda reason="": opened.append(reason))
-    monkeypatch.setattr(window, "_in_game", lambda: False)  # (con Roblox al frente, la ventana espera a que salgas)
+    monkeypatch.setattr(window, "_in_game", lambda: False)  # con Roblox al frente, la ventana espera a que se salga
     window.link = "conectando"
     window._ev_claude_access(("sin_sesion", False))
     window._ev_started(mw.NoClaudeError("Falta Claude para traducir"))
@@ -221,7 +223,7 @@ def test_measuring_your_pc_without_any_voice_says_so(window, monkeypatch):
 
     monkeypatch.setattr(panel.voice, "my_asr", lambda: object())
     monkeypatch.setattr(panel, "_voices", lambda: NoVoices())
-    monkeypatch.setattr(panel, "_run", lambda work, **kwargs: work())  # (sin hilos ni modelos)
+    monkeypatch.setattr(panel, "_run", lambda work, **kwargs: work())  # sin hilos ni modelos
     panel._test_pc()
     end = time.monotonic() + 3
     while time.monotonic() < end and "No se pudo" not in str(panel.pc_rating.cget("text")):
@@ -230,7 +232,7 @@ def test_measuring_your_pc_without_any_voice_says_so(window, monkeypatch):
             kind, payload = window.events.get_nowait()
             window._handle(kind, payload)
         window.root.update()
-    assert str(panel.pc_rating.cget("text")) == "✗ No se pudo medir"  # antes: «Midiendo…» para siempre
+    assert str(panel.pc_rating.cget("text")) == "✗ No se pudo medir"  # debe mostrar el fallo en lugar de «Midiendo…»
     assert "voz" in str(panel.pc_info.cget("text"))
 
 
@@ -244,12 +246,12 @@ def test_two_locks_on_the_same_button_do_not_step_on_each_other(window):
     inner = ttk.Frame(outer)
     label = ttk.Label(inner, text="Botón para hablar")
     button = ttk.Button(inner, text="Cambiar")
-    widgets.dim(outer, True, animate=False)  # tu voz apagada
+    widgets.dim(outer, True, animate=False)  # voz desactivada
     widgets.dim(inner, True, animate=False)  # modo directo (sin botón)
-    widgets.dim(outer, False, animate=False)  # prendés tu voz: sigue el modo directo
-    assert "disabled" in button.state() and label.dim_color  # (antes: el texto volvía normal)
-    widgets.dim(inner, False, animate=False)  # pasás a «con botón»
-    assert "disabled" not in button.state() and not hasattr(label, "dim_color")  # (antes: bloqueado para siempre)
+    widgets.dim(outer, False, animate=False)  # se activa la voz: continúa el modo directo
+    assert "disabled" in button.state() and label.dim_color  # el texto permanece atenuado
+    widgets.dim(inner, False, animate=False)  # se cambia a «con botón»
+    assert "disabled" not in button.state() and not hasattr(label, "dim_color")  # se desbloquea
 
 
 def test_finishing_a_test_does_not_unlock_a_dimmed_button(window):
@@ -260,10 +262,10 @@ def test_finishing_a_test_does_not_unlock_a_dimmed_button(window):
     box = ttk.Frame(window.root)
     button = ttk.Button(box, text="Medir")
     widgets.dim(box, True, animate=False, reason="pro")
-    widgets.set_enabled(button, True)  # (termina otra prueba y se habilitan los botones)
+    widgets.set_enabled(button, True)  # otra prueba termina y se habilitan los botones
     assert "disabled" in button.state()
     widgets.dim(box, False, animate=False, reason="pro")
-    assert "disabled" not in button.state()  # se habilita recién al liberarse
+    assert "disabled" not in button.state()  # se habilita solo al liberarse
 
 
 # ---------------------------------------------------------------- con Pro, lo de Basic difuminado
@@ -283,7 +285,7 @@ def test_with_pro_the_basic_parts_are_dimmed(window, monkeypatch):
     assert pro.active() and panel.comparison.dimmed and panel.comparison_note.winfo_manager()
     assert tests.pc_box.dimmed and tests.pc_note.winfo_manager()  # «Cuánto tarda en tu PC» mide Basic
     medir = next(b for b in tests._buttons if str(b.cget("text")) == "Medir")
-    tests._done()  # (termina otra prueba)
+    tests._done()  # termina otra prueba
     assert "disabled" in medir.state()
     window.set_pro(False)
     assert not panel.comparison.dimmed and not tests.pc_box.dimmed and not tests.pc_note.winfo_manager()
@@ -299,14 +301,14 @@ def test_the_microphone_tip_is_the_first_thing_you_see(window, monkeypatch):
     assert tip and tip["outer"].winfo_manager()
     home = app_view.PAGES and window.pages["inicio"]
     first = home.body.winfo_children()[0] if hasattr(home, "body") else home.winfo_children()[0]
-    assert first is tip["outer"]  # arriba de todo en Inicio
+    assert first is tip["outer"]  # primer elemento de Inicio
     assert any("buen micrófono" in str(w.cget("text")) for w in tip["texts"])
     started = []
     monkeypatch.setattr(window.tests_panel, "_test_mic", lambda: started.append(1))
     window.test_microphone()
     assert window.page_var.get() == "pruebas" and started  # «Probar mi micrófono»
     window.hide_mic_tip()
-    assert window.mic_tip is None and load_state().get("mic_tip_done")  # no vuelve
+    assert window.mic_tip is None and load_state().get("mic_tip_done")  # no vuelve a aparecer
 
 
 def test_the_tutorial_opens_with_the_microphone(window):
@@ -331,7 +333,7 @@ def test_windows_that_open_by_themselves_wait_their_turn(window, monkeypatch):
     assert opened == [] and later and later[0][0] == 1500  # espera su turno
     other.destroy()
     later.pop(0)[1]()
-    assert opened == ["tutorial"]  # y se abre cuando se cierra la otra
+    assert opened == ["tutorial"]  # se abre al cerrarse la otra
 
 
 def test_the_microphone_tip_turns_gold_with_pro(window, monkeypatch):

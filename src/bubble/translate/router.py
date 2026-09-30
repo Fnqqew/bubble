@@ -1,4 +1,4 @@
-"""Elige proveedor: prueba en orden y pasa al siguiente si uno falla o tarda demasiado."""
+"""Elige un proveedor: los prueba en orden y pasa al siguiente si uno falla o tarda demasiado."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from .base import DeltaCallback, Provider, TranslationRequest
 
 log = logging.getLogger(__name__)
 BatchDeltaCallback = Callable[[int, str], None]
-# El proveedor avisa con (SENT, "") cuando el pedido salió de verdad (ya tenía una sesión libre). Hasta ahí el pedido
-# puede estar esperando turno: esa espera no es una sesión colgada (antes contaba, y un pedido que esperaba detrás de
-# otro se cortaba por "sin respuesta" y reiniciaba la única sesión: la voz tardaba 15 s o fallaba).
+# El proveedor avisa con (SENT, "") cuando el pedido salió efectivamente, es decir, cuando ya obtuvo una sesión libre.
+# Hasta ese momento el pedido puede estar esperando turno, y esa espera no equivale a una sesión bloqueada: si contara,
+# un pedido en cola detrás de otro se cortaría por "sin respuesta" y reiniciaría la única sesión disponible.
 SENT = -1
-QUEUE_WAIT_S = 20.0  # tope para conseguir una sesión libre (normalmente es menos de 2 s)
+QUEUE_WAIT_S = 20.0  # tope para obtener una sesión libre (normalmente menos de 2 s)
 
 
 @dataclass
@@ -37,8 +37,9 @@ class Router:
             raise ValueError("Se necesita al menos un proveedor de traducción")
         self.providers = providers
         self.timeout_s = timeout_s
-        # Si en este tiempo no llegó nada, la sesión quedó colgada: se corta y se reintenta una vez (con otra
-        # sesión) en vez de esperar el límite entero y mostrar un error. Normalmente la primera palabra llega en ~1,5 s.
+        # Si en este plazo no llega nada, se considera la sesión bloqueada: se corta y se reintenta una vez con otra
+        # sesión, en lugar de esperar el límite completo y mostrar un error. Normalmente la primera palabra llega en
+        # ~1,5 s.
         self.first_token_s = first_token_s
 
     async def start(self) -> None:
@@ -54,7 +55,9 @@ class Router:
     async def translate_batch(
         self, requests: list[TranslationRequest], on_delta: BatchDeltaCallback | None = None
     ) -> list[RoutedTranslation]:
-        """Traduce varios mensajes en un pedido. `on_delta(índice, fragmento)` se llama mientras se generan."""
+        """Traduce varios mensajes en un solo pedido. `on_delta(índice, fragmento)` se invoca a medida que se
+        genera el texto.
+        """
         errors: list[str] = []
         timeout = self.timeout_s + 1.0 * (len(requests) - 1)
         loop = asyncio.get_running_loop()
@@ -66,16 +69,16 @@ class Router:
                 started = False
                 first_limit = min(self.first_token_s, timeout) if attempt == 1 else timeout
                 try:
-                    # Sin aviso de envío (otros proveedores), el reloj corre desde ya, como antes.
+                    # Sin aviso de envío (otros proveedores), el plazo corre desde el inicio.
                     wait = QUEUE_WAIT_S if getattr(provider, "reports_sent", False) else first_limit
                     async with asyncio.timeout(wait) as limit:
                         async with aclosing(_batch_stream(provider, requests)) as stream:
                             async for index, chunk in stream:
-                                if index == SENT:  # ya tiene sesión: desde acá corre el tiempo de respuesta
+                                if index == SENT:  # ya tiene sesión: desde aquí corre el tiempo de respuesta
                                     start = time.perf_counter()
                                     limit.reschedule(loop.time() + first_limit)
                                     continue
-                                if not started:  # ya responde: tiene el tiempo completo para terminar
+                                if not started:  # ya responde: dispone del tiempo completo para terminar
                                     started = True
                                     limit.reschedule(loop.time() + timeout - (time.perf_counter() - start))
                                 if ttfts[index] is None:
@@ -94,15 +97,15 @@ class Router:
                     log.warning("Proveedor %s falló (intento %d): %s", provider.name, attempt, reason)
                     errors.append(f"{provider.name}: {reason}")
                     if any(chunks):
-                        # Ya se mostró texto parcial; no mezclar con otro intento ni con otro proveedor.
+                        # Ya se mostró texto parcial: no se mezcla con otro intento ni con otro proveedor.
                         raise AllProvidersFailed("; ".join(errors)) from exc
                     if not stalled:
-                        break  # un error de verdad (no una sesión colgada): siguiente proveedor
+                        break  # error real (no una sesión bloqueada): pasa al siguiente proveedor
         raise AllProvidersFailed("; ".join(errors))
 
 
 async def _batch_stream(provider: Provider, requests: list[TranslationRequest]):
-    """Usa stream_batch si el proveedor lo tiene; si no, traduce de a uno."""
+    """Usa stream_batch si el proveedor lo implementa; si no, traduce de a un mensaje."""
     if hasattr(provider, "stream_batch"):
         async with aclosing(provider.stream_batch(requests)) as stream:
             async for item in stream:

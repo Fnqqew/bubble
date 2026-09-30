@@ -1,16 +1,16 @@
-"""Tu equipo: Bubble lo detecta solo y se adapta.
+"""Detección del equipo: Bubble lo identifica automáticamente y se adapta.
 
-Qué se mira (todo en tu PC; nada se manda a ningún lado, salvo la prueba de internet, que descarga unos MB de prueba):
+Qué se revisa (todo localmente; no se envía nada al exterior, salvo la prueba de internet, que descarga unos MB de prueba):
 - Windows (versión), Python, procesador, memoria, placa de video, pantalla (tamaño y escala).
-- Micrófonos, parlantes y el micrófono virtual.
-- Claude Code: si está instalado, si tenés la sesión iniciada y tu plan (de la sesión solo se leen esos datos, nunca
+- Micrófonos, parlantes y micrófono virtual.
+- Claude Code: si está instalado, si hay sesión iniciada y el plan (de la sesión solo se leen esos datos, nunca
   las claves).
 - Roblox: si está instalado (el de roblox.com o el de la Microsoft Store).
-- Los idiomas que el lector del chat de Windows sabe leer.
-- Internet: cuánto tarda en responder Claude y la nube, y la velocidad de descarga.
+- Los idiomas que el lector del chat de Windows puede leer.
+- Internet: tiempo de respuesta de Claude y de la nube, y velocidad de descarga.
 
-Con eso `recommend` decide lo que conviene (cuántas sesiones de Claude, qué reconocimiento de voz, el tamaño de la
-ventana…) y arma los avisos para mostrar ("Tu equipo", en Pruebas y en «Acerca de»).
+Con estos datos `recommend` decide la configuración más conveniente (cantidad de sesiones de Claude, reconocimiento de
+voz, tamaño de la ventana, etc.) y genera los avisos que se muestran ("Tu equipo", en Pruebas y en «Acerca de»).
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ from pathlib import Path
 
 @dataclass
 class Internet:
-    claude_ms: float | None = None  # conectarse con Claude (api.anthropic.com)
-    cloud_ms: float | None = None  # conectarse con la nube de Bubble Pro (api.deepgram.com)
+    claude_ms: float | None = None  # tiempo de conexión con Claude (api.anthropic.com)
+    cloud_ms: float | None = None  # tiempo de conexión con la nube de Bubble Pro (api.deepgram.com)
     download_mbps: float | None = None
     error: str = ""
 
@@ -39,10 +39,10 @@ class Internet:
 class Claude:
     installed: bool = False
     version: str = ""
-    logged_in: bool | None = None  # None: no se sabe (un Claude Code viejo no tiene `claude auth status`)
-    plan: str = ""  # "pro", "max"… (lo que dice la sesión de Claude Code)
-    auth: str = ""  # "claude.ai" (tu suscripción) o "console" (una cuenta de la API: cobra por uso)
-    api_key: bool = False  # hay ANTHROPIC_API_KEY: Claude Code cobraría por uso en vez de usar tu suscripción
+    logged_in: bool | None = None  # None: se desconoce (un Claude Code antiguo no tiene `claude auth status`)
+    plan: str = ""  # "pro", "max"… (según la sesión de Claude Code)
+    auth: str = ""  # "claude.ai" (suscripción) o "console" (cuenta de la API: cobra por uso)
+    api_key: bool = False  # hay ANTHROPIC_API_KEY: Claude Code cobraría por uso y no por suscripción
 
 
 @dataclass
@@ -65,7 +65,7 @@ class System:
     virtual_cable: bool = False
     ocr_languages: list[str] = field(default_factory=list)
     roblox: str = ""  # "roblox.com", "Microsoft Store", o "" (no se encontró)
-    voices_blocked: bool = False  # Windows no deja usar las voces de Piper (se usan las de Windows)
+    voices_blocked: bool = False  # Windows no permite usar las voces de Piper (se usan las de Windows)
     claude: Claude = field(default_factory=Claude)
     internet: Internet | None = None
 
@@ -89,12 +89,12 @@ def _windows() -> tuple[str, int]:
 
 
 def _screen() -> tuple[tuple[int, int], tuple[int, int], float]:
-    """Tamaño real de la pantalla principal, el espacio libre (sin la barra de tareas) y la escala de Windows."""
+    """Tamaño real de la pantalla principal, área libre (sin la barra de tareas) y escala de Windows."""
     from ctypes import wintypes
 
     from . import win32
 
-    win32.enable_dpi_awareness()  # (si no, Windows informa tamaños achicados: 1536×864 en vez de 1920×1080 al 125 %)
+    win32.enable_dpi_awareness()  # (si no, Windows informa tamaños reducidos: 1536×864 en vez de 1920×1080 al 125 %)
     user32 = ctypes.windll.user32
     size = (user32.GetSystemMetrics(0), user32.GetSystemMetrics(1))
     rect = wintypes.RECT()
@@ -126,7 +126,7 @@ def _ocr_languages() -> list[str]:
     try:
         from .capture.ocr import _use_system_cpp_runtime
 
-        _use_system_cpp_runtime()  # antes que winrt (si no, la parte de voz se cae después: ver capture/ocr.py)
+        _use_system_cpp_runtime()  # antes que winrt (si no, falla después el módulo de voz: ver capture/ocr.py)
         from winrt.windows.media.ocr import OcrEngine
 
         return [language.language_tag for language in OcrEngine.available_recognizer_languages]
@@ -140,11 +140,11 @@ def _voices_blocked() -> bool:
 
         return bool(piper_blocked())
     except ImportError:
-        return False  # (sin la parte de voz no hay nada que bloquear)
+        return False  # (sin el módulo de voz no hay nada que bloquear)
 
 
 def roblox_installed() -> str:
-    """Dónde está Roblox instalado: "roblox.com", "Microsoft Store" o "" (no se encontró)."""
+    """Ubicación de la instalación de Roblox: "roblox.com", "Microsoft Store" o "" (no se encontró)."""
     import winreg
 
     try:
@@ -163,13 +163,15 @@ def roblox_installed() -> str:
 
 
 PAID_PLANS = {"pro", "max", "team", "enterprise"}
-PRO_URL = "https://claude.com/pricing"  # los planes de Claude (Pro alcanza para Bubble)
+PRO_URL = "https://claude.com/pricing"  # planes de Claude (Pro alcanza para Bubble)
 NO_CLAUDE = {"sin_claude", "sin_sesion", "gratis"}  # sin esto no se puede traducir con Claude (ver claude_problem)
 
 
 def claude_status() -> Claude:
-    """Claude Code instalado, la sesión y el plan, según Claude Code (`claude auth status`): no se toca ningún archivo
-    con claves. Ojo: Claude Code a veces guarda un plan viejo ("pro" teniendo Max): por eso se muestra "Pro o Max"."""
+    """Estado de Claude Code (instalación, sesión y plan) según `claude auth status`; no se lee ningún archivo con
+    claves. Claude Code a veces conserva un plan desactualizado ("pro" con una cuenta Max), por eso se muestra "Pro
+    o Max".
+    """
     import subprocess
 
     from .claude_cli import ClaudeNotFoundError, cli_version, find_claude_cli
@@ -190,14 +192,15 @@ def claude_status() -> Claude:
         status.plan = str(data.get("subscriptionType") or "")
         status.auth = str(data.get("authMethod") or "")
     except (OSError, ValueError, subprocess.SubprocessError):
-        pass  # no se pudo saber: queda en None (no se avisa nada que no sea seguro)
+        pass  # no se pudo determinar: queda en None (no se emite un aviso sin certeza)
     return status
 
 
 def claude_problem(claude: Claude) -> str:
-    """Qué le falta a tu Claude para que Bubble traduzca: "sin_claude" (no está Claude Code), "sin_sesion",
-    "gratis" (la cuenta gratuita no incluye Claude Code), "por_uso" (una cuenta de la API: cobra cada traducción) o
-    "" (está bien, o no se puede saber: nunca se avisa algo que no sea seguro)."""
+    """Problema de Claude que impide traducir: "sin_claude" (Claude Code no está instalado), "sin_sesion", "gratis" (la
+    cuenta gratuita no incluye Claude Code), "por_uso" (cuenta de la API: cobra cada traducción) o "" (sin
+    problemas, o no se puede determinar: nunca se emite un aviso sin certeza).
+    """
     if not claude.installed:
         return "sin_claude"
     if claude.logged_in is False:
@@ -217,7 +220,7 @@ def plan_label(plan: str) -> str:
 
 
 def _connect_ms(host: str, timeout: float = 4.0) -> float | None:
-    """Cuánto tarda en conectarse (la mejor de tres)."""
+    """Tiempo de conexión en ms (el mejor de tres intentos)."""
     best = None
     for _ in range(3):
         started = time.perf_counter()
@@ -232,7 +235,7 @@ def _connect_ms(host: str, timeout: float = 4.0) -> float | None:
 
 
 def measure_internet(download_bytes: int = 3_000_000) -> Internet:
-    """Cuánto tardan en responder Claude y la nube, y la velocidad de descarga (baja unos MB de prueba)."""
+    """Mide el tiempo de respuesta de Claude y de la nube, y la velocidad de descarga (descarga unos MB de prueba)."""
     result = Internet(claude_ms=_connect_ms("api.anthropic.com"), cloud_ms=_connect_ms("api.deepgram.com"))
     try:
         request = urllib.request.Request(f"https://speed.cloudflare.com/__down?bytes={download_bytes}",
@@ -250,7 +253,7 @@ def measure_internet(download_bytes: int = 3_000_000) -> Internet:
 
 
 def detect(internet: bool = False) -> System:
-    """Todo lo de tu equipo (~1 s; con `internet`, unos segundos más)."""
+    """Detecta todo el equipo (~1 s; con `internet`, unos segundos más)."""
     from .voice.checks import cpu_name, gpu_names, memory_gb
 
     windows, build = _windows()
@@ -274,25 +277,25 @@ def detect(internet: bool = False) -> System:
 class Advice:
     level: str  # "ok", "aviso", "problema"
     text: str
-    action: str = ""  # "claude": con un link a cómo conseguir Claude (ver ui/claude_window.py)
+    action: str = ""  # "claude": con un enlace para obtener Claude (ver ui/claude_window.py)
 
 
 @dataclass
 class Plan:
     claude_sessions: int = 3  # sesiones de Claude abiertas a la vez (cada una ~250 MB de memoria)
-    whisper_ram_limit: bool = False  # poca memoria: el reconocimiento de voz de tu PC, el más liviano
+    whisper_ram_limit: bool = False  # poca memoria: reconocimiento de voz local, el más liviano
     slow_internet: bool = False
     advice: list[Advice] = field(default_factory=list)
 
 
-WITHOUT_CLAUDE = (("Mientras tanto, Bubble Pro puede traducir con los créditos gratis de Deepgram. Te regalan "
-                   "200 US$ al crear la cuenta y no piden tarjeta."))
+WITHOUT_CLAUDE = (("Mientras tanto, Bubble Pro puede traducir con los créditos gratis de Deepgram. Te ofrecen 200 "
+                   "US$ al crear la cuenta y no piden tarjeta."))
 CLAUDE_ADVICE = {
     "sin_claude": ("problema", ("Falta Claude Code, que es el que traduce. Si tenés Claude Pro o Max, instalalo "
                                 "desde Ajustes, en «Revisar instalación». ") + WITHOUT_CLAUDE),
     "sin_sesion": ("problema", "Claude Code no tiene sesión iniciada. Entrá con tu cuenta de Claude (Pro o Max). "
                                + WITHOUT_CLAUDE),
-    "gratis": ("problema", "Tu cuenta de Claude es la gratis, y esa no trae Claude Code, que es el que traduce. "
+    "gratis": ("problema", "Tu cuenta de Claude es la gratuita, y esa no incluye Claude Code, que es el que traduce. "
                            + WITHOUT_CLAUDE),
     "por_uso": ("aviso", ("Claude Code está conectado a una cuenta de API, que cobra cada traducción. Con una "
                           "suscripción (alcanza con Claude Pro) no pagás aparte.")),
@@ -300,7 +303,7 @@ CLAUDE_ADVICE = {
 
 
 def sessions_for(ram_gb: float, wanted: int = 3) -> int:
-    """Cuántas sesiones de Claude abrir según la memoria (cada una ocupa ~250 MB)."""
+    """Cantidad de sesiones de Claude a abrir según la memoria (cada una ocupa ~250 MB)."""
     if ram_gb and ram_gb < 6:
         return 1
     if ram_gb and ram_gb < 10:
@@ -312,21 +315,21 @@ def recommend(info: System) -> Plan:
     plan = Plan()
     add = plan.advice.append
     if info.build and info.build < 19041:
-        add(Advice("problema", "Tu Windows es muy viejo para Bubble. Actualizalo desde Windows Update: hace "
-                               "falta Windows 10 2004 o más nuevo."))
+        add(Advice("problema", "Tu Windows es demasiado antiguo para Bubble. Actualizalo desde Windows Update: hace "
+                               "falta Windows 10 2004 o posterior."))
     elif info.build and info.build < 20348:
         add(Advice("aviso", "En tu Windows, los subtítulos escuchan todo lo que suena en la PC, no solo "
                             "Roblox. Si ponés música, puede aparecer. En Windows 11 se escucha solo el juego."))
     if not info.python_64bit:
-        add(Advice("problema", "Tu Python es de 32 bits y así la voz no anda. Instalá el de 64 bits."))
+        add(Advice("problema", "Tu Python es de 32 bits y así la voz no funciona. Instalá el de 64 bits."))
     plan.claude_sessions = sessions_for(info.ram_gb)
     if info.ram_gb and info.ram_gb < 6:
         plan.whisper_ram_limit = True
-        add(Advice("aviso", f"Tu PC tiene {info.ram_gb:.0f} GB de memoria, así que uso lo más liviano para no sacarle memoria "
-                            "a Roblox."))
+        add(Advice("aviso", f"Tu PC tiene {info.ram_gb:.0f} GB de memoria, así que uso lo más liviano para no "
+                            "quitarle memoria a Roblox."))
     if info.threads and info.threads < 4:
-        add(Advice("aviso", "Tu procesador es algo justo para la voz. Con Bubble Pro se entiende en la nube y "
-                            "no le pesa a tu PC."))
+        add(Advice("aviso", "Tu procesador es algo limitado para la voz. Con Bubble Pro se entiende en la nube y no "
+                            "sobrecarga tu PC."))
     problem = claude_problem(info.claude)
     if problem in CLAUDE_ADVICE:
         level, text = CLAUDE_ADVICE[problem]
@@ -346,8 +349,8 @@ def recommend(info: System) -> Plan:
     if not info.microphones:
         add(Advice("aviso", "No encuentro ningún micrófono. Para traducir tu voz, conectá uno."))
     if info.work_area[1] and info.work_area[1] / max(info.scale, 1.0) < 700:
-        add(Advice("aviso", "Tu pantalla es chica, así que la ventana de Bubble se achica. Usá la ruedita para "
-                            "moverte."))
+        add(Advice("aviso", "Tu pantalla es pequeña, así que la ventana de Bubble se reduce. Usá la rueda del mouse "
+                            "para moverte."))
     net = info.internet
     if net is not None:
         if net.error and net.claude_ms is None:
@@ -356,20 +359,21 @@ def recommend(info: System) -> Plan:
             slow = (net.claude_ms or 0) > 350 or (net.download_mbps is not None and net.download_mbps < 2)
             plan.slow_internet = slow
             if slow:
-                add(Advice("aviso", "Tu internet anda lento, así que las traducciones van a tardar un poco más."))
+                add(Advice("aviso", "Tu conexión está lenta, así que las traducciones tardarán un poco más."))
     if not any(item.level != "ok" for item in plan.advice):
-        add(Advice("ok", "Todo listo: tu PC puede usar todo Bubble."))
+        add(Advice("ok", "Todo en orden: tu PC puede usar todo Bubble."))
     return plan
 
 
 # ---------------------------------------------------------------- al abrir Bubble
-INTERNET_EVERY_S = 24 * 3600  # la velocidad de internet se mide una vez por día (baja 3 MB de prueba)
-SLOW_START_S = 0.5  # con internet lento, la voz de la nube arranca con más colchón (no se corta)
+INTERNET_EVERY_S = 24 * 3600  # la velocidad de internet se mide una vez por día (descarga 3 MB de prueba)
+SLOW_START_S = 0.5  # con internet lento, la voz de la nube arranca con más margen (no se corta)
 
 
 def check(internet: bool | None = None) -> tuple[System, Plan]:
-    """Revisa tu equipo y dice qué conviene. `internet`: medirlo ya (None: si pasó un día desde la última vez; si no,
-    se usa la medición guardada)."""
+    """Revisa el equipo y determina la configuración recomendada. `internet`: si se mide ya (None: solo si pasó un día
+    desde la última medición; si no, se usa la guardada).
+    """
     from .state import load_state, update_state
 
     saved = load_state().get("internet") or {}
@@ -385,8 +389,9 @@ def check(internet: bool | None = None) -> tuple[System, Plan]:
 
 
 def adapt(plan: Plan) -> list[str]:
-    """Aplica lo que conviene para este equipo (lo que se decide al arrancar ya lo tomó: sesiones de Claude y
-    reconocimiento de voz según la memoria). Devuelve qué cambió."""
+    """Aplica la configuración recomendada para este equipo (lo que se decide al arrancar, como las sesiones de Claude
+    y el reconocimiento de voz según la memoria, ya está aplicado). Devuelve la lista de cambios.
+    """
     changes = []
     if plan.slow_internet:
         try:
@@ -394,13 +399,13 @@ def adapt(plan: Plan) -> list[str]:
 
             if audio.STREAM_START_S < SLOW_START_S:
                 audio.STREAM_START_S = SLOW_START_S
-                changes.append("la voz de la nube arranca con más colchón (internet lento)")
+                changes.append("la voz de la nube comienza con más margen (internet lento)")
         except ImportError:
             pass
     return changes
 
 def summary_lines(info: System) -> list[tuple[str, str]]:
-    """Para mostrar: (qué, cómo está)."""
+    """Para mostrar: (qué, estado)."""
     gpu = ", ".join(info.gpus[:2]) or "—"
     screen = f"{info.screen[0]}×{info.screen[1]} (escala {int(info.scale * 100)} %)"
     session = {True: "sesión iniciada", False: "sin sesión", None: f"instalado ({info.claude.version or '—'})"}

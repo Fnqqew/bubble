@@ -1,6 +1,6 @@
-"""Conexiones con Deepgram que quedan abiertas (HTTPS keep-alive): cada pedido se ahorra ~0,2 a 0,4 s de conectarse
-de nuevo (desde Argentina, el saludo cifrado con el servidor tarda eso). Las usan la voz de la nube y tus frases con
-el botón."""
+"""Conexiones abiertas con Deepgram (HTTPS keep-alive). Cada pedido ahorra ~0,2 a 0,4 s de reconexión (el saludo cifrado
+con el servidor tarda eso desde Argentina). Las usan la voz en la nube y las frases del jugador enviadas con el botón.
+"""
 
 from __future__ import annotations
 
@@ -12,17 +12,18 @@ import time
 from .errors import CloudError, error_for
 
 HOST = "api.deepgram.com"
-# Deepgram corta a los ~5 s una conexión quieta: si nunca se usó, antes de cerrarla deja escrito un «408 Request
-# Time-out» (medido el 29/9/2026). Antes se guardaban 45 s: el pedido siguiente leía ese 408 viejo como respuesta
-# («Deepgram respondió 408 <html>…») y esa frase se entendía con tu PC.
+# Deepgram cierra a los ~5 s una conexión inactiva y, si nunca se usó, deja escrito antes un «408 Request Time-out». Con
+# un tiempo de guardado mayor, el pedido siguiente leía ese 408 como respuesta («Deepgram respondió 408 <html>…») y la
+# frase se procesaba con la PC local.
 IDLE_MAX_S = 4.0
 
 
 def usable(connection: http.client.HTTPConnection) -> bool:
-    """¿Sirve para otro pedido? No, si el servidor ya mandó algo por su cuenta (un «408») o la cerró."""
+    """Indica si la conexión sirve para otro pedido: no, si el servidor envió algo por su cuenta (un «408») o la cerró.
+    """
     sock = connection.sock
     if sock is None:
-        return True  # (todavía no se conectó: se conecta al pedir)
+        return True  # aún sin conectar: se conecta al pedir
     try:
         if getattr(sock, "pending", lambda: 0)():
             return False
@@ -56,7 +57,7 @@ class Pool:
         self._idle.put((connection, time.monotonic()))
 
     def warm(self) -> None:
-        """Deja una conexión abierta, sin pedir nada (no gasta): el primer pedido sale enseguida."""
+        """Deja una conexión abierta sin enviar nada (sin costo), para que el primer pedido salga de inmediato."""
         connection = self._take()
         try:
             if connection.sock is None:
@@ -66,8 +67,9 @@ class Pool:
             connection.close()
 
     def request(self, method: str, path: str, body: bytes, headers: dict[str, str]) -> bytes:
-        """El pedido entero (la respuesta completa). Si la conexión guardada se había cortado (o el servidor la dio
-        por vencida: 408), se reintenta una vez con una nueva."""
+        """Realiza el pedido y devuelve la respuesta completa. Si la conexión guardada se cortó o el servidor la
+        dio por vencida (408), reintenta una vez con una conexión nueva.
+        """
         for attempt in (0, 1):
             connection = self._take() if attempt == 0 else self._new()
             try:
@@ -80,7 +82,7 @@ class Pool:
                     raise CloudError(f"Sin respuesta de Deepgram: {exc}") from exc
                 continue
             if response.status == 408 and not attempt:
-                connection.close()  # (una conexión vencida: se prueba con una nueva)
+                connection.close()  # conexión vencida: se reintenta con una nueva
                 continue
             if response.status >= 400:
                 connection.close()
@@ -90,8 +92,9 @@ class Pool:
         raise CloudError("Sin respuesta de Deepgram")
 
     def stream(self, method: str, path: str, body: bytes, headers: dict[str, str], size: int = 4800):
-        """Como `request`, pero la respuesta llega de a pedazos, apenas Deepgram los manda (para empezar a reproducir
-        la voz sin esperar el final)."""
+        """Igual que `request`, pero la respuesta se entrega en fragmentos a medida que Deepgram los envía, para
+        comenzar a reproducir la voz sin esperar el final.
+        """
         for attempt in (0, 1):
             connection = self._take() if attempt == 0 else self._new()
             try:
@@ -104,7 +107,7 @@ class Pool:
                 continue
             if response.status == 408 and not attempt:
                 response.read()
-                connection.close()  # (una conexión vencida: se prueba con una nueva)
+                connection.close()  # conexión vencida: se reintenta con una nueva
                 continue
             if response.status >= 400:
                 data = response.read()
@@ -135,7 +138,7 @@ _pools: dict[float, Pool] = {}
 
 
 def pool(timeout: float = 8.0) -> Pool:
-    """Una por tiempo de espera (compartida por todo Bubble)."""
+    """Devuelve el pool asociado a un tiempo de espera (compartido por todo Bubble)."""
     if timeout not in _pools:
         _pools[timeout] = Pool(timeout=timeout)
     return _pools[timeout]

@@ -1,7 +1,7 @@
 """Prompts del traductor.
 
-El system prompt es fijo durante toda la sesión (se cachea) y todo lo variable
-—dirección, variante destino, contexto, pistas de jerga y mensaje— va en cada pedido.
+El system prompt es fijo durante toda la sesión (se cachea). Todo lo variable (dirección, variante destino, contexto,
+pistas de jerga y mensaje) va en cada pedido.
 """
 
 from __future__ import annotations
@@ -93,10 +93,10 @@ _PARTIAL_CLOSE = re.compile(r"<(?:/(?:t(?:\d{1,3})?)?)?$")
 
 
 class OutputFilter:
-    """Extrae en streaming el texto de cada <tN>...</tN> y descarta cualquier otra cosa que diga el modelo.
+    """Extrae en streaming el texto de cada <tN>...</tN> y descarta cualquier otro contenido del modelo.
 
-    `feed()` devuelve pares (índice desde 0, texto) a medida que llegan. Si un pedido de un solo mensaje
-    vuelve sin marcas, se usa la respuesta completa.
+    `feed()` devuelve pares (índice desde 0, texto) a medida que llegan. Si un pedido de un solo mensaje vuelve sin
+    marcas, se usa la respuesta completa.
     """
 
     def __init__(self, count: int = 1) -> None:
@@ -114,7 +114,7 @@ class OutputFilter:
             if self._current is None:
                 match = _OPEN_TAG.search(self._buffer)
                 if not match:
-                    self._buffer = self._buffer[-6:]  # basta para no perder una marca partida
+                    self._buffer = self._buffer[-6:]  # suficiente para no perder una marca partida
                     break
                 self._saw_tag = True
                 index = int(match.group(1)) - 1
@@ -151,8 +151,8 @@ class OutputFilter:
 
 SYSTEM_PROMPT = build_system_prompt()
 TONE_LABELS = {1: "Neutral", 2: "Friendly", 3: "Casual", 4: "Gamer", 5: "Native slang"}
-# En cada pedido, lo que no puede faltar de ese nivel: con una frase llena de jerga ("che boludo, posta…"), el modelo
-# rápido la mantenía aunque el tono fuera 1 (medido: "Hey dude, for real…" en neutro).
+# Recordatorio que se incluye en cada pedido con lo imprescindible de cada nivel de tono. Con una frase cargada de
+# jerga, el modelo rápido la conservaba aunque el tono fuera 1 (por ejemplo, "Hey dude, for real…" en neutro).
 TONE_REMINDERS = {
     1: "standard, polite language: drop every slang and swear word of the original (no 'dude', 'bro', 'for real').",
     2: "warm but standard words: no slang, no swearing.",
@@ -162,7 +162,7 @@ TONE_REMINDERS = {
 }
 
 
-# Para decir en voz: variantes que se escriben distinto de como se dicen en el chat.
+# Variantes para voz: formas que se escriben distinto de como se pronuncian en el chat.
 SPOKEN_VARIANTS = {
     "hi": "casual spoken Hindi, written in Devanagari script (a Hindi voice will read it)",
     "sr": "casual spoken Serbian, written in Latin script (the voice reads only Latin letters)",
@@ -173,7 +173,8 @@ def build_user_prompt(requests: TranslationRequest | Sequence[TranslationRequest
     """Pedido con uno o más mensajes numerados que comparten dirección, destino y tono."""
     batch = [requests] if isinstance(requests, TranslationRequest) else list(requests)
     first = batch[0]
-    # Lo que mandás en tono 1 o 2: la variante sin su jerga (si no, hasta el neutro salía con "dude" y "for real").
+    # Mensajes salientes con tono 1 o 2: se usa la variante sin jerga (de lo contrario, incluso el neutro incluía "dude"
+    # y "for real").
     formal = first.direction == "outgoing" and first.tone <= 2
     reader = describe(first.target_lang, first.target_region, slang=not formal)
     parts: list[str] = []

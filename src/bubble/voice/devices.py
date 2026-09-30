@@ -1,16 +1,17 @@
-"""Los dispositivos de Windows, puestos como tienen que estar.
+"""Configuración de los dispositivos de audio de Windows.
 
 - Al instalar el micrófono virtual (VB-Audio Virtual Cable), Windows suele dejarlo como micrófono o parlante
-  predeterminado: como parlante no escuchás nada, y como micrófono nadie te escucha si Bubble está cerrado. Bubble lo
-  corrige solo.
-- Modo Soundpad: mientras Bubble está abierto, el micrófono de Windows es el virtual, y Bubble le pasa tu voz real en
-  vivo más la traducida: te escuchan igual que siempre, y la voz traducida cuando suena. Al cerrar Bubble, vuelve tu
-  micrófono. Roblox arma su lista de micrófonos UNA vez, al abrirse, y usa el que en ese momento es el de Windows (se
-  ve en su registro): por eso el cambio se hace apenas abre Bubble y no se deshace al cerrar Roblox. Si Roblox ya
-  estaba abierto, `roblox_microphone` dice cuál está usando, para avisarte.
+  predeterminado. Como parlante no se escucha nada, y como micrófono nadie oye al jugador si Bubble está cerrado. Bubble
+  lo corrige automáticamente.
+- Modo Soundpad: mientras Bubble está abierto, el micrófono de Windows es el virtual, y Bubble le envía la voz real en
+  vivo más la traducida. Los demás escuchan al jugador como siempre y, cuando corresponde, la voz traducida. Al cerrar
+  Bubble se restaura el micrófono original. Roblox arma su lista de micrófonos una sola vez, al abrirse, y usa el que en
+  ese momento es el predeterminado de Windows (se ve en su registro). Por eso el cambio se hace apenas abre Bubble y no
+  se deshace al cerrar Roblox. Si Roblox ya estaba abierto, `roblox_microphone` indica cuál está usando, para avisar al
+  jugador.
 
-Windows no tiene una función pública para elegir el dispositivo predeterminado: se usa la misma interfaz COM que usan
-el panel de Sonido y programas como EarTrumpet o SoundSwitch (IPolicyConfig), a mano con ctypes.
+Windows no ofrece una función pública para elegir el dispositivo predeterminado. Se usa la interfaz COM IPolicyConfig,
+la misma que emplean el panel de Sonido y programas como EarTrumpet o SoundSwitch, implementada a mano con ctypes.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ def is_virtual(name: str) -> bool:
 
 
 def set_default(device_id: str) -> None:
-    """Pone ese dispositivo como predeterminado de Windows (para los tres usos)."""
+    """Establece el dispositivo como predeterminado de Windows para los tres roles."""
     from .audio import com_ready
 
     com_ready()
@@ -74,8 +75,9 @@ def _remembered() -> str:
 
 
 def use_cable_as_default() -> bool:
-    """Modo Soundpad: el micrófono virtual como micrófono de Windows (se guarda cuál era el tuyo). False si no hay
-    micrófono virtual."""
+    """Modo Soundpad: establece el micrófono virtual como micrófono de Windows y guarda el original. Devuelve False si
+    no hay micrófono virtual.
+    """
     sc = _sc()
     cable = _cable_output(sc)
     if cable is None:
@@ -91,7 +93,7 @@ def use_cable_as_default() -> bool:
 
 
 def _fix_speaker(sc) -> str:
-    """El parlante nunca tiene que ser el cable (no escucharías nada)."""
+    """El parlante predeterminado nunca debe ser el cable virtual, porque no se escucharía nada."""
     if is_virtual(sc.default_speaker().name):
         real = next((speaker for speaker in sc.all_speakers() if not is_virtual(speaker.name)), None)
         if real is not None:
@@ -102,7 +104,7 @@ def _fix_speaker(sc) -> str:
 
 
 def wrong_defaults() -> list[str]:
-    """Qué quedó en el micrófono virtual: "micrófono", "parlante" (vacío si está todo bien)."""
+    """Indica qué dispositivo quedó mal en el micrófono virtual: "micrófono", "parlante" (vacío si todo está bien)."""
     sc = _sc()
     wrong = []
     if is_virtual(sc.default_microphone().name):
@@ -113,8 +115,9 @@ def wrong_defaults() -> list[str]:
 
 
 def restore_real_defaults() -> list[str]:
-    """Vuelve a poner tu micrófono y tu parlante de verdad como predeterminados, si el cable quedó en su lugar.
-    Devuelve los nombres de lo que puso."""
+    """Restaura el micrófono y el parlante reales como predeterminados, si el cable sigue siendo el predeterminado.
+    Devuelve los nombres de los dispositivos restablecidos.
+    """
     sc = _sc()
     fixed = []
     if is_virtual(sc.default_microphone().name):
@@ -133,8 +136,9 @@ def restore_real_defaults() -> list[str]:
 
 
 def roblox_microphone() -> str | None:
-    """El micrófono del que está grabando Roblox ahora (su sesión de audio activa), o None si no graba o no está
-    abierto. Solo mira: no cambia nada."""
+    """Micrófono desde el que graba Roblox (su sesión de audio activa), o None si no graba o no está abierto. Solo
+    consulta: no modifica nada.
+    """
     from .. import win32
     from .sessions import sessions
 
@@ -152,7 +156,8 @@ def roblox_microphone() -> str | None:
 
 
 def real_microphone(name: str = ""):
-    """Tu micrófono de verdad: el elegido en Bubble, o el predeterminado de Windows salvo que sea el virtual."""
+    """Micrófono real: el elegido en Bubble o, si no hay, el predeterminado de Windows, siempre que no sea el virtual.
+    """
     sc = _sc()
     mics = sc.all_microphones()
     if name:
@@ -162,6 +167,6 @@ def real_microphone(name: str = ""):
     default = sc.default_microphone()
     if not is_virtual(default.name):
         return default
-    saved = _remembered()  # con el modo Soundpad, el de Windows es el virtual: el tuyo es el que estaba antes
+    saved = _remembered()  # con el modo Soundpad, el de Windows es el virtual: el real es el guardado
     return next((mic for mic in mics if mic.name == saved),
                 next((mic for mic in mics if not is_virtual(mic.name)), default))

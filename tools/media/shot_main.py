@@ -1,4 +1,4 @@
-"""Captura páginas de la ventana (transparente y sin tomar el foco: nunca sale lo que hay detrás).
+"""Captura páginas de la ventana, transparente y sin tomar el foco, de modo que nunca aparece lo que hay detrás.
 
 Uso: shot_main.py inicio,voz,ajustes <carpeta> [oscuro|claro]  →  <carpeta>/page_<tema>_<página>.png
 """
@@ -33,11 +33,11 @@ config = load_config()
 config.appearance.theme = theme_name
 import bubble.cloud.keys  # noqa: E402
 
-if "pro" in sys.argv[4:]:  # con Bubble Pro activo (dorado): una clave de mentira, no se conecta a nada
+if "pro" in sys.argv[4:]:  # Con Bubble Pro activo (dorado); clave ficticia, sin conexión
     bubble.cloud.keys.load_key = lambda: "clave-de-prueba"
     config.pro.enabled = True
     theme_name += "_pro"
-else:  # Basic (aunque en esta PC esté activado el Pro)
+else:  # Versión Basic, aunque en esta PC esté activado el Pro
     bubble.cloud.keys.load_key = lambda: ""
     config.pro.enabled = False
 root = tk.Tk()

@@ -1,6 +1,7 @@
-"""Animaciones cortas y suaves: la ventana y la barra para escribir aparecen deslizándose, y se van desvaneciendo.
-Todo corre en el hilo de la ventana (con `after`), de a ~60 cuadros por segundo, y dura menos de un cuarto de segundo:
-se nota, pero nunca hace esperar."""
+"""Animaciones cortas y suaves: la ventana y la barra de escritura aparecen deslizándose y se cierran desvaneciéndose.
+Todo corre en el hilo de la ventana (con `after`), a unos 60 cuadros por segundo y en menos de 0,25 s: son
+perceptibles, pero no hacen esperar al jugador.
+"""
 
 from __future__ import annotations
 
@@ -12,15 +13,16 @@ FRAME_MS = 15
 
 
 def ease_out(t: float) -> float:
-    """Arranca rápido y frena suave al llegar."""
+    """Curva de suavizado: arranca rápido y desacelera al llegar."""
     t = min(1.0, max(0.0, t))
     return 1 - (1 - t) ** 3
 
 
 def animate(widget: tk.Misc, seconds: float, step: Callable[[float], None],
             done: Callable[[], None] | None = None, alive: Callable[[], bool] | None = None) -> None:
-    """Llama a `step(avance 0→1, ya suavizado)` en cada cuadro durante `seconds`, y al final `done`. `alive`: si deja
-    de ser cierto (otra animación la reemplazó), se corta sin tocar nada."""
+    """Llama a `step(avance 0→1, ya suavizado)` en cada cuadro durante `seconds` y, al final, a `done`. Si `alive` deja
+    de ser verdadero (otra animación la reemplazó), se interrumpe sin modificar nada.
+    """
     start = time.perf_counter()
 
     def frame() -> None:
@@ -34,14 +36,14 @@ def animate(widget: tk.Misc, seconds: float, step: Callable[[float], None],
             elif done:
                 done()
         except tk.TclError:
-            pass  # la ventana se cerró en el medio
+            pass  # la ventana se cerró durante la animación
 
     frame()
 
 
 def appear(window: tk.Misc, x: int | None = None, y: int | None = None, rise: int = 14, seconds: float = 0.2,
            alpha: float = 1.0, alive: Callable[[], bool] | None = None) -> None:
-    """Aparece desvaneciéndose y subiendo un poco hasta (x, y) (si se da la posición)."""
+    """Aparece con fundido y un leve desplazamiento ascendente hasta (x, y), si se indica la posición."""
     window.attributes("-alpha", 0.0)
     if x is not None and y is not None:
         window.geometry(f"+{x}+{y + rise}")
@@ -56,7 +58,7 @@ def appear(window: tk.Misc, x: int | None = None, y: int | None = None, rise: in
 
 def vanish(window: tk.Misc, then: Callable[[], None], seconds: float = 0.12, alpha: float = 1.0,
            alive: Callable[[], bool] | None = None) -> None:
-    """Se desvanece y después `then` (por ejemplo, esconderla)."""
+    """Se desvanece y luego ejecuta `then` (por ejemplo, ocultar la ventana)."""
 
     def step(p: float) -> None:
         window.attributes("-alpha", alpha * (1 - p))

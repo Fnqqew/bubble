@@ -1,6 +1,8 @@
-"""¿Hay alguien hablando? Silero VAD (viene con faster-whisper): cada 32 ms, la probabilidad de que sea voz.
+"""¿Hay alguien hablando? Silero VAD (incluido con faster-whisper) calcula cada 32 ms la probabilidad de que el audio
+sea voz.
 
-Distingue la voz de la música del juego, pasos, explosiones o viento mucho mejor que medir el volumen.
+Distingue la voz de la música del juego, los pasos, las explosiones o el viento mucho mejor que una medición de
+volumen.
 """
 
 from __future__ import annotations
@@ -26,8 +28,10 @@ _lock = threading.Lock()
 
 
 def session():
-    """Un solo modelo para todas las escuchas (cada una guarda su propio estado): crearlo congela la ventana un
-    momento (onnxruntime no suelta a Python mientras tanto), así que se crea una vez, al abrir Bubble."""
+    """Un único modelo compartido por todas las escuchas (cada una mantiene su propio estado). Su creación bloquea la
+    ventana unos instantes porque onnxruntime no libera el control a Python, por lo que se crea una sola vez, al
+    abrir Bubble.
+    """
     with _lock:
         if not _shared:
             import onnxruntime
@@ -52,7 +56,7 @@ class StreamingVad:
         self._pending = np.zeros(0, dtype=np.float32)
 
     def feed(self, samples: np.ndarray) -> np.ndarray:
-        """Audio nuevo (mono, 16 kHz) → probabilidades de voz de cada cuadro completo de 32 ms."""
+        """Recibe audio nuevo (mono, 16 kHz) y devuelve la probabilidad de voz de cada cuadro completo de 32 ms."""
         data = np.concatenate([self._pending, np.asarray(samples, dtype=np.float32).ravel()])
         count = len(data) // FRAME
         self._pending = data[count * FRAME:]

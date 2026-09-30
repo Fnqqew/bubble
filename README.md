@@ -10,12 +10,12 @@
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
 </p>
 
-<h3 align="center">El idioma no debería ser una pared.</h3>
+<h3 align="center">El idioma no debería ser una barrera.</h3>
 
 <p align="center">
-  En un mismo servidor de Roblox juegan chicos de Brasil, de India, de Francia, de México y de Argentina.<br>
-  Se cruzan, se piden ayuda, se ríen… y muchas veces no se entienden.<br>
-  <b>Hice Bubble para que nadie se quede afuera de una charla.</b>
+  En un mismo servidor de Roblox coinciden jugadores de Brasil, India, Francia, México y Argentina.<br>
+  Se cruzan, se piden ayuda, comparten partidas… y muchas veces no logran entenderse.<br>
+  <b>Desarrollé Bubble para que nadie quede fuera de una conversación.</b>
 </p>
 
 <br>
@@ -32,39 +32,40 @@
   <img src="docs/como-funciona.png" alt="1. Mira: lee el chat y las burbujas de la pantalla. 2. Entiende: tu Claude traduce con la jerga de cada país. 3. Muestra: la traducción aparece encima del original, en su lugar exacto." width="100%">
 </p>
 
-Bubble mira la pantalla mientras jugás y te traduce todo:
+Bubble observa la pantalla mientras jugás y traduce todo lo que aparece:
 
-- **El chat.** Cada mensaje en otro idioma aparece traducido arriba del original. Lo que ya está en tu idioma lo
-  deja tranquilo.
-- **Las burbujas** que salen sobre la cabeza de los jugadores, aunque muevas la cámara.
-- **Lo que escribís.** Apretás °, escribís como hablás y sale traducido al chat. Con Tab elegís el idioma, entre 59.
-- **Las voces.** Lo que te dicen aparece subtitulado abajo, como en una película.
-- **Tu voz.** Hablás en tu idioma y los demás te escuchan en el suyo, con voz de mujer o de hombre y con tus mismas
-  ganas: si gritás, grita; si preguntás, pregunta.
+- **El chat.** Cada mensaje en otro idioma se muestra traducido encima del original. Los mensajes que ya están en tu
+  idioma no se modifican.
+- **Las burbujas** que aparecen sobre los jugadores, aunque muevas la cámara.
+- **Lo que escribís.** Presionás °, escribís con normalidad y el mensaje llega al chat traducido. Con Tab elegís el
+  idioma, entre 59 opciones.
+- **Las voces.** Lo que te dicen aparece subtitulado en la parte inferior, como en una película.
+- **Tu voz.** Hablás en tu idioma y los demás te escuchan en el suyo, con voz de mujer o de hombre y con tu misma
+  expresión: si gritás, la voz grita; si preguntás, la voz pregunta.
 
-Y no traduce palabra por palabra: entiende la jerga (*vlw mano*, *ngl this obby is mid*, *mdr jsp*) y te la cuenta
-como la diría alguien de tu barrio.
+La traducción no es literal: interpreta la jerga (*vlw mano*, *ngl this obby is mid*, *mdr jsp*) y la expresa como la
+diría alguien de tu país.
 
 <br>
 
 ## En tu idioma
 
 Bubble se muestra en el idioma de tu Windows. Si lo abre alguien de Brasil, lo ve en portugués; si lo abre alguien de
-Japón, en japonés. Los 20 idiomas más jugados vienen listos, y para el resto Bubble se traduce solo la primera vez.
-También lo podés cambiar en Ajustes.
+Japón, en japonés. Se incluyen los 20 idiomas más usados, y para el resto Bubble se traduce la primera vez que se
+conecta. También se puede cambiar desde Ajustes.
 
 <br>
 
-## La app
+## La aplicación
 
 <p align="center">
   <img src="docs/interfaz.png" alt="La ventana de Bubble: tu idioma y cuatro interruptores (chat, burbujas, voz y tu voz), y los ajustes de apariencia" width="100%">
 </p>
 
-Elegís tu idioma, prendés lo que quieras y a jugar. El chat lo encuentra solo.
+Elegís tu idioma, activás lo que necesites y empezás a jugar. El chat se detecta automáticamente.
 
-Si querés, la acomodás a tu gusto: colores, tamaño de las traducciones, dónde van los subtítulos. Y en **Pruebas**
-podés probar tu micrófono y tu voz traducida sin entrar a ningún juego.
+Si lo preferís, podés personalizar los colores, el tamaño de las traducciones y la ubicación de los subtítulos. En
+**Pruebas** podés verificar el micrófono y la voz traducida sin entrar a ningún juego.
 
 <br>
 
@@ -74,66 +75,67 @@ podés probar tu micrófono y tu voz traducida sin entrar a ningún juego.
   <img src="docs/pro.png" alt="Bubble Basic y Bubble Pro lado a lado: la ventana de siempre y la ventana dorada de Pro con la comparación, la barra para escribir en dorado y el aviso «Bubble Pro activado» dentro del juego" width="100%">
 </p>
 
-Basic es gratis y hace todo en tu PC. Pro manda la voz a la nube de Deepgram, con tu propia cuenta:
+Basic es gratuito y procesa todo en tu PC. Pro envía la voz a la nube de Deepgram, con tu propia cuenta:
 
 | | **Basic** · gratis | **✦ Pro** |
 |---|---|---|
-| Entender voces | en tu PC | en la nube: entiende aunque hablen rápido, se pisen o mezclen idiomas |
-| Voces que hablan por vos | las de tu PC | voces que suenan de verdad, con personalidad; en inglés, con emoción |
-| Costo | gratis | lo que uses, unos 0,35 US$ por hora de voz (la cuenta nueva trae 200 US$) |
+| Reconocimiento de voces | en tu PC | en la nube: reconoce aunque hablen rápido, se superpongan o mezclen idiomas |
+| Voces que hablan por vos | las de tu PC | voces naturales, con personalidad; en inglés, con emoción |
+| Costo | gratis | según el uso, unos 0,35 US$ por hora de voz (la cuenta nueva incluye 200 US$) |
 
-En el juego pasás de uno al otro con **Ctrl+P**. Si se corta internet, esa frase la entiende tu PC; si la cuenta se
-queda sin saldo, Bubble vuelve solo a Basic y te avisa.
+En el juego se cambia de plan con **Ctrl+P**. Si se corta internet, esa frase se procesa en tu PC; si se agota el
+saldo, Bubble vuelve a Basic y lo informa.
 
-¿No tenés Claude todavía? Con Pro, la traducción también va por la nube, con el crédito de regalo de Deepgram. Cuando
-conectes Claude, deja de gastar. [Cómo se activa](docs/GUIA.md#bubble-pro).
+¿Todavía no tenés Claude? Con Pro, la traducción también se hace en la nube, con el crédito de regalo de Deepgram.
+Cuando conectes Claude, deja de consumir crédito. [Cómo se activa](docs/GUIA.md#bubble-pro).
 
 <br>
 
-## Anda en cualquier juego
+## Funciona en cualquier juego
 
-Encuentra el chat esté donde esté, lo lee con cualquier fondo y se acomoda a tu PC para que Roblox no se trabe. Anda
-con el Roblox de la web, con Bloxstrap o con el de la Microsoft Store, y las traducciones salen en tus capturas y
-grabaciones. Tampoco se confunde con el spam ni con las voces de la otra punta del mapa.
+Detecta el chat donde esté, lo lee con cualquier fondo y se adapta a tu PC para no afectar el rendimiento de Roblox.
+Es compatible con el Roblox de la web, con Bloxstrap y con el de la Microsoft Store, y las traducciones aparecen en tus
+capturas y grabaciones. Tampoco se confunde con el spam ni con las voces del otro extremo del mapa.
 
 <br>
 
 ## Tu PC, tu cuenta
 
-Bubble corre en tu computadora y traduce con **tu suscripción de Claude**, a través de Claude Code. No hay
-servidores de por medio. Claude solo ve texto, y cada traducción usa muy poco
-([acá lo medí](docs/USO-DE-CLAUDE.md)).
+Bubble se ejecuta en tu computadora y traduce con **tu suscripción de Claude**, a través de Claude Code. No hay
+servidores intermedios. Claude solo recibe texto, y cada traducción consume muy poco
+([ver la medición](docs/USO-DE-CLAUDE.md)).
 
-A Roblox no lo toca: mira la pantalla como una app de grabación y escribe como lo harías vos.
+Bubble no modifica Roblox: observa la pantalla como una aplicación de grabación y escribe como lo harías vos.
 
 <br>
 
-## Empezar
+## Cómo empezar
 
 <p align="center">
   <img src="docs/instalacion.gif" alt="La instalación en 5 pasos: bajar Bubble, doble clic en Iniciar.bat, Bubble descarga lo que necesita, conectás tu cuenta de Claude y a jugar" width="100%">
 </p>
 
-Necesitás Windows 10 u 11 y Claude Pro o Max (o, mientras tanto, una cuenta gratis de Deepgram para Pro).
+Requisitos: Windows 10 u 11 y Claude Pro o Max (o, mientras tanto, una cuenta gratuita de Deepgram para usar Pro).
 
-**Bajá Bubble, hacé doble clic en `Iniciar.bat` y listo.** La primera vez prepara todo solo, y lo que necesita tu
-permiso te espera con su botón. [La instalación paso a paso, con imágenes](docs/INSTALACION.md).
+**Descargá Bubble y hacé doble clic en `Iniciar.bat`.** La primera vez se prepara todo automáticamente, y lo que
+requiere tu permiso aparece con su propio botón. [La instalación paso a paso, con imágenes](docs/INSTALACION.md).
 
 > [!IMPORTANT]
-> **Lo más importante es el micrófono.** Bubble te entiende tan bien como te escucha. Con uno de auriculares o uno
-> USB cerca de la boca, todo sale mucho mejor que con el de la notebook. Probalo en **Inicio → Probar mi micrófono**.
+> **Lo más importante es el micrófono.** Bubble te entiende tan bien como te escucha. Con un micrófono de auriculares
+> o uno USB cerca de la boca, el resultado es mucho mejor que con el de la notebook. Podés probarlo en
+> **Inicio → Probar mi micrófono**.
 
-Cuando sale una versión nueva, Bubble te avisa y se actualiza en menos de un minuto. Si preferís no pensar en eso,
-en Ajustes prendés **Actualizar solo** y se baja e instala sola cuando no estás jugando.
+Cuando sale una versión nueva, Bubble lo informa y se actualiza en menos de un minuto. Si preferís no ocuparte de eso,
+activá **Actualizar automáticamente** en Ajustes: la versión nueva se descarga e instala cuando no estás jugando.
 
 Para desinstalar: **Ajustes → Desinstalar Bubble…** Elegís qué borrar y tu micrófono queda como estaba.
 
-La primera vez te acompaña un tutorial corto. Para todo lo demás está la [guía](docs/GUIA.md). Y si algo no anda o
-tenés una idea, contalo desde **Soporte**, abajo de todo en la ventana: me llega directo.
+La primera vez te acompaña un tutorial breve. Para todo lo demás está la [guía](docs/GUIA.md). Si algo no funciona o
+tenés una sugerencia, podés escribirla desde **Soporte**, al final de la ventana: le llega directamente al creador.
 
 <br>
 
 <p align="center">
   <img src="src/bubble/assets/bubble.png" alt="" width="44"><br>
-  <sub>Hecho con cariño para que el idioma no sea una pared.</sub>
+  <sub>Hecho con dedicación para que el idioma no sea una barrera.</sub>
 </p>

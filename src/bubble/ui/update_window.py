@@ -1,4 +1,4 @@
-"""«Hay una versión nueva»: qué trae, y actualizar ahora o más tarde (ver update.py)."""
+"""Aviso de versión nueva: muestra las novedades y permite actualizar ahora o más tarde (ver update.py)."""
 
 from __future__ import annotations
 
@@ -15,18 +15,19 @@ from . import motion, theme, widgets
 class UpdateWindow:
     def __init__(self, root: tk.Misc, release: update.Release, post: Callable[[Callable[[], None]], None],
                  restart: Callable[[], None]) -> None:
-        """`post(acción)`: hacer algo en el hilo de la ventana. `restart()`: cerrar Bubble (la actualización termina
-        sola y lo vuelve a abrir)."""
+        """`post(acción)`: ejecuta una acción en el hilo de la ventana. `restart()`: cierra Bubble; la
+        actualización termina por su cuenta y lo vuelve a abrir.
+        """
         self.release, self.post, self.restart = release, post, restart
         self.kind = update.install_kind()
         self.window, body = widgets.dialog(root, "Actualización de Bubble")
         colors = widgets.palette()
         ttk.Label(body, text="Hay una versión nueva", font="SunValleySubtitleFont").pack(anchor="w")
-        widgets.muted(body, f"Salió Bubble {release.version} (vos tenés la {__version__}). Se instala en menos de un minuto y no perdés "
-                            "nada de lo que configuraste.", pady=(2, 12))
+        widgets.muted(body, f"Ya está disponible Bubble {release.version} (tenés la {__version__}). Se instala en "
+                            "menos de un minuto y conservás toda tu configuración.", pady=(2, 12))
         notes = update.plain_notes(release.notes)
         if notes:
-            ttk.Label(body, text="Qué trae", font="SunValleyBodyStrongFont").pack(anchor="w", pady=(0, 4))
+            ttk.Label(body, text="Novedades", font="SunValleyBodyStrongFont").pack(anchor="w", pady=(0, 4))
             frame, text = theme.scrolled_text(body, height=9, width=58, wrap="word", font=("Segoe UI", 10))
             frame.pack(fill="x")
             text.insert("1.0", notes)
@@ -41,8 +42,8 @@ class UpdateWindow:
         buttons.pack(fill="x")
         if self.kind:
             self.go = ttk.Button(buttons, text="Actualizar ahora", style="Accent.TButton", command=self._update)
-        else:  # (instalado de otra forma: se baja a mano)
-            self.go = ttk.Button(buttons, text="Bajarla de GitHub", style="Accent.TButton",
+        else:  # (instalación manual: la descarga es a mano)
+            self.go = ttk.Button(buttons, text="Descargarla de GitHub", style="Accent.TButton",
                                  command=lambda: (webbrowser.open(release.url), self.close()))
         self.go.pack(side="right")
         self.later = ttk.Button(buttons, text="Más tarde", command=self._later)
@@ -53,7 +54,7 @@ class UpdateWindow:
 
     def _later(self) -> None:
         if str(self.later.cget("state")) == "disabled":
-            return  # (actualizando: ya no se puede cancelar)
+            return  # (actualización en curso: ya no se puede cancelar)
         update.remind_later(self.release)
         self.close()
 
@@ -80,7 +81,7 @@ class UpdateWindow:
             try:
                 folder = update.prepare(self.release, self._progress)
             except (update.UpdateError, OSError, ValueError) as exc:
-                message = str(exc) if isinstance(exc, update.UpdateError) else f"No se pudo bajar ({exc})."
+                message = str(exc) if isinstance(exc, update.UpdateError) else f"No se pudo descargar ({exc})."
                 self.post(lambda: self._failed(message))
                 return
             self.post(lambda: self._ready(folder))
@@ -95,14 +96,14 @@ class UpdateWindow:
             button.state(["!disabled"])
 
     def _ready(self, folder) -> None:
-        self.status.configure(text="Listo. Bubble se cierra y vuelve a abrir solo en unos segundos…",
+        self.status.configure(text="Listo. Bubble se cerrará y volverá a abrirse en unos segundos…",
                               foreground=widgets.palette()["good"])
 
         def go() -> None:
             try:
                 update.launch(folder)
             except OSError as exc:
-                self._failed(f"No se pudo empezar la actualización ({exc}).")
+                self._failed(f"No se pudo iniciar la actualización ({exc}).")
                 return
             self.restart()
 

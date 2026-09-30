@@ -20,7 +20,7 @@ def candidate_paths() -> list[Path]:
         candidates.append(Path(found))
     # Instalador nativo (irm https://claude.ai/install.ps1 | iex).
     candidates.append(home / ".local" / "bin" / "claude.exe")
-    # Binario incluido en la extensión de Claude Code para VS Code / Cursor.
+    # Binario incluido en la extensión de Claude Code para VS Code y Cursor.
     for editor_dir in (".vscode", ".vscode-insiders", ".cursor"):
         extensions = home / editor_dir / "extensions"
         if extensions.is_dir():
@@ -29,7 +29,7 @@ def candidate_paths() -> list[Path]:
 
 
 def cli_version(path: Path) -> tuple[int, ...]:
-    """Versión reportada por `claude -v` (vacía si no responde)."""
+    """Versión informada por `claude -v` (vacía si no responde)."""
     try:
         out = subprocess.run(
             [str(path), "-v"], capture_output=True, text=True, timeout=5,
@@ -46,12 +46,12 @@ def find_claude_cli(configured: str = "") -> str:
         if Path(configured).is_file():
             return configured
         raise ClaudeNotFoundError(f"No existe claude.exe en la ruta configurada: {configured}")
-    # En Windows el SDK solo acepta un .exe nativo (no los shims .cmd de npm).
+    # En Windows el SDK solo acepta un .exe nativo, no los shims .cmd de npm.
     usable = list(dict.fromkeys(
         p for p in candidate_paths() if p.is_file() and (os.name != "nt" or p.suffix.lower() == ".exe")
     ))
     if usable:
-        # Puede haber varias instalaciones: se usa la más nueva (las viejas no soportan todas las opciones).
+        # Puede haber varias instalaciones: se usa la más reciente, porque las antiguas no soportan todas las opciones.
         return str(max(usable, key=cli_version))
     raise ClaudeNotFoundError(
         "No se encontró Claude Code. Instalalo con:  irm https://claude.ai/install.ps1 | iex\n"

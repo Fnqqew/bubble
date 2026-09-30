@@ -1,9 +1,9 @@
 """Captura de una región de la pantalla.
 
-Si la PC lo permite se captura con la GPU (DXGI Desktop Duplication: funciona con placas AMD, NVIDIA e Intel,
-integradas o dedicadas). Casi no usa CPU: en 1080p la captura baja de ~50 ms a ~3 ms. Las ventanas de Bubble
-marcadas como invisibles para capturas tampoco salen acá. Si la GPU no está disponible (escritorio remoto, pantalla
-rotada, un error del driver), se usa GDI (mss) como antes, sin que el resto del programa se entere.
+Si el equipo lo permite, se captura con la GPU (DXGI Desktop Duplication, compatible con placas AMD, NVIDIA e Intel,
+integradas o dedicadas). Casi no usa CPU: en 1080p la captura baja de ~50 ms a ~3 ms. Las ventanas de Bubble marcadas
+como invisibles para capturas tampoco aparecen. Si la GPU no está disponible (escritorio remoto, pantalla rotada, error
+del driver), se usa GDI (mss) sin que el resto del programa lo note.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from ..geometry import Rect
 
 log = logging.getLogger(__name__)
 _local = threading.local()
-# Mientras sacás una captura de pantalla, las traducciones se ven en las capturas (ver screenshots.py): en ese
-# momento no se lee la pantalla (el OCR leería las traducciones en vez del chat).
+# Mientras el jugador toma una captura de pantalla, las traducciones son visibles en ella (ver screenshots.py), por lo
+# que no se lee la pantalla: el OCR leería las traducciones en lugar del chat.
 _reading = {"paused": False, "mark": 0}
 
 
@@ -31,17 +31,17 @@ def pause_reading(paused: bool) -> None:
 
 
 def reading_mark() -> int | None:
-    """None si ahora no se puede leer la pantalla; si no, una marca para `still_readable`."""
+    """None si en este momento no se puede leer la pantalla; en caso contrario, una marca para `still_readable`."""
     return None if _reading["paused"] else _reading["mark"]
 
 
 def still_readable(mark: int) -> bool:
-    """False si mientras se capturaba se empezó (o terminó) a sacar una captura: esa imagen no sirve."""
+    """False si durante la captura comenzó o terminó una captura de pantalla del jugador: la imagen no es válida."""
     return not _reading["paused"] and _reading["mark"] == mark
 
 
 def _grab_gdi(rect: Rect) -> Image.Image:
-    # mss no es seguro entre hilos: una instancia por hilo.
+    # mss no es seguro entre hilos: se usa una instancia por hilo.
     if not hasattr(_local, "sct"):
         _local.sct = mss.MSS() if hasattr(mss, "MSS") else mss.mss()
     shot = _local.sct.grab({"left": rect.left, "top": rect.top, "width": rect.width, "height": rect.height})
@@ -49,8 +49,9 @@ def _grab_gdi(rect: Rect) -> Image.Image:
 
 
 class GpuScreen:
-    """Captura por GPU de cada monitor. Guarda el último cuadro completo de cada uno: la GPU solo entrega un
-    cuadro cuando algo cambió en pantalla, y el chat y las burbujas recortan su zona del mismo cuadro."""
+    """Captura por GPU de cada monitor. Conserva el último cuadro completo de cada uno: la GPU solo entrega un cuadro
+    cuando cambia algo en pantalla, y el chat y las burbujas recortan su zona del mismo cuadro.
+    """
 
     RETRY_AFTER_S = 5.0
 
@@ -64,7 +65,7 @@ class GpuScreen:
         for device_idx, outputs in enumerate(factory.outputs):
             for output_idx, output in enumerate(outputs):
                 if output.rotation_angle:
-                    continue  # pantalla rotada: la imagen viene girada, mejor GDI
+                    continue  # pantalla rotada: la imagen viene girada, se usa GDI
                 c = output.desc.DesktopCoordinates
                 self._outputs.append((device_idx, output_idx, Rect.from_points(c.left, c.top, c.right, c.bottom)))
         if not self._outputs:
@@ -78,7 +79,7 @@ class GpuScreen:
         for device_idx, output_idx, area in self._outputs:
             if area.left <= rect.left and area.top <= rect.top and rect.right <= area.right and rect.bottom <= area.bottom:
                 return (device_idx, output_idx), area
-        return None  # la zona cruza dos monitores (o está fuera): GDI
+        return None  # la zona cruza dos monitores o queda fuera: GDI
 
     def grab(self, rect: Rect) -> Image.Image | None:
         found = self._output_for(rect)
@@ -99,7 +100,7 @@ class GpuScreen:
                     self._frames[key] = frame
                 frame = self._frames.get(key)
                 if frame is None:
-                    # Todavía no hubo ningún cuadro (la pantalla está quieta desde que se abrió la captura).
+                    # Aún no hay ningún cuadro (la pantalla permanece quieta desde que se abrió la captura).
                     frame = camera.grab(new_frame_only=False)
                     if frame is None:
                         return None
@@ -125,7 +126,7 @@ def set_gpu_capture(enabled: bool) -> None:
 
 
 def gpu_screen() -> GpuScreen | None:
-    """La captura por GPU, si esta PC la tiene (se prueba una sola vez)."""
+    """Captura por GPU, si el equipo la admite (se comprueba una sola vez)."""
     global _gpu
     if not _gpu_state["enabled"]:
         return None
@@ -148,9 +149,9 @@ def capture_backend() -> str:
 
 
 # ---------------------------------------------------------------- leer solo la ventana de Roblox
-# Con esto las traducciones pueden salir en tus capturas y grabaciones (ver window_capture.py). Se activa solo si en
-# esta PC la foto de la ventana sale igual a la pantalla; si después falla (Roblox en pantalla completa exclusiva…),
-# se vuelve a esconder las traducciones de las capturas y a leer la pantalla como antes.
+# Permite que las traducciones aparezcan en las capturas y grabaciones del jugador (ver window_capture.py). Se activa
+# solo si en este equipo la imagen de la ventana coincide con la pantalla; si luego falla (p. ej. Roblox en pantalla
+# completa exclusiva), las traducciones vuelven a ocultarse de las capturas y se lee la pantalla.
 PROBE_EVERY_S = 5.0
 FAILS_TO_GIVE_UP = 8
 _window = {"wanted": False, "active": False, "capture": None, "probed_at": 0.0, "fails": 0,
@@ -158,8 +159,9 @@ _window = {"wanted": False, "active": False, "capture": None, "probed_at": 0.0, 
 
 
 def set_window_capture(wanted: bool, on_change=None) -> None:
-    """`on_change(activo)`: avisa cuando se empieza o se deja de leer la ventana sola (las traducciones pasan a
-    verse, o a no verse, en las capturas)."""
+    """`on_change(activo)`: se invoca cuando empieza o deja de leerse la ventana sola (las traducciones pasan a ser
+    visibles, o dejan de serlo, en las capturas).
+    """
     _window["wanted"] = wanted
     if on_change is not None:
         _window["on_change"] = on_change
@@ -168,7 +170,7 @@ def set_window_capture(wanted: bool, on_change=None) -> None:
 
 
 def window_mode() -> bool:
-    """¿Se está leyendo la ventana de Roblox sola? (las traducciones salen en capturas y grabaciones)"""
+    """Indica si se está leyendo solo la ventana de Roblox (las traducciones aparecen en capturas y grabaciones)."""
     return bool(_window["active"])
 
 
@@ -208,8 +210,8 @@ def grab(rect: Rect) -> Image.Image:
             return image
         _window["fails"] += 1
         if _window["fails"] < FAILS_TO_GIVE_UP:
-            return Image.new("RGB", (rect.width, rect.height))  # (un momento: Roblox minimizado, cambiando)
-        _set_window_active(False)  # no anda en esta PC (o ya no): las traducciones se esconden otra vez
+            return Image.new("RGB", (rect.width, rect.height))  # (transitorio: Roblox minimizado o cambiando)
+        _set_window_active(False)  # no funciona en este equipo (o dejó de hacerlo): se ocultan de nuevo
         _window["probed_at"] = time.monotonic()
     screen = _grab_screen(rect)
     if _window["wanted"] and time.monotonic() - _window["probed_at"] > PROBE_EVERY_S:

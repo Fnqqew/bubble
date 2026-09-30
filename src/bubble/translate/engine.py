@@ -1,4 +1,4 @@
-"""Motor de traducción: decide si hace falta traducir, detecta jerga y variantes, usa cache y contexto."""
+"""Motor de traducción: decide si hace falta traducir, detecta jerga y variantes, y usa caché y contexto."""
 
 from __future__ import annotations
 
@@ -24,15 +24,16 @@ from .slang import Slang, laugh_for, laugh_only, scan
 SKIP_CONFIDENCE = 0.6
 # Confianza mínima para contar un idioma al estimar el idioma del servidor.
 TRACK_CONFIDENCE = 0.5
-# Si al menos esta fracción de las palabras son comunes en tu idioma (y ninguna delata otro), se saltea.
+# Fracción mínima de palabras comunes en el idioma del jugador (sin ninguna que delate otro idioma) para omitir la
+# traducción.
 LEXICAL_SKIP = 0.6
-CLOSE_TO_MINE = 0.75  # tu idioma, al menos así de cerca del primero (ver Translator._close_to_mine)
+CLOSE_TO_MINE = 0.75  # idioma del jugador, al menos así de cerca del primero (ver Translator._close_to_mine)
 MY_SPEAKER = "Yo"
 MAX_HINTS = 6
-# Mensajes recientes que se miran para decidir en qué idioma(s) escribir.
+# Cantidad de mensajes recientes que se consideran para decidir en qué idiomas escribir.
 RECENT_MESSAGES = 12
-# Voz: si el carril rápido no terminó en este tiempo, se le pregunta también al del chat y gana el primero. Una
-# traducción de voz tarda ~1,6 s (medido); a veces 3 o 4 s: ahí sirve.
+# Voz: si el carril rápido no terminó en este tiempo, se consulta también el del chat y gana el primero. Una traducción
+# de voz tarda unos 1,6 s; a veces 3 o 4 s, y en ese caso el segundo carril ayuda.
 HEDGE_AFTER_S = 2.3
 log = logging.getLogger(__name__)
 
@@ -40,21 +41,24 @@ log = logging.getLogger(__name__)
 class Translator:
     def __init__(self, config: Config, router: Router, detector: LanguageDetector | None = None,
                  voice_router: Router | None = None) -> None:
-        """`voice_router`: el carril de la voz (su propia sesión, sin pensar antes de responder): lo que decís y lo que
-        te dicen por voz no hace fila detrás del chat."""
+        """`voice_router`: carril de la voz, con su propia sesión y sin razonamiento previo a la respuesta. Así, lo
+        que el jugador dice y lo que le dicen por voz no espera detrás del chat.
+        """
         self.config = config
-        self.hedge = True  # si la voz tarda, probar también por el carril del chat (ver _hedged)
+        self.hedge = True  # si la voz demora, se consulta también el carril del chat (ver _hedged)
         self.router = router
         self.voice_router = voice_router
         self._voice_lane: asyncio.Task | None = None
-        # El último idioma en el que hablaste o escribiste: se mantiene (antes, en "automático", se elegía de nuevo en
-        # cada mensaje según el chat y cambiaba solo).
+        # Último idioma en el que el jugador habló o escribió. Se conserva: en modo automático no se vuelve a elegir
+        # según el chat en cada mensaje.
         self.last_target: str | None = None
-        # Pedidos en curso por texto: si el chat y la burbuja piden el mismo mensaje a la vez, se hace uno solo.
+        # Pedidos de texto en curso: si el chat y la burbuja piden el mismo mensaje a la vez, se realiza un único
+        # pedido.
         self._inflight: dict[tuple[str, str], asyncio.Future] = {}
-        # Cómo querés sonar: devuelve pares (dijiste, quedó bien) aprobados en la página Pruebas para ese idioma.
+        # Estilo deseado: devuelve los pares (original, versión correcta) aprobados en la página Pruebas para ese
+        # idioma.
         self.examples_for: Callable[[str], tuple[tuple[str, str], ...]] | None = None
-        # Tus palabras y nombres (perfil de voz), para que Claude entienda lo que Whisper escuchó mal.
+        # Palabras y nombres del jugador (perfil de voz), para que Claude interprete lo que Whisper entendió mal.
         self.vocabulary_for: Callable[[str], tuple[str, ...]] | None = None
         self.detector = detector or LanguageDetector()
         self.cache = TranslationCache(config.translation.cache_size, config.translation.cache_max_words)
@@ -62,16 +66,18 @@ class Translator:
         self.batcher = Batcher(router, workers=config.claude.pool_size)
         self._incoming_langs: deque[str] = deque(maxlen=30)
         self._incoming_regions: deque[tuple[str, str]] = deque(maxlen=30)
-        self._speaker_langs: dict[str, deque[str]] = {}  # idioma de lo último que escribió cada jugador (seguro)
+        self._speaker_langs: dict[str, deque[str]] = {}  # idioma de los últimos mensajes de cada jugador (confiable)
 
     async def start(self) -> None:
         await asyncio.gather(asyncio.to_thread(self.detector.load), self.router.start())
         self.batcher.start()
         if self.config.voice.speak or self.config.voice.subtitles or self.config.roblox.translate_bubbles:
-            self.start_voice()  # el carril rápido: la voz y las burbujas
+            self.start_voice()  # carril rápido: voz y burbujas
 
     def start_voice(self) -> None:
-        """Abre el carril de la voz en segundo plano (y lo deja caliente). Mientras abre, la voz usa el del chat."""
+        """Abre el carril de la voz en segundo plano y lo deja precalentado. Mientras se abre, la voz usa el carril
+        del chat.
+        """
         if self.voice_router is not None and self._voice_lane is None:
             self._voice_lane = asyncio.get_running_loop().create_task(self._open_voice_lane())
 
@@ -97,10 +103,10 @@ class Translator:
         return split_locale(self.config.user.language)
 
     def chat_languages(self, recent: int = RECENT_MESSAGES) -> list[str]:
-        """Idiomas (distintos del tuyo) de los últimos mensajes, del más usado al menos usado.
+        """Idiomas de los últimos mensajes (distintos del del jugador), del más usado al menos usado.
 
-        En un mismo servidor puede haber varios idiomas: se mira solo lo reciente para seguir
-        la conversación actual. A igual cantidad, gana el que habló más recientemente.
+        Un servidor puede tener varios idiomas: solo se consideran los mensajes recientes para seguir la
+        conversación actual. En caso de empate, gana el que se habló más recientemente.
         """
         mine = self.my_locale[0]
         latest = [lang for lang in list(self._incoming_langs)[-recent:] if lang != mine]
@@ -109,8 +115,9 @@ class Translator:
         return sorted(counts, key=lambda lang: (-counts[lang], -last_seen[lang]))
 
     def outgoing_target(self) -> str:
-        """Idioma al que se traduce lo que escribís o decís: el elegido; en "automático", el último que usaste (se
-        mantiene); y si todavía no usaste ninguno, el más usado en el chat."""
+        """Idioma al que se traduce lo que el jugador escribe o dice: el elegido; en modo automático, el último que
+        usó (se conserva); y si aún no usó ninguno, el más frecuente en el chat.
+        """
         configured = self.config.user.outgoing_language
         if configured and configured != "auto":
             return split_locale(configured)[0]
@@ -120,22 +127,23 @@ class Translator:
         return languages[0] if languages else "en"
 
     def remember_target(self, language: str) -> None:
-        """Hablaste o escribiste en este idioma: es el que se usa la próxima vez."""
+        """El jugador habló o escribió en este idioma, que se usará la próxima vez."""
         code = split_locale(language)[0] if language else ""
-        if code.isalpha():  # no "*" (todos los del chat)
+        if code.isalpha():  # excluye "*" (todos los idiomas del chat)
             self.last_target = code
 
     def voice_locale(self, lang: str) -> str:
-        """Con qué voz se dice algo en ese idioma: con la región que elegiste en Ajustes (inglés del Reino Unido, español
-        de México…), si elegiste una; si no, sin región. Siempre la misma: la región del chat va cambiando y la voz
-        cambiaría de acento a cada rato."""
+        """Voz con la que se dice un texto en ese idioma: usa la región elegida en Ajustes (inglés del Reino Unido,
+        español de México, etc.) o, si no hay ninguna, no usa región. Es siempre la misma: la región del chat
+        cambia y la voz variaría de acento constantemente.
+        """
         configured = self.config.user.outgoing_language
         if configured and configured != "auto" and "-" in configured and                 split_locale(configured)[0] == split_locale(lang)[0]:
             return configured
         return lang
 
     def outgoing_region(self, lang: str) -> str:
-        """Variante del idioma destino: la configurada o la que más aparece en la jerga del chat."""
+        """Variante del idioma destino: la configurada o, si no, la que más aparece en la jerga del chat."""
         configured = self.config.user.outgoing_language
         if configured and configured != "auto" and "-" in configured:
             conf_lang, conf_region = split_locale(configured)
@@ -154,10 +162,11 @@ class Translator:
         intonation: str = "",
         fast: bool = False,
     ) -> TranslationResult:
-        """`on_pending` se llama (sin esperar) justo antes de pedirle la traducción a Claude:
-        sirve para reservar el lugar del mensaje en pantalla, en el orden del chat. `from_speech`: lo dijeron por voz
-        (va por el carril rápido y Claude sabe que puede haber palabras mal entendidas). `fast`: sin esperar a juntarse
-        con otros mensajes y por el carril rápido si está abierto (las burbujas: se ven al lado del jugador)."""
+        """`on_pending` se llama (sin esperar) justo antes de pedirle la traducción a Claude: permite reservar el
+        lugar del mensaje en pantalla, respetando el orden del chat. `from_speech`: el mensaje se dijo por voz
+        (va por el carril rápido y Claude sabe que puede haber palabras mal entendidas). `fast`: no espera a
+        agrupar mensajes y usa el carril rápido si está abierto (burbujas, que se muestran junto al jugador).
+        """
         lang, region = self.my_locale
         return await self._translate(text, lang, region, "incoming", speaker, on_delta, on_pending=on_pending,
                                      from_speech=from_speech, intonation=intonation, fast=fast)
@@ -172,8 +181,9 @@ class Translator:
         from_speech: bool = False,
         intonation: str = "",
     ) -> TranslationResult:
-        """`spoken`: se va a decir en voz (sin abreviaturas de chat, en la escritura del idioma). `from_speech`: lo
-        dijiste vos por el micrófono (Whisper). Lo que va a voz usa el carril rápido."""
+        """`spoken`: el texto se va a decir en voz (sin abreviaturas de chat, con la escritura propia del idioma).
+        `from_speech`: lo dijo el jugador por el micrófono (Whisper). Lo que va a voz usa el carril rápido.
+        """
         target = target_lang or self.outgoing_target()
         lang, region = split_locale(target)
         if "-" not in target:
@@ -212,7 +222,7 @@ class Translator:
             )
 
         if is_filtered(text):
-            # Mensaje tapado por el filtro de Roblox (****): no hay nada que traducir ni mostrar.
+            # Mensaje ocultado por el filtro de Roblox (****): no hay nada que traducir ni mostrar.
             return result(text, "filtered", None)
         if not text or is_universal(text):
             return result(text, "universal", None)
@@ -220,12 +230,12 @@ class Translator:
         hints = scan(text)
         hint_langs = {h.lang for h in hints}
         if laugh_only(text):
-            # Risas: se pasan al estilo del lector sin llamar a Claude (kkkk -> jajaja).
+            # Risas: se adaptan al estilo del lector sin llamar a Claude (kkkk -> jajaja).
             source = next(iter(hint_langs), None)
             translated = text if source == target else laugh_for(target)
             return result(translated, "local", source)
 
-        detection = self.detector.detect(without_gaming(text))  # "pvp" o "lag" no hacen inglés a un mensaje
+        detection = self.detector.detect(without_gaming(text))  # "pvp" o "lag" no hacen que un mensaje sea inglés
         source = detection.lang if detection else None
         confident = bool(detection and detection.is_confident(SKIP_CONFIDENCE))
         if len(hint_langs) == 1 and not (detection and detection.is_confident(TRACK_CONFIDENCE)):
@@ -237,13 +247,14 @@ class Translator:
 
         mode: Mode = "translate"
         tokens = text.split()
-        # Una palabra suelta de otro idioma en un mensaje en tu idioma ("tal vez see") no lo vuelve extranjero.
+        # Una palabra suelta de otro idioma dentro de un mensaje en el idioma del lector ("tal vez see") no lo vuelve
+        # extranjero.
         stray = foreign_words(text, target)
         foreign = any(h.lang != target for h in hints) or len(stray) >= max(1, (len(tokens) + 1) // 2)
         if direction == "incoming" and source and detection and detection.is_confident(TRACK_CONFIDENCE):
             self._speaker_langs.setdefault(speaker, deque(maxlen=4)).append(source)
-        # Ya está en el idioma del lector: lo dice el detector con seguridad, o casi todas sus palabras son
-        # comunes en ese idioma (clave para mensajes cortos como "hola", "dale voy", "todo bien?").
+        # Ya está en el idioma del lector: el detector lo indica con seguridad o casi todas sus palabras son comunes en
+        # ese idioma (clave en mensajes cortos como "hola", "dale voy", "todo bien?").
         looks_native = (source == target and (confident or hints)) or native_by_words(text, target, LEXICAL_SKIP)
         if direction == "incoming" and not looks_native and not foreign and not confident:
             looks_native = self._short_from_my_side(text, speaker, target) or (
@@ -251,12 +262,12 @@ class Translator:
         if not foreign and looks_native:
             source = target
             if self.config.translation.adapt_slang and self._foreign_region(hints, target, region):
-                mode = "adapt"  # mismo idioma, pero con jerga de otro país
+                mode = "adapt"  # mismo idioma, con jerga de otro país
             else:
                 self.history.append(ChatLine(speaker, text))
                 return result(text, "same_language", source)
 
-        # Cómo se dijo cuenta: "vamos a la torre" preguntado no se traduce igual que afirmado.
+        # El modo de decirlo importa: "vamos a la torre" como pregunta no se traduce igual que como afirmación.
         cache_key = (f"{target}-{region}:{mode}:{direction}:{tone if direction == 'outgoing' else ''}:{spoken}:"
                      f"{intonation}")
         if (cached := self.cache.get(text, cache_key)) is not None:
@@ -264,7 +275,7 @@ class Translator:
             return result(cached, "cache", source)
         flight = (" ".join(text.casefold().split()), cache_key)
         if (shared := self._inflight.get(flight)) is not None:
-            # Ya se está traduciendo (el mismo mensaje en el chat y en la burbuja): se espera ese mismo pedido.
+            # Ya se está traduciendo (el mismo mensaje en el chat y en la burbuja): se espera ese pedido.
             if on_pending:
                 on_pending()
             shared_result = await asyncio.shield(shared)
@@ -287,20 +298,21 @@ class Translator:
 
     async def _ask(self, text, target, region, direction, speaker, source, mode, hints, tone, spoken, from_speech,
                    intonation, examples, vocabulary, cache_key, on_delta, on_pending, fast, result) -> TranslationResult:
-        """El pedido a Claude (ya se sabe que hace falta: no estaba en caché ni en curso)."""
+        """Pedido a Claude (ya se sabe que es necesario: no estaba en caché ni en curso)."""
         request = TranslationRequest(
             text, target, direction, speaker, tuple(self.history),
             target_region=region, mode=mode, slang_hints=_hint_tuples(hints), tone=tone, spoken=spoken,
             from_speech=from_speech, intonation=intonation, examples=tuple(examples), vocabulary=tuple(vocabulary),
         )
-        # Se agrega al contexto ya (no al terminar) para que el siguiente mensaje del chat lo tenga en cuenta.
+        # Se agrega al contexto de inmediato, sin esperar el resultado, para que el siguiente mensaje del chat lo tenga
+        # en cuenta.
         self.history.append(ChatLine(speaker, text))
         if on_pending:
             on_pending()
         try:
             routed = await self._route(request, on_delta, fast)
             if looks_wrong(text, routed.text, request.context):
-                # Traducción sospechosa (mezcló otros mensajes o inventó texto): reintento sin contexto.
+                # Traducción sospechosa (mezcló otros mensajes o inventó texto): se reintenta sin contexto.
                 retry = replace(request, context=())
                 routed = await self.router.translate(retry)
                 if looks_wrong(text, routed.text, ()):
@@ -309,7 +321,8 @@ class Translator:
             return result(text, "error", source, error=str(exc))
 
         if direction == "incoming" and mode == "translate" and unchanged(text, routed.text):
-            # Claude lo devolvió igual: ya estaba en tu idioma (el detector dudó). No se muestra como traducción.
+            # Claude lo devolvió sin cambios: ya estaba en el idioma del lector y el detector dudó. No se muestra como
+            # traducción.
             self.cache.put(text, cache_key, text)
             return result(text, "same_language", target, routed.provider)
         self.cache.put(text, cache_key, routed.text)
@@ -317,10 +330,10 @@ class Translator:
         return result(routed.text, status, source, routed.provider, ttft_s=routed.ttft_s)
 
     async def _route(self, request: TranslationRequest, on_delta: DeltaCallback | None, fast: bool = False):
-        """Por dónde va cada pedido:
-        - la voz (lo que decís, lo que te dicen, lo que escribís para decir) y las burbujas: carril rápido;
-        - lo que escribís para el chat: directo, sin esperar a que se junten mensajes;
-        - los mensajes del chat: en lotes (llegan en ráfagas)."""
+        """Ruta de cada pedido: - voz (lo que el jugador dice, lo que le dicen y lo que escribe para decir) y
+        burbujas: carril rápido; - lo que el jugador escribe para el chat: directo, sin esperar a agrupar
+        mensajes; - mensajes del chat: en lotes, porque llegan en ráfagas.
+        """
         voice = request.spoken or request.from_speech or fast
         if voice and self._voice_ready():
             if not self.hedge:  # (sin Claude se paga por conexión abierta: nunca dos a la vez para lo mismo)
@@ -331,10 +344,11 @@ class Translator:
         return await self.batcher.translate(request, on_delta)
 
     async def _hedged(self, request: TranslationRequest, on_delta: DeltaCallback | None = None):
-        """Carril rápido; si tarda, también el del chat, y gana el primero que termine bien. El que pierde termina
-        solo (cortarlo reiniciaría su sesión). Con `on_delta` (la voz se dice de a oraciones), los pedazos que se
-        pasan son solo los del carril que empezó a responder primero, y gana ese: así nunca se mezclan dos
-        traducciones."""
+        """Carril rápido; si demora, se consulta también el del chat y gana el primero que termine bien. El
+        perdedor termina por sí solo (cortarlo reiniciaría su sesión). Con `on_delta` (la voz se dice por
+        oraciones), los fragmentos que se entregan son solo los del carril que empezó a responder primero, y ese
+        gana: así nunca se mezclan dos traducciones.
+        """
         owner: list[str] = []
 
         def relay(lane: str):
@@ -354,10 +368,10 @@ class Translator:
         if first in done:
             if first.exception() is None:
                 return first.result()
-            if owner:  # ya se dijo algo de esta traducción: no se empieza otra encima
+            if owner:  # ya se emitió parte de esta traducción: no se inicia otra encima
                 raise first.exception()
             return await self.router.translate(request, relay("chat"))
-        if owner:  # el carril rápido ya está respondiendo: se lo espera (sin otro pedido)
+        if owner:  # el carril rápido ya está respondiendo: se lo espera sin otro pedido
             return await first
         second = asyncio.ensure_future(self.router.translate(request, relay("chat")))
         tasks = {"voz": first, "chat": second}
@@ -367,7 +381,7 @@ class Translator:
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
                 if owner and task is not tasks[owner[0]]:
-                    continue  # terminó el otro, pero la voz viene siguiendo a este
+                    continue  # el otro terminó, pero la voz sigue a este
                 if task.exception() is None:
                     for other in pending:
                         other.add_done_callback(_forget)
@@ -386,23 +400,27 @@ class Translator:
 
     @staticmethod
     def _close_to_mine(detection, target: str) -> bool:
-        """El detector dudó entre idiomas parecidos y el tuyo quedó casi empatado arriba ("esperame en la torre": 17 %
-        catalán, 15 % español). Con muchos idiomas para elegir, la seguridad se reparte entre los vecinos (español,
-        catalán, portugués, italiano…): si el tuyo está ahí, es tuyo. Solo en frases (en una o dos palabras la
-        seguridad no dice nada) y sin palabras típicas de otro idioma."""
+        """El detector dudó entre idiomas parecidos y el del jugador quedó casi empatado en primer lugar ("esperame
+        en la torre": 17 % catalán, 15 % español). Con muchos idiomas posibles, la confianza se reparte entre
+        los vecinos (español, catalán, portugués, italiano, etc.): si el del jugador está entre ellos, se lo
+        considera el idioma del mensaje. Solo aplica a frases (en una o dos palabras la confianza no significa
+        nada) y sin palabras típicas de otro idioma.
+        """
         if detection is None or detection.lang == target or detection.confidence >= TRACK_CONFIDENCE:
             return False
         return detection.score(target) >= CLOSE_TO_MINE * detection.confidence
 
     def _short_from_my_side(self, text: str, speaker: str, target: str) -> bool:
-        """Un mensaje corto que el detector no sabe de qué idioma es ("alm", "visito", "sofiiii"). Se deja como está si
-        ese jugador viene escribiendo en tu idioma, o si es una sola palabra que no es de ningún idioma conocido (un
-        nombre, una risa, un error de tipeo). Antes iban a Claude, que los "traducía" a tu español."""
+        """Mensaje corto cuyo idioma el detector no logra determinar ("alm", "visito", "sofiiii"). Se deja como
+        está si ese jugador suele escribir en el idioma del lector, o si es una sola palabra que no pertenece a
+        ningún idioma conocido (un nombre, una risa, un error de tipeo). Enviarlos a Claude los "traducía" al
+        español del lector.
+        """
         tokens = words_in(text)
         if not tokens or len(tokens) > 4:
             return False
         if script_of(text) != SCRIPTS.get(target, "latin"):
-            return False  # en otra escritura que la tuya ("дякую", "תודה"): seguro que es de otro idioma
+            return False  # en otra escritura distinta de la del lector ("дякую", "תודה"): es de otro idioma
         recent = list(self._speaker_langs.get(speaker, ()))
         if recent and recent.count(target) * 2 > len(recent):
             return True
@@ -415,7 +433,7 @@ class Translator:
 
 def _forget(task: asyncio.Future) -> None:
     if not task.cancelled():
-        task.exception()  # que no avise "nunca se leyó el error"
+        task.exception()  # evita el aviso "nunca se leyó el error"
 
 
 _WORD = re.compile(r"\w+", re.UNICODE)

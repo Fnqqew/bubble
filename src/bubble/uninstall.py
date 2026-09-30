@@ -1,14 +1,16 @@
-"""Desinstalar Bubble: borra todo lo que trajo (ver ui/setup_window.py: UninstallWindow).
+"""Desinstala Bubble y borra todo lo que instaló (ver ui/setup_window.py: UninstallWindow).
 
-- Tu configuración, tu clave de Pro, lo aprendido de tu voz y los registros (%APPDATA%\\Bubble y %LOCALAPPDATA%\\Bubble).
+- La configuración, la clave de Pro, lo aprendido de la voz del jugador y los registros (%APPDATA%\\Bubble y
+  %LOCALAPPDATA%\\Bubble).
 - Los modelos de voz y las voces descargadas (%LOCALAPPDATA%\\Bubble\\models).
 - El acceso directo del escritorio.
-- El micrófono virtual (VB-Cable), si querés: es un controlador de Windows y otros programas pueden usarlo, así que se
-  abre su desinstalador oficial (pide permiso de administrador).
+- Opcionalmente, el micrófono virtual (VB-Cable): es un controlador de Windows que otros programas pueden usar, por lo
+  que se abre su desinstalador oficial (requiere permisos de administrador).
 - La carpeta del programa. Si es una carpeta de desarrollo (con git), no se toca.
 
-Antes de borrar, Windows vuelve a usar tu micrófono y tu parlante de verdad. Lo que Bubble tiene abierto mientras corre
-(sus registros, el Python del programa) se borra apenas se cierra, con un paso que corre solo después.
+Antes de borrar, Windows vuelve a usar el micrófono y el parlante reales. Lo que Bubble mantiene abierto mientras corre
+(sus registros, el Python del programa) se borra al cerrarse, mediante un paso posterior que se ejecuta de forma
+independiente.
 """
 
 from __future__ import annotations
@@ -75,12 +77,14 @@ def _desktop_link() -> Path | None:
 
 
 def is_development(folder: Path = PROJECT_DIR) -> bool:
-    """Una carpeta de desarrollo (con git): el código no se borra nunca."""
+    """Indica si es una carpeta de desarrollo (con git); su código nunca se borra."""
     return (folder / ".git").exists()
 
 
 def is_bubble_folder(folder: Path) -> bool:
-    """¿Es de verdad la carpeta de Bubble? (si Bubble corre instalado en otro lado, no se borra nada que no sea suyo)"""
+    """Indica si la carpeta es realmente la de Bubble. Si Bubble corre instalado en otra ubicación, no se borra nada
+    que no le pertenezca.
+    """
     return (folder / "pyproject.toml").is_file() and (folder / "src" / "bubble" / "__init__.py").is_file()
 
 
@@ -105,8 +109,9 @@ def parts(project: Path = PROJECT_DIR) -> list[Part]:
         Part("modelos", "Modelos y voces descargados", f"{human(size_of(models))} en tu disco.",
              [p for p in models if p.exists()]),
         Part("accesos", "Acceso directo", "El de tu escritorio.", [link] if link and link.exists() else []),
-        Part("cable", "Micrófono virtual (VB-Cable)", "El micrófono que instaló Bubble. Se saca de Windows del "
-                                                      "todo (te va a pedir permiso).", [], selected=cable, available=cable),
+        Part("cable", "Micrófono virtual (VB-Cable)", "El micrófono que instaló Bubble. Se quita de Windows por "
+                                                      "completo (te va a pedir permiso).", [], selected=cable,
+             available=cable),
         Part("programa", "La carpeta de Bubble",
              str(project) if removable else "Es una carpeta de desarrollo (git): no se borra." if development
              else "Bubble no está en una carpeta propia: no se borra.",
@@ -115,8 +120,9 @@ def parts(project: Path = PROJECT_DIR) -> list[Part]:
 
 
 def run(selected: set[str], project: Path = PROJECT_DIR, after_exit: bool = True) -> list[str]:
-    """Desinstala lo elegido. Devuelve lo que hizo (para mostrar). Lo que no se pudo borrar ahora (en uso) se borra
-    cuando Bubble se cierra."""
+    """Desinstala los componentes elegidos y devuelve la lista de acciones realizadas (para mostrarlas). Lo que no se
+    puede borrar en el momento (por estar en uso) se elimina cuando Bubble se cierra.
+    """
     done: list[str] = []
     try:
         from .voice.devices import restore_real_defaults
@@ -128,7 +134,7 @@ def run(selected: set[str], project: Path = PROJECT_DIR, after_exit: bool = True
         log.debug("No se pudieron devolver los dispositivos", exc_info=True)
     later: list[Path] = []
     ordered = parts(project)
-    # El micrófono virtual primero: su desinstalador está en las descargas, que se borran después.
+    # El micrófono virtual va primero: su desinstalador está en las descargas, que se borran después.
     ordered.sort(key=lambda part: part.key != "cable")
     for part in ordered:
         if part.key not in selected or not part.available:
@@ -137,7 +143,7 @@ def run(selected: set[str], project: Path = PROJECT_DIR, after_exit: bool = True
             done.append(_uninstall_cable())
             continue
         if part.key == "programa":
-            later.extend(part.paths)  # el programa está corriendo: se borra al cerrarse
+            later.extend(part.paths)  # el programa está en ejecución: se borra al cerrarse
             done.append("La carpeta de Bubble se borra al cerrarse.")
             continue
         for path in part.paths:
@@ -157,8 +163,9 @@ def run(selected: set[str], project: Path = PROJECT_DIR, after_exit: bool = True
 
 
 def _cable_setup() -> Path | None:
-    """El instalador oficial de VB-Cable (sirve también para desinstalarlo), copiado a una carpeta temporal: las
-    descargas de Bubble se borran enseguida. Si no está (se borró), se baja de nuevo."""
+    """Devuelve el instalador oficial de VB-Cable (también sirve para desinstalarlo), copiado a una carpeta temporal
+    porque las descargas de Bubble se borran enseguida. Si ya no está, se descarga de nuevo.
+    """
     import zipfile
 
     folder = _local() / "descargas" / "vbcable"
@@ -183,20 +190,20 @@ def _cable_setup() -> Path | None:
 
 
 def _uninstall_cable() -> str:
-    """Saca el controlador de VB-Cable con su instalador oficial, sin ventanas (-u -h). Windows pide permiso."""
+    """Quita el controlador de VB-Cable con su instalador oficial, sin ventanas (-u -h). Windows solicita permisos."""
     import ctypes
 
     setup = _cable_setup()
     if setup is None:
-        return ("El micrófono virtual lo sacás desde Windows, en Aplicaciones (se llama VB-Audio Virtual Cable).")
+        return ("El micrófono virtual lo desinstalás desde Windows, en Aplicaciones (se llama VB-Audio Virtual Cable).")
     result = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(setup), "-u -h", str(setup.parent), 0)
     if result <= 32:
         return "El micrófono virtual quedó instalado porque se canceló el permiso."
-    return "Micrófono virtual sacado. Si Windows lo pide, reiniciá la PC."
+    return "Micrófono virtual quitado. Si Windows lo pide, reiniciá la PC."
 
 
 def _delete_after_exit(paths: list[Path]) -> None:
-    """Un paso que espera a que Bubble se cierre y borra lo que quedaba en uso (y después se borra a sí mismo)."""
+    """Paso independiente que espera a que Bubble se cierre, borra lo que quedó en uso y luego se elimina a sí mismo."""
     pid = os.getpid()
     lines = ["@echo off", "chcp 65001 >nul", ":espera",
              f'tasklist /FI "PID eq {pid}" | find "{pid}" >nul && (timeout /t 1 >nul & goto espera)']
@@ -205,7 +212,7 @@ def _delete_after_exit(paths: list[Path]) -> None:
     lines.append('del "%~f0"')
     script = Path(tempfile.gettempdir()) / f"bubble-desinstalar-{pid}.cmd"
     script.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
-    # (desde la carpeta temporal: si no, no se podría borrar la carpeta desde la que corre)
+    # (desde la carpeta temporal: de lo contrario no se podría borrar la carpeta desde la que corre)
     subprocess.Popen(["cmd", "/c", str(script)], cwd=tempfile.gettempdir(),
                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
                      | getattr(subprocess, "DETACHED_PROCESS", 0), close_fds=True)

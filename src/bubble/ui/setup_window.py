@@ -1,4 +1,5 @@
-"""Ventanas para instalar lo que falta («Preparar Bubble») y para desinstalar todo («Desinstalar Bubble»)."""
+"""Ventanas para instalar los componentes faltantes («Preparar Bubble») y para desinstalar todo («Desinstalar Bubble»).
+"""
 
 from __future__ import annotations
 
@@ -14,13 +15,17 @@ ICONS = {"pending": "○", "working": "◐", "done": "✓", "error": "!", "manua
 
 
 class SetupWindow:
-    """Lo que falta, con su estado. Lo automático se instala solo al abrirse; lo que necesita permiso tiene botón."""
+    """Lista los componentes faltantes con su estado. Los automáticos se instalan al abrir la ventana; los que
+    requieren permiso tienen un botón.
+    """
 
     def __init__(self, root: tk.Misc, post: Callable[[Callable[[], None]], None], steps: list[install.Step] | None = None,
                  auto: bool = True, on_no_claude: Callable[[], None] | None = None) -> None:
-        """`on_no_claude()`: «¿No tenés Claude?» (cómo seguir: Bubble Pro con créditos o conectar Claude)."""
+        """`on_no_claude()`: se invoca cuando el jugador no tiene Claude; indica cómo continuar (Bubble Pro con
+        créditos o conectar Claude).
+        """
         self.root = root
-        self.post = post  # hacer algo en el hilo de la ventana
+        self.post = post  # ejecuta una función en el hilo de la ventana
         self.steps = steps if steps is not None else install.steps()
         self.window, body = widgets.dialog(root, "Preparar Bubble")
         colors = widgets.palette()
@@ -28,7 +33,8 @@ class SetupWindow:
         widgets.muted(body, "Instalo solo lo que falta. La primera vez tarda unos minutos, pero podés seguir "
                             "usando la PC.", pady=(2, 12))
         self.rows: dict[str, tuple[ttk.Label, ttk.Label]] = {}
-        self.buttons: dict[str, tuple[ttk.Button, ttk.Frame]] = {}  # lo que necesita tu permiso (se va al estar listo)
+        # componentes que requieren permiso (se quitan al quedar listos)
+        self.buttons: dict[str, tuple[ttk.Button, ttk.Frame]] = {}
         for step in self.steps:
             row = ttk.Frame(body)
             row.pack(fill="x", pady=(6, 0))
@@ -73,7 +79,7 @@ class SetupWindow:
         icon.configure(text=ICONS[state], foreground=color)
         if text is not None:
             detail.configure(text=text)
-        if key in self.buttons:  # ya está: sin el botón de instalarlo (confundía)
+        if key in self.buttons:  # ya instalado: se oculta el botón para evitar confusión
             button, texts = self.buttons[key]
             if state == "done":
                 button.pack_forget()
@@ -146,7 +152,7 @@ class SetupWindow:
         self.bar.stop()
         self.bar.configure(mode="determinate", value=1.0 if not failed else 0.0)
         if failed:
-            self.status.configure(text="Algo no se pudo instalar. Fijate la conexión y probá otra vez.")
+            self.status.configure(text="Algo no se pudo instalar. Revisá la conexión y probá otra vez.")
             self.close_button.configure(text="Cerrar")
         else:
             self.status.configure(text="✓ Todo listo." if installed or not self._manual_pending() else
@@ -164,7 +170,7 @@ class SetupWindow:
                 message = step.run(self._progress)
                 self.post(lambda: self._set(step.key, "manual", message))
             except Exception as exc:  # noqa: BLE001
-                error = f"No se pudo: {exc}"  # (`exc` deja de existir al salir del except: la lambda corre después)
+                error = f"No se pudo: {exc}"  # `exc` no existe fuera del except y la lambda se ejecuta después
                 self.post(lambda: self._set(step.key, "error", error))
 
         threading.Thread(target=work, name="bubble-instalar-manual", daemon=True).start()
@@ -174,7 +180,7 @@ class SetupWindow:
 
 
 class UninstallWindow:
-    """Qué se borra (elegible), confirmación y listo. `on_done`: cerrar Bubble."""
+    """Muestra qué se borra (a elección del jugador), pide confirmación y finaliza. `on_done`: cierra Bubble."""
 
     def __init__(self, root: tk.Misc, on_done: Callable[[], None]) -> None:
         self.root = root
@@ -209,9 +215,9 @@ class UninstallWindow:
             self.status.configure(text="No elegiste nada para borrar.")
             return
         if not self._confirming:
-            self._confirming = True  # un segundo toque confirma (no se borra nada por un clic de más)
+            self._confirming = True  # un segundo clic confirma, para no borrar nada por un clic accidental
             self.go.configure(text="Sí, desinstalar")
-            self.status.configure(text="¿Seguro? Esto no se puede deshacer. Tocá «Sí, desinstalar».",
+            self.status.configure(text="¿Confirmás? Esto no se puede deshacer. Tocá «Sí, desinstalar».",
                                   foreground=widgets.palette()["warn"])
             return
         self.go.state(["disabled"])
@@ -227,7 +233,7 @@ class UninstallWindow:
             except Exception as exc:  # noqa: BLE001
                 result.append(f"No se pudo terminar: {exc}")
 
-        def wait() -> None:  # (la ventana se toca solo desde su hilo)
+        def wait() -> None:  # la ventana solo se modifica desde su propio hilo
             if result:
                 self._finished(result[0])
             else:

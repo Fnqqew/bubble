@@ -1,9 +1,9 @@
-"""La guía de instalación animada (docs/instalacion.gif) y un cuadro por paso (docs/instalacion/paso-N.png), con las
-ventanas reales de Bubble.
+"""Guía de instalación animada (docs/instalacion.gif) y un cuadro por paso (docs/instalacion/paso-N.png), generados con
+las ventanas reales de Bubble.
 
-Uso: make_install.py <carpeta con las capturas> <carpeta de salida>
-Capturas (ver tools/media/README.md): setup_*.png y setup.json (shot_install.py) y page_oscuro_inicio.png
-(shot_main.py). La carpeta y la consola son dibujos (con los textos reales de Iniciar.bat).
+Uso: make_install.py <carpeta con las capturas> <carpeta de salida> Capturas (ver tools/media/README.md): setup_*.png
+y setup.json (shot_install.py) y page_oscuro_inicio.png (shot_main.py). La carpeta y la consola se dibujan, con los
+textos reales de Iniciar.bat.
 """
 import json
 import shutil
@@ -30,7 +30,7 @@ MUTED = (150, 157, 170)
 FAINT = (255, 255, 255, 38)
 LOGO = Image.open("src/bubble/assets/bubble.png").convert("RGBA")
 BUTTONS = json.loads((SCRATCH / "setup.json").read_text(encoding="utf-8"))
-EDGE = 9  # los bordes invisibles de Windows alrededor de cada ventana capturada
+EDGE = 9  # bordes invisibles de Windows alrededor de cada ventana capturada
 
 STEPS = [
     ("Bajá Bubble", "Descargá el ZIP de la última versión (en GitHub, «Releases») y descomprimilo donde quieras: "
@@ -94,7 +94,7 @@ def text_layer(index: int) -> Image.Image:
 
 
 def chrome(canvas: Image.Image, index: int, progress: float) -> None:
-    """La marca arriba y los pasos abajo (como historias: el actual se va llenando)."""
+    """Dibuja la marca arriba y los pasos abajo; el paso actual se va llenando, como en las historias."""
     logo = LOGO.resize((30, 30), Image.Resampling.LANCZOS)
     canvas.alpha_composite(logo, (60, 44))
     draw = ImageDraw.Draw(canvas)
@@ -103,7 +103,7 @@ def chrome(canvas: Image.Image, index: int, progress: float) -> None:
               font=font("segoeui.ttf", 16), fill=MUTED, anchor="lm")
     gap, left, right, y = 8, 60, 460, H - 58
     size = (right - left - gap * (len(STEPS) - 1)) / len(STEPS)
-    track = Image.new("RGBA", (W, H), (0, 0, 0, 0))  # (la transparencia se mezcla aparte: si no, queda blanco)
+    track = Image.new("RGBA", (W, H), (0, 0, 0, 0))  # la transparencia se mezcla aparte; de lo contrario queda blanco
     ImageDraw.Draw(track).rounded_rectangle((left, y, right, y + 5), 3, fill=(0, 0, 0, 0))
     lines = ImageDraw.Draw(track)
     for step in range(len(STEPS)):
@@ -211,7 +211,7 @@ def scene_console(t: float) -> Image.Image:
             color = (247, 200, 110)
         draw.text((10, y), line, font=mono, fill=color)
         y += 22
-    if int(t * 2.5) % 2 == 0:  # el cursor que titila
+    if int(t * 2.5) % 2 == 0:  # cursor con parpadeo
         draw.rectangle((12, y + 2, 20, y + 16), fill=(212, 216, 222))
     card = rounded(card, 12)
     frame = Image.new("RGBA", (W, H), (0, 0, 0, 0))

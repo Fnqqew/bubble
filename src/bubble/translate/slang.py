@@ -1,9 +1,9 @@
 """Jerga, abreviaturas y expresiones regionales por idioma.
 
 Se usa de dos formas:
-- Como referencia en el prompt de Claude (para interpretar con precisión).
-- Localmente: los términos marcados como `hint` identifican idioma/país sin ambigüedad y
-  evitan errores del detector de idioma en mensajes cortos llenos de jerga.
+- Como referencia en el prompt de Claude, para interpretar los mensajes con precisión.
+- Localmente: los términos marcados como `hint` identifican el idioma o país sin ambigüedad y
+  evitan errores del detector de idioma en mensajes cortos con mucha jerga.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ class Slang:
     lang: str
     meaning: str
     region: str = ""
-    # True = el término identifica el idioma/país con seguridad (no es una palabra común de otro idioma).
+    # True si el término identifica el idioma o país con certeza (no es una palabra común de otro idioma).
     hint: bool = False
 
 
@@ -198,7 +198,9 @@ LEXICON: tuple[Slang, ...] = tuple(
 
 # ---------- detección local ----------
 def _fold(text: str) -> str:
-    """Minúsculas y sin acentos (güey -> guey), para comparar jerga escrita de mil formas."""
+    """Devuelve el texto en minúsculas y sin acentos (güey -> guey), para comparar jerga escrita de formas muy
+    variadas.
+    """
     return "".join(c for c in unicodedata.normalize("NFKD", text.casefold()) if not unicodedata.combining(c))
 
 
@@ -208,7 +210,7 @@ for _entry in LEXICON:
         for _variant in _entry.term.split("/"):
             _HINTS.setdefault(_fold(_variant.strip()), []).append(_entry)
 
-# Risas: se reconocen por patrón y se "traducen" localmente, sin llamar a Claude.
+# Risas: se reconocen por patrón y se traducen localmente, sin llamar a Claude.
 _LAUGH_PATTERNS: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r"^k{3,}$"), "pt", "BR"),
     (re.compile(r"^(?:rs){2,}$"), "pt", "BR"),
@@ -236,7 +238,7 @@ def tokens(text: str) -> list[str]:
 
 
 def scan(text: str) -> list[Slang]:
-    """Términos de jerga que identifican idioma/país presentes en el mensaje."""
+    """Devuelve los términos de jerga que identifican idioma o país presentes en el mensaje."""
     found: list[Slang] = []
     words = [_fold(t) for t in tokens(text)]
     for i, word in enumerate(words):
@@ -252,7 +254,7 @@ def scan(text: str) -> list[Slang]:
 
 
 def laugh_only(text: str) -> bool:
-    """True si el mensaje son solo risas (kkkk, jajaja, wkwk, ㅋㅋㅋ, mdr...)."""
+    """Indica si el mensaje está formado solo por risas (kkkk, jajaja, wkwk, ㅋㅋㅋ, mdr...)."""
     words = tokens(text)
     return bool(words) and all(any(p.match(w.casefold()) for p, _, _ in _LAUGH_PATTERNS) for w in words)
 
@@ -262,7 +264,7 @@ def laugh_for(lang: str) -> str:
 
 
 def prompt_reference() -> str:
-    """Glosario compacto para el system prompt, agrupado por idioma/país."""
+    """Devuelve un glosario compacto para el system prompt, agrupado por idioma o país."""
     from .languages import LANGUAGES
 
     groups: dict[tuple[str, str], list[str]] = {}

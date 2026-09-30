@@ -31,7 +31,7 @@ class FakeProvider:
 
 
 class FakeDetector:
-    """Detecta según un diccionario fijo texto -> (idioma, confianza)."""
+    """Detecta el idioma mediante un diccionario fijo texto -> (idioma, confianza)."""
 
     def __init__(self, table: dict[str, tuple[str, float]] | None = None) -> None:
         self.table = table or {}

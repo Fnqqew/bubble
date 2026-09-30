@@ -1,4 +1,4 @@
-"""El botón del micrófono de Roblox (muteado o no) y la escucha de solo el sonido de Roblox."""
+"""Botón del micrófono de Roblox (silenciado o no) y captura exclusiva del audio de Roblox."""
 
 from pathlib import Path
 
@@ -13,7 +13,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def window_with(bar: str) -> Image.Image:
-    """La barra de arriba de una grabación real, en una ventana de 1920x1040."""
+    """Barra superior de una grabación real, en una ventana de 1920x1040."""
     window = Image.new("RGB", (1920, 1040), (40, 40, 40))
     window.paste(Image.open(FIXTURES / bar).convert("RGB"), (0, 0))
     return window
@@ -37,7 +37,7 @@ def test_no_mic_button_without_voice_chat():
 
 def test_red_text_in_the_bar_is_not_the_mic():
     window = Image.new("RGB", (1920, 1040), (40, 40, 40))
-    window.paste((230, 60, 60), (300, 30, 420, 38))  # una franja roja horizontal (una bandera, un texto)
+    window.paste((230, 60, 60), (300, 30, 420, 38))  # franja roja horizontal (una bandera, un texto)
     assert find_mic(window) is None
 
 
@@ -53,9 +53,9 @@ def test_warns_if_muted_but_never_clicks(monkeypatch):
     assert roblox_mic.roblox_muted(grab) is True
     bar = window_with("roblox_bar_mic_on.png")
     assert roblox_mic.roblox_muted(grab) is False
-    assert not hasattr(roblox_mic, "_click") and not hasattr(roblox_mic, "RobloxMic")  # nada de clics
+    assert not hasattr(roblox_mic, "_click") and not hasattr(roblox_mic, "RobloxMic")  # sin clics
     monkeypatch.setattr(win32, "roblox_is_foreground", lambda: False)
-    assert roblox_mic.roblox_muted(grab) is None  # sin Roblox al frente no se mira
+    assert roblox_mic.roblox_muted(grab) is None  # sin Roblox en primer plano no se analiza
 
 
 class _Broken:
@@ -90,7 +90,7 @@ def test_game_audio_falls_back_to_the_whole_pc():
 
 
 def test_roblox_audio_follows_the_process_that_plays(monkeypatch):
-    """Roblox cambió de proceso (se reabrió): Bubble se pasa al nuevo en vez de quedarse con el viejo en silencio."""
+    """Roblox cambió de proceso (se reabrió): Bubble pasa al nuevo en lugar de quedarse en silencio con el anterior."""
     import time
 
     from bubble.voice import process_audio
@@ -123,12 +123,12 @@ def test_roblox_audio_follows_the_process_that_plays(monkeypatch):
     empty = process_audio.RobloxAudio(find_pid=lambda: 0)
     with empty.recorder(samplerate=16000) as rec:
         started = time.perf_counter()
-        assert not rec.record(1600).any()  # Roblox cerrado: silencio al ritmo real
+        assert not rec.record(1600).any()  # Roblox cerrado: silencio a ritmo real
         assert time.perf_counter() - started >= 0.09
 
 
 def test_process_loopback_reads_in_real_time():
-    """Escucha solo a este mismo proceso (que no suena): silencio, al ritmo real."""
+    """Captura solo este mismo proceso (que no emite sonido): silencio, a ritmo real."""
     import os
     import time
 
@@ -147,8 +147,9 @@ def test_process_loopback_reads_in_real_time():
 
 
 def test_translated_voice_goes_to_cable_input_not_the_16ch_one(monkeypatch):
-    """VB-Cable instala «CABLE In 16ch» (primero en la lista) y «CABLE Input»: reproducir en el de 16 canales fallaba
-    y la voz traducida nunca le llegaba a Roblox."""
+    """VB-Cable instala «CABLE In 16ch» (primero en la lista) y «CABLE Input». Reproducir en el de 16 canales fallaba y
+    la voz traducida nunca llegaba a Roblox.
+    """
     from types import SimpleNamespace
 
     from bubble.voice import bridge

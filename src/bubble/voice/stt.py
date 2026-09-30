@@ -1,10 +1,10 @@
-"""Filtros para lo que transcribe Whisper (ver asr.py, que es el que transcribe)."""
+"""Filtros para el texto que transcribe Whisper (ver asr.py)."""
 
 from __future__ import annotations
 
 import re
 
-# Frases que Whisper "inventa" con ruido, música o silencio (aprendidas de videos subtitulados).
+# Frases que Whisper inventa ante ruido, música o silencio (aprendidas de videos subtitulados).
 _HALLUCINATIONS = re.compile(
     r"^(thank you( so much)?( for watching)?|thanks for watching|subscribe|please subscribe|"
     r"gracias por ver( el video)?|subt[ií]tulos (realizados )?por la comunidad de amara\.org|"

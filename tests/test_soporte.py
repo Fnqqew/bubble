@@ -1,5 +1,6 @@
-"""Soporte: el mensaje (título, qué pasó, imágenes) se arma bien, se manda (a un servidor de prueba local: nunca al
-de verdad) y, si no se puede, queda listo para mandarlo a mano."""
+"""Soporte: arma el mensaje (título, descripción e imágenes), lo envía a un servidor de prueba local (nunca al real) y,
+si el envío falla, lo deja listo para enviarlo manualmente.
+"""
 
 import http.server
 import re
@@ -26,7 +27,7 @@ def report(tmp_path, images=0, **changes) -> support.Report:
 
 
 def parse(body: bytes, content_type: str):
-    """Lee el formulario como un servidor (en UTF-8, como lo mandan los navegadores)."""
+    """Lee el formulario como lo haría un servidor (en UTF-8, como lo envían los navegadores)."""
     boundary = content_type.split("boundary=")[1].encode()
     fields, files = {}, {}
     for part in body.split(b"--" + boundary)[1:-1]:
@@ -91,14 +92,15 @@ def server():
 
 def test_sends_title_description_and_images(server, tmp_path):
     url, collector = server
-    assert support.send(report(tmp_path, images=2), endpoint=url).startswith("¡Enviado!")
+    assert support.send(report(tmp_path, images=2), endpoint=url).startswith("Enviado.")
     fields, files = parse(collector.received[0][1], collector.received[0][0])
     assert fields["_subject"] == "[Bubble · Problema] La voz se corta"
     assert fields["Título"] == "La voz se corta" and fields["Tipo"] == "Problema"
     assert "3. Se cortó" in fields["Mensaje"] and "Windows 11" in fields["Mensaje"]
     assert fields["_replyto"] == "jugador@example.com" and fields["_captcha"] == "false"
     assert set(files) == {"imagen1", "imagen2"}
-    assert files["imagen1"][0] == "captura0.jpg" and files["imagen1"][1][:2] == b"\xff\xd8"  # JPG de verdad
+    # JPG válido (firma de bytes)
+    assert files["imagen1"][0] == "captura0.jpg" and files["imagen1"][1][:2] == b"\xff\xd8"
 
 
 def test_images_that_do_not_fit_are_left_out(server, tmp_path, monkeypatch):
@@ -107,7 +109,7 @@ def test_images_that_do_not_fit_are_left_out(server, tmp_path, monkeypatch):
     monkeypatch.setattr(support, "MAX_BYTES", int(one * 2.5))
     support.send(report(tmp_path, images=4), endpoint=url)
     _fields, files = parse(collector.received[0][1], collector.received[0][0])
-    assert len(files) == 2  # el mensaje sale igual, con lo que entra
+    assert len(files) == 2  # el mensaje se envía igual, con las imágenes disponibles
 
 
 def test_first_message_asks_to_confirm_the_form(server, tmp_path):
@@ -145,7 +147,7 @@ def window(monkeypatch, tmp_path):
     from bubble.ui import widgets
     from bubble.ui.support_window import SupportWindow
 
-    monkeypatch.setattr(widgets, "present", lambda window, root: None)  # escondida: nunca te saca el foco
+    monkeypatch.setattr(widgets, "present", lambda window, root: None)  # oculta: nunca le quita el foco al jugador
     monkeypatch.setattr(support, "system_text", lambda: "PC de prueba")
     monkeypatch.setattr(support, "log_text", lambda: "")
     root = tk.Tk()
@@ -185,7 +187,7 @@ def test_needs_a_title_and_what_happened(window, monkeypatch):
 
 def test_sends_with_images_and_pc_data(window, monkeypatch):
     sent = []
-    monkeypatch.setattr(support, "send", lambda message: sent.append(message) or "¡Enviado! Gracias: te van a leer.")
+    monkeypatch.setattr(support, "send", lambda message: sent.append(message) or "Enviado. Gracias por escribir.")
     fill(window)
     window._shot()  # «Captura de Roblox»
     assert len(window.images) == 1 and window._thumbs
@@ -195,7 +197,7 @@ def test_sends_with_images_and_pc_data(window, monkeypatch):
     message = sent[0]
     assert message.kind == "idea" and message.title == "La voz se corta" and message.system == "PC de prueba"
     assert message.images == window.images
-    assert "¡Enviado!" in str(window.status.cget("text"))
+    assert "Enviado." in str(window.status.cget("text"))
 
 
 def test_if_it_cannot_send_it_prepares_the_mail(window, monkeypatch, tmp_path):
@@ -210,4 +212,4 @@ def test_if_it_cannot_send_it_prepares_the_mail(window, monkeypatch, tmp_path):
     pump(window, lambda: prepared)
     window.window.update()
     assert prepared and "sin internet" in str(window.status.cget("text"))
-    assert "disabled" not in window.send_button.state()  # se puede volver a probar
+    assert "disabled" not in window.send_button.state()  # permite reintentar el envío

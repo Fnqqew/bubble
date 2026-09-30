@@ -1,7 +1,7 @@
-"""La ventana «Preparar Bubble» (la real) en cada etapa de la instalación, para la guía (docs/INSTALACION.md).
-Transparente y sin tomar el foco: nunca sale lo que hay detrás en tu pantalla. No instala nada.
+"""Ventana «Preparar Bubble» (la real) en cada etapa de la instalación, para la guía (docs/INSTALACION.md). Es
+transparente y no toma el foco, de modo que nunca captura lo que hay detrás en la pantalla. No instala nada.
 
-Uso: shot_install.py <carpeta> tools/media  →  <carpeta>/setup_<etapa>.png y setup.json (dónde están los botones)
+Uso: shot_install.py <carpeta> tools/media  →  <carpeta>/setup_<etapa>.png y setup.json (posición de los botones)
 """
 import ctypes
 import json

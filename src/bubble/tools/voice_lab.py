@@ -1,17 +1,17 @@
-"""Laboratorio de voz: conversaciones de prueba (voces sintéticas en varios idiomas) pasadas en tiempo real por los
-subtítulos de voz de Bubble, para medir qué tan rápido y qué tan bien se entiende y se traduce.
+"""Laboratorio de voz: conversaciones de prueba (voces sintéticas en varios idiomas) que se pasan en tiempo real por los
+subtítulos de voz de Bubble, para medir la velocidad y la calidad de la comprensión y la traducción.
 
-No suena nada: el audio entra directo al sistema de escucha, al mismo ritmo que si viniera del juego.
+No se reproduce sonido: el audio entra directamente al sistema de escucha, al mismo ritmo que si viniera del juego.
 
 Uso:
     python -m bubble.tools.voice_lab                       # todos los escenarios, con traducción (Claude)
     python -m bubble.tools.voice_lab grupo idiomas         # algunos
     python -m bubble.tools.voice_lab --sin-claude          # solo escuchar y transcribir (gratis)
-    python -m bubble.tools.voice_lab --directo             # tu voz, traducción directa (hablás y sale en voz)
+    python -m bubble.tools.voice_lab --directo             # voz propia, traducción directa (se habla y sale en voz)
 
-Para cada escenario informa: en cuánto aparece el texto, en cuánto la traducción, palabras mal entendidas (WER),
-idioma acertado, quién habla (voces encontradas y aciertos) y uso de CPU. Guarda capturas de cómo se ven los
-subtítulos en %LOCALAPPDATA%\\Bubble\\voice_lab.
+Para cada escenario informa: tiempo hasta que aparece el texto, tiempo hasta la traducción, palabras mal entendidas
+(WER), acierto de idioma, identificación de hablantes (voces encontradas y aciertos) y uso de CPU. Guarda capturas de
+los subtítulos en %LOCALAPPDATA%\\Bubble\\voice_lab.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ RATE = 16000
 @dataclass(frozen=True)
 class Speaker:
     voice: str  # modelo de Piper
-    id: int | None = None  # hablante dentro del modelo (los que tienen varios)
+    id: int | None = None  # hablante dentro del modelo (si tiene varios)
     gain_db: float = 0.0
 
 
@@ -47,8 +47,8 @@ class Turn:
     who: str
     lang: str
     text: str
-    gap: float = 0.8  # silencio antes (negativo: se pisa con la frase anterior)
-    speed: float = 1.0  # >1 más rápido
+    gap: float = 0.8  # silencio previo (negativo: se superpone con la frase anterior)
+    speed: float = 1.0  # >1: más rápido
 
 
 @dataclass
@@ -77,7 +77,7 @@ CAST = {
 
 
 
-RAW = False  # --sin-filtro: sin radio de escucha ni filtro de ruido (para comparar)
+RAW = False  # --sin-filtro: sin radio de escucha ni filtro de ruido (comparación)
 
 def scenarios() -> list[Scenario]:
     return [
@@ -152,7 +152,7 @@ def synthesize(voices, speaker: Speaker, text: str, speed: float) -> np.ndarray:
         return np.load(path)
     from piper.config import SynthesisConfig
 
-    voice = voices._load_here(speaker.voice)  # (acá, en este proceso: se necesita la voz con varios hablantes)
+    voice = voices._load_here(speaker.voice)  # (en este proceso: se necesita la voz con varios hablantes)
     config = SynthesisConfig(speaker_id=speaker.id, length_scale=1.0 / speed)
     audio = np.concatenate([chunk.audio_float_array for chunk in voice.synthesize(text, config)])
     audio = resample(audio.astype(np.float32), voice.config.sample_rate, RATE)
@@ -161,7 +161,7 @@ def synthesize(voices, speaker: Speaker, text: str, speed: float) -> np.ndarray:
 
 
 def roblox_voice(audio: np.ndarray, gain_db: float) -> np.ndarray:
-    """Como llega la voz por el chat de voz: banda de teléfono ancha y un poco comprimida."""
+    """Simula la voz recibida por el chat de voz: banda de teléfono ancha y algo comprimida."""
     from scipy.signal import butter, sosfilt
 
     sos = butter(4, [110, 7200], btype="band", fs=RATE, output="sos")
@@ -171,7 +171,7 @@ def roblox_voice(audio: np.ndarray, gain_db: float) -> np.ndarray:
 
 
 def game_noise(seconds: float, seed: int = 1) -> np.ndarray:
-    """Música de fondo (acordes con ritmo), un zumbido y golpes/explosiones de vez en cuando."""
+    """Música de fondo (acordes con ritmo), zumbido y golpes o explosiones ocasionales."""
     rng = np.random.default_rng(seed)
     t = np.arange(int(seconds * RATE)) / RATE
     music = np.zeros_like(t)
@@ -220,7 +220,7 @@ def build(scenario: Scenario) -> tuple[np.ndarray, list[Truth]]:
     for turn in scenario.turns:
         speaker = scenario.cast[turn.who]
         audio = roblox_voice(synthesize(voices, speaker, turn.text, turn.speed), speaker.gain_db)
-        # Piper deja un poco de silencio al principio y al final: se mide dónde está la voz de verdad.
+        # Piper deja silencio al principio y al final: se mide dónde está realmente la voz.
         loud = np.flatnonzero(np.abs(audio) > 0.02)
         lead = loud[0] / RATE if len(loud) else 0.0
         tail = (len(audio) - loud[-1]) / RATE if len(loud) else 0.0
@@ -395,7 +395,7 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
             if lines:
                 shots.append(lines)
         time.sleep(0.05)
-    time.sleep(3.0)  # que terminen las últimas traducciones
+    time.sleep(3.0)  # esperar las últimas traducciones
     listener.stop()
     cpu = (time.process_time() - cpu0) / (time.perf_counter() - wall0)
 
@@ -416,7 +416,7 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
         matches = [r for r in records.values() if related(r, truth)]
         if not matches:
             continue
-        starting = [r for r in matches if r.start >= truth.start - 0.5]  # frases que empiezan con esta
+        starting = [r for r in matches if r.start >= truth.start - 0.5]  # frases que comienzan con esta
         if starting:
             first_text.append(min(r.first_seen for r in starting) - source.wall(truth.start))
         closing = [r for r in matches if r.final_at and r.end >= truth.end - 0.3]
@@ -431,7 +431,7 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
     reference = " ".join(t.text for t in truths)
     hypothesis = " ".join(r.text for r in finals)
     total_wer = wer(reference, hypothesis)
-    # idioma y voz de cada frase final: la de la frase real con la que más se superpone
+    # idioma y voz de cada frase final: los de la frase real con la que más se superpone
     lang_ok, pairs = 0, []
     for rec in finals:
         truth = max(truths, key=lambda t: overlap(rec, t))
@@ -439,7 +439,7 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
         pairs.append((truth.who, rec.speaker))
     real = {who for who, _n in pairs}
     found = {n for _w, n in pairs if n}
-    # acierto de voz: cada voz encontrada se asigna a la persona que más dice; se cuentan las frases bien atribuidas
+    # acierto de voz: cada voz encontrada se asigna a la persona que más habla; se cuentan las frases bien atribuidas
     by_number: dict[int, list[str]] = {}
     for who, number in pairs:
         by_number.setdefault(number, []).append(who)
@@ -510,7 +510,7 @@ DIRECT = [
 
 
 class _LabOut:
-    """Como VoiceOut, pero en vez de sonar anota cuándo empezaría a sonar tu voz traducida."""
+    """Como VoiceOut, pero en lugar de reproducir el audio registra cuándo comenzaría a sonar la voz traducida."""
 
     def __init__(self, voices) -> None:
         from ..voice.audio import Output

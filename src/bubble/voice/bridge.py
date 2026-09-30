@@ -1,11 +1,11 @@
-"""Hablar "por tu micrófono", como Soundpad: lo que escucha Roblox es tu voz real más la voz traducida.
+"""Permite hablar «por el micrófono», como Soundpad: Roblox recibe la voz real del jugador más la voz traducida.
 
-Windows no deja que un programa meta sonido en un micrófono físico: hace falta un micrófono virtual (VB-Audio
-Virtual Cable, gratis). Bubble pasa tu micrófono real al virtual en vivo (~20 ms de demora) y la voz traducida se
-suma ahí. En Roblox se elige una sola vez «CABLE Output» como micrófono.
+Windows no permite que un programa inyecte sonido en un micrófono físico, por lo que se requiere un micrófono virtual
+(VB-Audio Virtual Cable, gratuito). Bubble reenvía el micrófono real al virtual en vivo (~20 ms de latencia) y suma ahí
+la voz traducida. En Roblox se selecciona una sola vez «CABLE Output» como micrófono.
 
-    tu micrófono ──► Bubble ──► CABLE Input ══► CABLE Output ──► Roblox
-    voz traducida ──────────────┘
+    micrófono ──► Bubble ──► CABLE Input ══► CABLE Output ──► Roblox
+    voz traducida ───────────┘
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ RATE = 48000
 BLOCK = 480  # 10 ms
 CABLE_PAGE = "https://vb-audio.com/Cable/"
 CABLE_FALLBACK = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip"
-VIRTUAL = ("cable", "vb-audio", "voicemeeter")  # dispositivos virtuales: no son tu micrófono
+VIRTUAL = ("cable", "vb-audio", "voicemeeter")  # dispositivos virtuales, no son un micrófono real
 
 
 def _sc():
@@ -43,7 +43,7 @@ def _sc():
 
 
 def microphones() -> list[str]:
-    """Tus micrófonos de verdad (sin los virtuales), el predeterminado primero."""
+    """Micrófonos reales (excluye los virtuales), con el predeterminado primero."""
     sc = _sc()
     names = [m.name for m in sc.all_microphones() if not any(v in m.name.lower() for v in VIRTUAL)]
     default = sc.default_microphone().name
@@ -51,7 +51,7 @@ def microphones() -> list[str]:
 
 
 def cable_input():
-    """La entrada del micrófono virtual (donde se reproduce lo que Roblox va a escuchar), o None."""
+    """Entrada del micrófono virtual (donde se reproduce lo que Roblox escucha), o None."""
     speakers = _sc().all_speakers()
     for wanted in ("cable input", "voicemeeter input", "voicemeeter vaio input"):
         for speaker in speakers:
@@ -62,21 +62,23 @@ def cable_input():
 
 
 def _microphone(name: str):
-    """Tu micrófono de verdad. Nunca el virtual: si Windows lo dejó como predeterminado, Bubble pasaría el cable al
-    cable (y escucharía eso en vez de tu voz)."""
+    """Micrófono real. Nunca el virtual: si Windows lo dejó como predeterminado, Bubble reenviaría el cable a sí mismo
+    y capturaría eso en lugar de la voz.
+    """
     from .devices import real_microphone
 
     return real_microphone(name)
 
 
 class MicBridge:
-    """Pasa tu micrófono real al micrófono virtual, todo el tiempo. Mientras suena la voz traducida, tu voz real
-    baja (si no, se escucharían las dos encima)."""
+    """Reenvía de forma continua el micrófono real al micrófono virtual. Mientras suena la voz traducida, atenúa la voz
+    real para que no se superpongan.
+    """
 
     def __init__(self, mic_name: str = "", duck: float = 0.15) -> None:
         self.mic_name = mic_name
         self.duck_level = duck
-        self.enabled = True  # pasar tu voz real (si no, solo se escucha la traducida)
+        self.enabled = True  # reenviar la voz real (si no, solo se oye la traducida)
         self.error = ""
         self._duck_until = 0.0
         self._running = threading.Event()
@@ -142,8 +144,9 @@ def _driver_url() -> str:
 
 
 def install_cable(progress: Progress | None = None) -> str:
-    """Baja el instalador oficial de VB-Audio Virtual Cable y lo abre (Windows pide permiso de administrador y hay
-    que tocar «Install Driver»). Devuelve un mensaje para mostrar."""
+    """Descarga el instalador oficial de VB-Audio Virtual Cable y lo ejecuta (Windows solicita permiso de administrador
+    y el usuario debe pulsar «Install Driver»). Devuelve un mensaje para mostrar.
+    """
     import ctypes
 
     from .models import download
@@ -156,7 +159,7 @@ def install_cable(progress: Progress | None = None) -> str:
     setup = folder / "VBCABLE_Setup_x64.exe"
     if not setup.exists():
         return "No se encontró el instalador dentro del paquete descargado."
-    # "runas": el instalador de controladores necesita permiso de administrador (Windows lo pregunta).
+    # "runas": el instalador de controladores requiere permisos de administrador (Windows los solicita).
     result = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(setup), None, str(folder), 1)
     if result <= 32:
         return "No se abrió el instalador (¿se canceló el permiso de administrador?)."

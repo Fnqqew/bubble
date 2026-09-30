@@ -60,7 +60,7 @@ async def test_filtered_messages_are_not_translated():
     for text in ("**********", "#### ####", "*** de *****", "**** ** you"):
         result = await translator.translate_incoming(text, "Bob")
         assert result.status == "filtered", text
-    # Una palabra tapada suelta no frena la traducción del resto.
+    # Una palabra censurada aislada no impide traducir el resto del mensaje.
     assert (await translator.translate_incoming("hello **** my friend", "Bob")).status == "translated"
     assert len(provider.requests) == 1
 

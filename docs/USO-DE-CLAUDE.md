@@ -1,85 +1,86 @@
 # Cuánto usa Bubble de tu suscripción de Claude
 
-Bubble traduce con **tu** suscripción de Claude (Pro o Max), a través de Claude Code: no hay API keys ni cobros
-aparte. Lo que sí hace es usar una parte de los límites de tu plan, los mismos que usás en claude.ai y en Claude Code.
+Bubble traduce con **tu** suscripción de Claude (Pro o Max), a través de Claude Code: no requiere claves de API ni
+cobros adicionales. Lo que sí hace es consumir una parte de los límites de tu plan, los mismos que se aplican en
+claude.ai y en Claude Code.
 
-## Qué se le manda a Claude
+## Qué se envía a Claude
 
 Solo lo que hace falta traducir:
 
-- mensajes del chat y de las burbujas que **no** están en tu idioma;
-- frases del chat de voz que no están en tu idioma;
-- lo que escribís o decís vos para mandar traducido.
+- los mensajes del chat y de las burbujas que **no** están en tu idioma;
+- las frases del chat de voz que no están en tu idioma;
+- lo que escribís o decís para enviar traducido.
 
-No se mandan: lo que ya está en tu idioma (incluido lo corto: "sii", "aja", "Q PEDO"), "gg", "lol", risas, spam,
-avisos del juego, mensajes tapados por el filtro de Roblox (####) ni lo repetido (queda guardado). Los mensajes que
-llegan juntos van en un mismo pedido.
+No se envía: lo que ya está en tu idioma (incluidos los mensajes cortos, como "sii", "aja" o "Q PEDO"), "gg", "lol",
+risas, spam, avisos del juego, mensajes ocultos por el filtro de Roblox (####) ni mensajes repetidos (quedan
+guardados). Los mensajes que llegan juntos se agrupan en un mismo pedido.
 
-## Lo que gasta cada traducción (medido)
+## Consumo de cada traducción
 
-Medido el 27/9/2026 con `python -m bubble.tools.usage_meter`, con 52 mensajes como los de una partida (chat en
-inglés, portugués, alemán, francés e hindi; frases del chat de voz; mensajes tuyos para mandar en inglés):
+Medición realizada con `python -m bubble.tools.usage_meter`, con 52 mensajes representativos de una partida (chat en
+inglés, portugués, alemán, francés e hindi; frases del chat de voz; mensajes propios para enviar en inglés):
 
-| Modelo | Por traducción (equivalente en la API) | Tokens por pedido | Tiempo por pedido | ¿Sirve? |
+| Modelo | Por traducción (equivalente en la API) | Tokens por pedido | Tiempo por pedido | ¿Es adecuado? |
 |---|---|---|---|---|
-| **Opus** (el que viene puesto) | 0,003 a 0,004 US$ | ~6.000 del caché + ~30 de respuesta | ~2 s | ✅ el más preciso |
-| **Sonnet** | 0,003 US$ | ~6.000 del caché + ~25 de respuesta | ~1,5 s | ✅ un poco menos gasto |
-| **Haiku** (pensando antes de responder) | 0,006 US$ | respuestas larguísimas | ~24 s | ❌ se va por las ramas |
-| **Haiku sin pensar** (la voz y las burbujas) | menos que Sonnet | ~6.000 del caché + ~20 de respuesta | ~0,8 s | ✅ para la voz: 2,5 veces más rápido que Opus |
+| **Opus** (predeterminado) | 0,003 a 0,004 US$ | ~6.000 de caché + ~30 de respuesta | ~2 s | ✅ el más preciso |
+| **Sonnet** | 0,003 US$ | ~6.000 de caché + ~25 de respuesta | ~1,5 s | ✅ algo más económico |
+| **Haiku** (con razonamiento previo) | 0,006 US$ | respuestas muy extensas | ~24 s | ❌ se desvía del pedido |
+| **Haiku sin razonamiento** (voz y burbujas) | menos que Sonnet | ~6.000 de caché + ~20 de respuesta | ~0,8 s | ✅ para la voz: 2,5 veces más rápido que Opus |
 
-**La voz y las burbujas van por Haiku**, sin pensar antes de responder: tu voz se traduce en menos de un segundo
-(con Opus tardaba casi dos) y la calidad es casi la misma. El chat escrito sigue con Opus, que entiende mejor la
-jerga.
+**La voz y las burbujas usan Haiku**, sin razonamiento previo: tu voz se traduce en menos de un segundo (con Opus
+demoraba casi dos) con una calidad muy similar. El chat escrito sigue con Opus, que interpreta mejor la jerga.
 
-Casi todo lo que se manda son las instrucciones de Bubble, que quedan en el **caché** de Claude: se leen de nuevo en
-cada pedido a una fracción del costo. La respuesta es corta (la traducción).
+Casi todo lo que se envía son las instrucciones de Bubble, que quedan en el **caché** de Claude: se vuelven a leer en
+cada pedido a una fracción del costo. La respuesta es breve (la traducción).
 
-"Equivalente en la API" es lo que costaría pagando por uso: con la suscripción no pagás eso, pero sirve para comparar
-cuánto pesa cada cosa.
+"Equivalente en la API" es lo que costaría pagando por uso. Con la suscripción no se paga ese monto, pero sirve para
+comparar el peso de cada operación.
 
 ## Por hora de juego
 
 Depende de cuántos mensajes en otro idioma lleguen. Con Opus:
 
-| Cómo está el servidor | Mensajes en otro idioma | Equivalente en la API |
+| Actividad del servidor | Mensajes en otro idioma | Equivalente en la API |
 |---|---|---|
-| Tranquilo | uno por minuto (~60 por hora) | ~0,20 US$ por hora |
+| Tranquila | uno por minuto (~60 por hora) | ~0,20 US$ por hora |
 | Normal | uno cada 20 s (~180 por hora) | ~0,60 US$ por hora |
-| Muy activo | uno cada 6 s (~600 por hora) | ~2 US$ por hora |
+| Muy alta | uno cada 6 s (~600 por hora) | ~2 US$ por hora |
 
-El chat de voz suma un pedido por cada frase que no está en tu idioma; lo que escribís vos, uno por mensaje.
+El chat de voz suma un pedido por cada frase que no está en tu idioma, y lo que escribís, uno por mensaje.
 
-**Bubble en tu idioma.** Si tu idioma no viene listo, la primera vez Bubble traduce su propia ventana con tu Claude
-(unos 850 textos, en tandas, con Sonnet). Pasa una sola vez y queda guardado.
+**Bubble en tu idioma.** Si tu idioma no está incluido, la primera vez Bubble traduce su propia ventana con tu cuenta
+de Claude (unos 850 textos, en tandas, con Sonnet). Ocurre una sola vez y el resultado queda guardado.
 
-## ¿Cuánto aguanta cada plan?
+## Alcance de cada plan
 
-Anthropic no publica los límites en tokens ni en dólares, así que no se puede decir "X horas" con exactitud. Lo que
-sí publica ([cómo funcionan los límites](https://support.claude.com/en/articles/11647753-how-do-usage-and-length-limits-work),
+Anthropic no publica los límites en tokens ni en dólares, por lo que no es posible indicar una cantidad exacta de horas.
+Lo que sí informa ([cómo funcionan los límites](https://support.claude.com/en/articles/11647753-how-do-usage-and-length-limits-work),
 [plan Max](https://support.claude.com/en/articles/11049741-what-is-the-max-plan)):
 
 - El uso de claude.ai, Claude Code y Claude Desktop **comparte el mismo límite** (Bubble cuenta como Claude Code).
-- El límite se renueva **cada 5 horas**, y además hay un **límite semanal**.
-- **Max 5x** tiene 5 veces el uso por sesión de **Pro**; **Max 20x**, 20 veces.
+- El límite se renueva **cada 5 horas**, y además existe un **límite semanal**.
+- **Max 5x** ofrece 5 veces el uso por sesión de **Pro**; **Max 20x**, 20 veces.
 
-En la práctica: con Pro, una partida tranquila o normal es un uso chico; un servidor muy activo durante horas, sumado a
-lo que uses Claude para otras cosas, puede acercarte al límite de 5 horas. Con Max 5x o 20x hay mucho margen.
+En la práctica, con Pro una partida tranquila o normal representa un consumo bajo; un servidor muy activo durante horas,
+sumado a otros usos de Claude, puede acercarte al límite de 5 horas. Con Max 5x o 20x hay un margen amplio.
 
-**Para ver cuánto llevás:** claude.ai → Configuración → Uso (muestra el porcentaje del límite de 5 horas y del
-semanal). Si te acercás al tope, Claude Code te avisa y Bubble lo anota en `%APPDATA%\Bubble\bubble.log`.
+**Para consultar el consumo:** claude.ai → Configuración → Uso (muestra el porcentaje del límite de 5 horas y del
+semanal). Si te acercás al límite, Claude Code lo avisa y Bubble lo registra en `%APPDATA%\Bubble\bubble.log`.
 
-## Cómo gastar menos
+## Cómo reducir el consumo
 
-- **Usar Sonnet:** en `config.toml`, `[claude] model = "sonnet"`. Gasta un poco menos y responde más rápido; Opus
-  traduce la jerga un poco mejor.
-- **Apagar lo que no uses:** burbujas o subtítulos de voz (interruptores en Inicio).
-- Dejar `adapt_slang = false` (viene así): los mensajes en tu idioma con jerga de otro país no se mandan.
+- **Usar Sonnet:** en `config.toml`, `[claude] model = "sonnet"`. Consume algo menos y responde más rápido; Opus
+  interpreta la jerga un poco mejor.
+- **Desactivar lo que no uses:** las burbujas o los subtítulos de voz (interruptores en Inicio).
+- Mantener `adapt_slang = false` (valor predeterminado): los mensajes en tu idioma con jerga de otro país no se envían.
 
-## Medilo vos
+## Medición propia
 
 ```powershell
-.venv\Scripts\python.exe -m bubble.tools.usage_meter                  # con el modelo que tengas configurado
-.venv\Scripts\python.exe -m bubble.tools.usage_meter --modelo sonnet  # o probá otro
+.venv\Scripts\python.exe -m bubble.tools.usage_meter                  # con el modelo configurado
+.venv\Scripts\python.exe -m bubble.tools.usage_meter --modelo sonnet  # o con otro modelo
 ```
 
-Son ~50 traducciones (un uso chico de tu suscripción). El resultado queda en `%LOCALAPPDATA%\Bubble\uso_<modelo>.json`.
+Son unas 50 traducciones (un consumo bajo de la suscripción). El resultado se guarda en
+`%LOCALAPPDATA%\Bubble\uso_<modelo>.json`.

@@ -1,8 +1,8 @@
 """Agrupa los mensajes que llegan casi juntos y los traduce en un solo pedido.
 
-En un chat activo llegan ráfagas de mensajes: traducirlos de a uno hacía que los últimos esperaran
-turno varios segundos y que las traducciones llegaran desordenadas. En lote salen juntas, en orden,
-más rápido y gastando menos (el prompt fijo se lee una sola vez por lote).
+En un chat activo llegan ráfagas de mensajes. Traducirlos de a uno hace que los últimos esperen su turno varios segundos
+y que las traducciones lleguen desordenadas. En lote salen juntas, en orden, más rápido y con menor costo, porque el
+prompt fijo se lee una sola vez por lote.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ class _Item:
 
 
 def _group_key(request: TranslationRequest) -> tuple:
-    # Solo se juntan mensajes que se traducen igual (misma dirección, idioma, variante y tono).
+    # Solo se agrupan mensajes que se traducen igual: misma dirección, idioma, variante y tono.
     return (request.direction, request.target_lang, request.target_region, request.tone, request.spoken,
             request.from_speech, request.intonation, request.examples, request.vocabulary)
 
@@ -75,7 +75,7 @@ class Batcher:
     async def _worker(self) -> None:
         while True:
             await self._wakeup.wait()
-            await asyncio.sleep(self.gather_s)  # dar unos milisegundos a los mensajes que llegan juntos
+            await asyncio.sleep(self.gather_s)  # espera breve para agrupar mensajes que llegan juntos
             batch = self._take_batch()
             if not batch:
                 continue

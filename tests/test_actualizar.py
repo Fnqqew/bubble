@@ -1,5 +1,7 @@
-"""Actualizar Bubble: saber si hay una versión nueva, bajarla y ponerla sin tocar lo tuyo (siempre sobre carpetas de
-prueba y un servidor local: nunca toca tu copia de Bubble ni pregunta a GitHub de verdad)."""
+"""Actualización de Bubble: detectar si hay una versión nueva, descargarla e instalarla sin modificar los datos del
+usuario. Las pruebas usan siempre carpetas temporales y un servidor local: nunca tocan la instalación real ni consultan
+GitHub.
+"""
 
 import http.server
 import json
@@ -60,7 +62,7 @@ def test_knows_how_bubble_was_installed(tmp_path):
     assert update.install_kind(zipped) == "zip"
     (zipped / ".git").mkdir()
     assert update.install_kind(zipped) == "git"
-    assert update.install_kind(tmp_path / "otra") == ""  # no es una carpeta de Bubble: no se toca
+    assert update.install_kind(tmp_path / "otra") == ""  # no es una carpeta de Bubble: no se modifica
 
 
 # ---------------------------------------------------------------- GitHub (un servidor de prueba)
@@ -99,7 +101,7 @@ def test_asks_github_for_the_latest_release(github):
 
 
 def test_a_private_repository_just_means_no_news(github):
-    assert update.latest_from_github() is None  # GitHub responde 404 a quien no tiene cuenta
+    assert update.latest_from_github() is None  # GitHub responde 404 si no hay sesión iniciada
 
 
 def test_asks_at_most_twice_a_day_and_respects_later(monkeypatch, tmp_path):
@@ -108,14 +110,14 @@ def test_asks_at_most_twice_a_day_and_respects_later(monkeypatch, tmp_path):
     monkeypatch.setattr(update, "latest", lambda: asked.append(1) or update.Release("3.4.0", "notas"))
     release = update.check(current="3.3.0")
     assert release.version == "3.4.0" and len(asked) == 1
-    assert update.check(current="3.3.0").version == "3.4.0" and len(asked) == 1  # usa lo que ya sabe
-    assert update.check(current="3.4.0") is None  # (ya la tenés)
+    assert update.check(current="3.3.0").version == "3.4.0" and len(asked) == 1  # usa el resultado ya obtenido
+    assert update.check(current="3.4.0") is None  # ya está instalada esa versión
     update.check(force=True, current="3.3.0")
-    assert len(asked) == 2  # «Buscar actualizaciones»: pregunta igual
+    assert len(asked) == 2  # «Buscar actualizaciones»: consulta de todos modos
     assert update.should_offer(release)
     update.remind_later(release)
-    assert not update.should_offer(release)  # «Más tarde»: no vuelve a preguntar hoy…
-    assert update.should_offer(update.Release("3.5.0"))  # …salvo que salga otra
+    assert not update.should_offer(release)  # «Más tarde»: no vuelve a consultar el mismo día
+    assert update.should_offer(update.Release("3.5.0"))  # salvo que aparezca otra versión
 
 
 def test_downloads_and_prepares_a_zip_update(github, monkeypatch, tmp_path):
@@ -147,9 +149,9 @@ def test_replaces_bubble_but_never_your_environment(tmp_path):
     install = make_project(tmp_path / "Bubble", "3.3.0", extra={"src/bubble/viejo.py": "x", "docs/a.md": "viejo",
                                                                 ".venv/pyvenv.cfg": "mío", "mis-notas.txt": "mío"})
     staged = make_project(tmp_path / "nueva", "3.4.0", extra={"docs/a.md": "nuevo", "docs/b.md": "nuevo"})
-    assert update_helper.replace_files(install, staged) is False  # misma lista de paquetes: no hace falta pip
+    assert update_helper.replace_files(install, staged) is False  # misma lista de paquetes: no se requiere pip
     assert '"3.4.0"' in (install / "src" / "bubble" / "__init__.py").read_text()
-    assert not (install / "src" / "bubble" / "viejo.py").exists()  # lo que ya no existe se va
+    assert not (install / "src" / "bubble" / "viejo.py").exists()  # los archivos que ya no existen se eliminan
     assert (install / "docs" / "b.md").read_text() == "nuevo" and (install / "docs" / "a.md").read_text() == "nuevo"
     assert (install / ".venv" / "pyvenv.cfg").read_text(encoding="utf-8") == "mío"
     assert (install / "mis-notas.txt").read_text(encoding="utf-8") == "mío"
@@ -174,8 +176,8 @@ def test_if_copying_fails_the_old_version_stays(tmp_path, monkeypatch):
 
 
 def run_helper(tmp_path, plan: dict) -> dict:
-    """El que termina la actualización, como proceso aparte (como de verdad), sin ventana."""
-    done = subprocess.run([sys.executable, "-c", "pass"])  # un «Bubble» que ya se cerró
+    """Finaliza la actualización como proceso aparte, igual que en uso real, y sin ventana."""
+    done = subprocess.run([sys.executable, "-c", "pass"])  # simula un proceso de Bubble que ya terminó
     marker = tmp_path / "reabierto.txt"
     plan.update(pid=4_000_000 + done.returncode, python=sys.executable, result=str(tmp_path / "resultado.json"),
                 relaunch=[sys.executable, "-c", f"open(r'{marker}', 'w').write('ok')"])
@@ -204,7 +206,7 @@ def test_a_failed_update_still_reopens_bubble_and_says_why(tmp_path):
     result = run_helper(tmp_path, {"kind": "zip", "project": str(install), "staged": str(tmp_path / "no-existe"),
                                    "version": "3.4.0"})
     assert not result["ok"] and result["error"]
-    assert '"3.3.0"' in (install / "src" / "bubble" / "__init__.py").read_text()  # quedó la que tenías
+    assert '"3.3.0"' in (install / "src" / "bubble" / "__init__.py").read_text()  # se conserva la versión anterior
 
 
 def test_finished_is_read_once(monkeypatch, tmp_path):
@@ -245,7 +247,7 @@ def test_a_git_copy_updates_with_git_pull(tmp_path):
 
     (install / "Iniciar.bat").write_text("cambio mío", encoding="utf-8")
     with pytest.raises(update.UpdateError, match="cambios sin guardar"):
-        update.prepare(release, lambda *a: None, folder=install)  # nunca pisa lo que cambiaste
+        update.prepare(release, lambda *a: None, folder=install)  # nunca sobrescribe los datos del usuario
     git(install, "checkout", "--", "Iniciar.bat")
     assert update_helper.git_pull(install) is False
     assert '"3.4.0"' in (install / "src" / "bubble" / "__init__.py").read_text()
@@ -258,7 +260,7 @@ def window(monkeypatch, tmp_path):
     from bubble.ui import widgets
     from bubble.ui.update_window import UpdateWindow
 
-    monkeypatch.setattr(widgets, "present", lambda window, root: None)  # escondida: nunca te saca el foco
+    monkeypatch.setattr(widgets, "present", lambda window, root: None)  # oculta: nunca le quita el foco al jugador
     monkeypatch.setattr(update, "install_kind", lambda folder=None: "zip")
     root = tk.Tk()
     root.withdraw()
@@ -271,7 +273,7 @@ def window(monkeypatch, tmp_path):
         root.destroy()
 
 
-pending: list = []  # lo que la ventana pide hacer en su hilo (en Bubble lo hace la cola de eventos)
+pending: list = []  # acciones que la ventana pide ejecutar en su hilo (en Bubble las procesa la cola de eventos)
 
 
 def pump(window, until, seconds=4.0):
@@ -295,7 +297,7 @@ def test_update_now_prepares_closes_and_lets_the_helper_finish(window, monkeypat
     monkeypatch.setattr(update, "prepare", lambda release, progress: progress("Bajando…", 0.5) or tmp_path)
     monkeypatch.setattr(update, "launch", launched.append)
     dialog.go.invoke()
-    assert "disabled" in dialog.later.state()  # ya no se cancela a la mitad
+    assert "disabled" in dialog.later.state()  # ya no se cancela a mitad de la operación
     pump(dialog, lambda: restarted)
     assert launched == [tmp_path] and restarted == [1]
 

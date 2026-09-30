@@ -1,9 +1,8 @@
-"""La imagen de Bubble Pro para el README (docs/pro.png): Basic y Pro lado a lado, con las ventanas reales, la barra
-para escribir en Pro y el aviso que aparece en el juego al cambiar con Ctrl+P.
+"""Genera la imagen de Bubble Pro para el README (docs/pro.png): Basic y Pro lado a lado, con las ventanas reales, la
+barra de escritura de Pro y el aviso que se muestra en el juego al cambiar con Ctrl+P.
 
-Uso: make_pro.py <carpeta con las capturas> <carpeta de salida>
-Capturas (ver tools/media/README.md): page_oscuro_inicio.png (Basic), page_oscuro_pro_pro.png (Pro) y
-compose_pro/done.png (la barra con Pro).
+Uso: make_pro.py <carpeta con las capturas> <carpeta de salida> Capturas (ver tools/media/README.md):
+page_oscuro_inicio.png (Basic), page_oscuro_pro_pro.png (Pro) y compose_pro/done.png (la barra con Pro).
 """
 import sys
 from pathlib import Path
@@ -22,7 +21,7 @@ GOLD = (242, 193, 78)
 
 def window(name: str, scale: float) -> Image.Image:
     raw = Image.open(SCRATCH / name)
-    image = rounded(raw.crop((9, 0, raw.width - 9, raw.height - 9)), 8)  # sin los bordes invisibles de Windows
+    image = rounded(raw.crop((9, 0, raw.width - 9, raw.height - 9)), 8)  # recorta los bordes invisibles de Windows
     return image.resize((int(image.width * scale), int(image.height * scale)), Image.Resampling.LANCZOS)
 
 
@@ -34,7 +33,7 @@ def glow(canvas: Image.Image, box: tuple[int, int, int, int], color: tuple, blur
 
 def label(canvas: Image.Image, x: int, y: int, text: str, size: int, color: tuple, sub: str = "") -> None:
     draw = ImageDraw.Draw(canvas)
-    if text.startswith(STAR):  # ✦ con la letra de símbolos (la otra no lo tiene)
+    if text.startswith(STAR):  # usa la fuente de símbolos, que la otra no incluye ✦
         draw.text((x, y), STAR, font=symbol_font(size), fill=color, anchor="ls")
         x += int(symbol_font(size).getlength(STAR)) + 10
         text = text[len(STAR):].strip()

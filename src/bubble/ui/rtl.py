@@ -1,9 +1,9 @@
-"""Hebreo, árabe, persa y urdu en el juego: se escriben de derecha a izquierda.
+"""Soporte de hebreo, árabe, persa y urdu, que se escriben de derecha a izquierda.
 
-Las traducciones y los subtítulos del juego se dibujan con Pillow, que sin su motor de texto completo (libraqm, que no
-viene en Windows) pone las letras en el orden en que se guardan: el hebreo salía al revés y el árabe, además, con cada
-letra suelta. Acá se da vuelta el texto como se lee y se unen las letras árabes, sin paquetes aparte: las formas de
-cada letra (sola, al principio, en el medio, al final) salen de la tabla de Unicode.
+Las traducciones y los subtítulos del juego se dibujan con Pillow. Sin su motor de texto completo (libraqm, que no viene
+en Windows), Pillow coloca las letras en el orden en que están almacenadas: el hebreo aparecía invertido y el árabe,
+además, con las letras sin unir. Este módulo invierte el texto al orden de lectura y une las letras árabes sin
+dependencias adicionales: la forma de cada letra (aislada, inicial, media o final) se obtiene de la tabla de Unicode.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from functools import lru_cache
 
 _RTL_RANGES = ((0x0590, 0x05FF), (0x0600, 0x06FF), (0x0750, 0x077F), (0xFB1D, 0xFDFF), (0xFE70, 0xFEFF))
 _ARABIC = (0x0600, 0x06FF)
-_TASHKEEL = range(0x064B, 0x0660)  # marcas de vocal: van sobre la letra, no cortan la unión
+_TASHKEEL = range(0x064B, 0x0660)  # marcas de vocal: van sobre la letra y no interrumpen la unión
 
 
 def is_rtl(char: str) -> bool:
@@ -27,7 +27,7 @@ def has_rtl(text: str) -> bool:
 
 @lru_cache(maxsize=1)
 def _forms() -> dict[str, dict[str, str]]:
-    """letra → {"isolated", "final", "initial", "medial"} → la forma que se dibuja (de la tabla de Unicode)."""
+    """Mapea cada letra a sus formas {"isolated", "final", "initial", "medial"} según la tabla de Unicode."""
     table: dict[str, dict[str, str]] = {}
     for code in list(range(0xFB50, 0xFDFF)) + list(range(0xFE70, 0xFEFF)):
         parts = unicodedata.decomposition(chr(code)).split()
@@ -37,13 +37,14 @@ def _forms() -> dict[str, dict[str, str]]:
 
 
 def _joins_next(char: str) -> bool:
-    """¿Esta letra se une con la que sigue? (las que solo tienen forma sola y final, como ا د ر و, no)."""
+    """Indica si la letra se une con la siguiente. Las que solo tienen forma aislada y final (como ا د ر و) no se unen.
+    """
     forms = _forms().get(char)
     return bool(forms) and "initial" in forms
 
 
 def shape(text: str) -> str:
-    """Las letras árabes con la forma que les toca según sus vecinas (unidas, como se escriben)."""
+    """Devuelve las letras árabes con la forma que corresponde según sus vecinas, es decir, unidas."""
     table = _forms()
     letters = [char for char in text]
     out = []
@@ -68,17 +69,20 @@ def shape(text: str) -> str:
 
 
 def visual(text: str) -> str:
-    """El texto en el orden en que se ve (para dibujarlo con Pillow). Sin letras de derecha a izquierda, igual."""
+    """Devuelve el texto en orden visual, para dibujarlo con Pillow. Si no hay letras de derecha a izquierda, lo
+    devuelve igual.
+    """
     if not has_rtl(text):
         return text
     text = shape(text) if any(_ARABIC[0] <= ord(c) <= _ARABIC[1] for c in text) else text
-    # Tramos: de derecha a izquierda (letras hebreas/árabes y lo que queda entre ellas) o de izquierda a derecha
-    # (números, palabras en letras latinas). La línea se lee de derecha a izquierda: los tramos van al revés y las
-    # letras de cada tramo de derecha a izquierda también; los números y el latín quedan como se leen.
+    # Tramos de derecha a izquierda (letras hebreas o árabes y lo que queda entre ellas) o de izquierda a derecha
+    # (números y palabras en letras latinas). La línea se lee de derecha a izquierda: se invierte el orden de los tramos
+    # y también el de las letras dentro de cada tramo de derecha a izquierda; los números y el texto latino conservan su
+    # orden.
     runs: list[tuple[bool, str]] = []
     for char in text:
         rtl = is_rtl(char) if (char.isalnum() or is_rtl(char)) else None
-        if rtl is None:  # espacios y signos: con el tramo en el que están
+        if rtl is None:  # espacios y signos: se asignan al tramo en el que están
             rtl = runs[-1][0] if runs else True
         if runs and runs[-1][0] == rtl:
             runs[-1] = (rtl, runs[-1][1] + char)

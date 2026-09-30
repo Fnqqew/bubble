@@ -16,9 +16,9 @@ def test_scan_identifies_language_and_country():
     assert variants("vlw mano, tmj") == {"pt-BR"}
     assert variants("no mames wey, neta?") == {"es-MX"}
     assert variants("che boludo, posta") == {"es-AR"}
-    assert variants("Güey eso está chido") == {"es-MX"}  # sin importar mayúsculas ni acentos
+    assert variants("Güey eso está chido") == {"es-MX"}  # sin distinguir mayúsculas ni acentos
     assert variants("mdr jsp") == {"fr-FR"}
-    assert variants("wanna trade my pet") == set()  # palabras comunes no son pistas
+    assert variants("wanna trade my pet") == set()  # las palabras comunes no cuentan como indicios
 
 
 def test_laughs():
@@ -51,11 +51,11 @@ async def test_laugh_is_translated_locally():
 
 
 async def test_foreign_slang_beats_wrong_language_detection():
-    # El detector cree que es español, pero "vlw" y "tmj" son portugués de Brasil.
+    # El detector clasifica el texto como español, pero "vlw" y "tmj" son portugués de Brasil.
     translator, provider = make(detections={"vlw mano tmj": ("es", 0.9)})
     result = await translator.translate_incoming("vlw mano tmj", "Pedro")
     assert result.status == "translated"
-    assert result.source_lang == "es"  # confianza alta del detector, pero igual se tradujo
+    assert result.source_lang == "es"  # aun con confianza alta del detector, se traduce
     assert provider.requests[0].slang_hints
 
 
@@ -96,7 +96,7 @@ async def test_chat_languages_follow_recent_messages_in_mixed_servers():
     for i in range(12):
         await translator.translate_incoming(f"msg{i}", "X")
     assert translator.chat_languages() == ["pt", "hi", "en"]
-    for i in range(12, 20):  # la conversación se pasa al hindi
+    for i in range(12, 20):  # la conversación cambia al hindi
         translator.detector.table[f"msg{i}"] = ("hi", 0.9)
         await translator.translate_incoming(f"msg{i}", "X")
     assert translator.outgoing_target() == "hi"
@@ -107,7 +107,7 @@ async def test_outgoing_tone_is_sent_and_cached_separately():
     await translator.translate_outgoing("dale, voy", "en", tone=1)
     await translator.translate_outgoing("dale, voy", "en", tone=5)
     again = await translator.translate_outgoing("dale, voy", "en", tone=5)
-    assert [r.tone for r in provider.requests] == [1, 5]  # cada tono es una traducción distinta
+    assert [r.tone for r in provider.requests] == [1, 5]  # cada tono genera una traducción distinta
     assert again.status == "cache"
     translator.config.user.tone = 9  # fuera de rango: se ajusta a 5
     await translator.translate_outgoing("otra cosa", "en")
@@ -123,7 +123,9 @@ def test_tone_only_in_outgoing_prompt():
 
 
 def test_each_tone_level_is_clearly_different():
-    """Los tonos 1, 2 y 3 salían casi iguales: el destino se describía "como escriben los gamers" hasta en neutro."""
+    """Los tonos 1, 2 y 3 producían resultados casi idénticos porque el destino se describía "como escriben los gamers"
+    incluso en el tono neutro.
+    """
     neutral = build_user_prompt(TranslationRequest("che boludo", "es", "outgoing", target_region="AR", tone=1))
     native = build_user_prompt(TranslationRequest("che boludo", "es", "outgoing", target_region="AR", tone=5))
     assert "Rioplatense" in neutral and "che, re, posta" not in neutral and "drop every slang" in neutral

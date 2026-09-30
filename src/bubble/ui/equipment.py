@@ -1,4 +1,5 @@
-"""«Tu equipo» (en Pruebas): lo que Bubble detectó de tu PC al abrirse, cómo se adaptó y qué conviene revisar."""
+"""«Tu equipo» (en Pruebas): muestra lo que Bubble detectó del equipo al abrirse, cómo se adaptó y qué conviene revisar.
+"""
 
 from __future__ import annotations
 
@@ -17,9 +18,9 @@ LEVELS = {"ok": ("✓", "good"), "aviso": ("●", "warn"), "problema": ("✗", "
 class EquipmentCard:
     def __init__(self, app: BubbleWindow, page) -> None:
         self.app = app
-        box = widgets.card(page, "Tu equipo", "Cada vez que abrís Bubble reviso tu PC y me acomodo: uso más o "
-                                              "menos memoria, elijo cómo leer la pantalla y cómo arrancar la "
-                                              "voz según tu internet.")
+        box = widgets.card(page, "Tu equipo", "Cada vez que abrís Bubble reviso tu PC y me adapto: uso más o menos "
+                                              "memoria, elijo cómo leer la pantalla y cómo iniciar la voz según tu "
+                                              "internet.")
         self.table = ttk.Frame(box)
         self.table.pack(fill="x")
         self.table.columnconfigure(1, weight=1)
@@ -53,7 +54,7 @@ class EquipmentCard:
         for button in self.buttons:
             button.state(["!disabled"])
         if info is None or plan is None:
-            self.state.configure(text="No se pudo revisar (mirá el registro de errores).")
+            self.state.configure(text="No se pudo revisar (consultá el registro de errores).")
             return
         self.state.configure(text="")
         colors = widgets.palette()

@@ -1,12 +1,12 @@
-"""Cuánto de tu suscripción de Claude gasta Bubble.
+"""Mide cuánto de la suscripción de Claude consume Bubble.
 
-Pasa por el traductor de verdad (tu suscripción, el mismo camino que en el juego) un lote como el de una partida:
-mensajes del chat en varios idiomas, frases del chat de voz y mensajes tuyos. Anota lo que informa Claude Code:
-- tokens y costo equivalente en la API (lo que costaría pagando por uso);
-- cuánto se movió el límite de 5 horas y el semanal de tu plan (lo que de verdad importa con una suscripción).
+Ejecuta un lote representativo de una partida (mensajes del chat en varios idiomas, frases del chat de voz y mensajes
+del propio jugador) a través del traductor real, con la suscripción y el mismo camino que se usa en el juego. Registra
+lo que informa Claude Code: - tokens y costo equivalente en la API (lo que costaría con pago por uso); - variación del
+límite de 5 horas y del límite semanal del plan (lo que importa con una suscripción).
 
-Uso:  python -m bubble.tools.usage_meter [--modelo opus|sonnet|haiku]   (≈50 traducciones: un uso chico)
-Guarda el resultado en %LOCALAPPDATA%\\Bubble\\uso_<modelo>.json.
+Uso:  python -m bubble.tools.usage_meter [--modelo opus|sonnet|haiku]   (≈50 traducciones: consumo bajo) Guarda el
+resultado en %LOCALAPPDATA%\\Bubble\\uso_<modelo>.json.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from ..config import load_config
 from ..translate import build_translator
 from ..voice.models import models_dir
 
-# Lo que llega en una partida típica (mensajes reales de grabaciones y ejemplos de otros idiomas).
+# Mensajes típicos de una partida (reales, de grabaciones, y ejemplos de otros idiomas).
 CHAT = [
     "i'm studying medicine btw", "mess ege me anytime", "me too!", "actually", "before u go",
     "could u donate pls i wanna buy a priv", "umm a lil bit shy", "have u been on mic up?", "its so toxic on there",

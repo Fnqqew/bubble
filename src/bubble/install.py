@@ -1,8 +1,9 @@
-"""Lo que Bubble necesita para andar, y cómo instalarlo solo (ver ui/setup_window.py).
+"""Requisitos de Bubble y su instalación automática (ver ui/setup_window.py).
 
-Al abrir se revisa rápido (sin descargar nada). Si falta algo necesario, la ventana «Preparar Bubble» lo instala sola:
-la parte de voz (paquetes de Python), el reconocimiento de voz de tu PC, el de voces y una voz sintética. Lo que toca
-Windows o tu cuenta (Claude Code, el micrófono virtual) no se instala a escondidas: tiene su botón y pide permiso.
+Al abrir se hace una revisión rápida, sin descargar nada. Si falta algo necesario, la ventana «Preparar Bubble» lo
+instala: la parte de voz (paquetes de Python), el reconocimiento de voz del equipo, el de voces y una voz sintética. Lo
+que modifica Windows o la cuenta del usuario (Claude Code, el micrófono virtual) no se instala de forma automática:
+tiene su propio botón y requiere autorización.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Callable
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 VOICE_MODULES = ("faster_whisper", "piper", "soundcard", "websockets", "onnxruntime")
-Progress = Callable[[str, float], None]  # (qué está haciendo, 0..1; -1 si no se sabe cuánto falta)
+Progress = Callable[[str, float], None]  # (descripción de la tarea, 0..1; -1 si se desconoce el total)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
@@ -28,10 +29,10 @@ class Step:
     title: str
     detail: str
     check: Callable[[], bool]
-    run: Callable[[Progress], str] | None = None  # None: no se instala solo (ver `action`)
-    required: bool = True  # sin esto, una parte de Bubble no anda
-    action: str = ""  # texto del botón, si hace falta que lo apruebes
-    after: list[str] = field(default_factory=list)  # pasos que tienen que estar antes
+    run: Callable[[Progress], str] | None = None  # None: no se instala automáticamente (ver `action`)
+    required: bool = True  # sin este paso, una parte de Bubble no funciona
+    action: str = ""  # texto del botón, si requiere aprobación del usuario
+    after: list[str] = field(default_factory=list)  # pasos que deben completarse antes
 
 
 # ---------------------------------------------------------------- revisar
@@ -79,7 +80,7 @@ def _claude_ready() -> bool:
 
 
 def _runtime_ready() -> bool:
-    """Los componentes de Visual C++ de Windows (sin ellos, la parte de voz no carga: "DLL load failed")."""
+    """Componentes de Visual C++ de Windows (sin ellos, la parte de voz no carga: "DLL load failed")."""
     import ctypes.util
 
     return all(ctypes.util.find_library(name) for name in ("msvcp140", "vcruntime140", "vcruntime140_1"))
@@ -89,7 +90,7 @@ def _session_ready() -> bool:
     from .system import claude_status
 
     status = claude_status()
-    return status.installed and status.logged_in is not False  # (si no se puede saber, no se insiste)
+    return status.installed and status.logged_in is not False  # (si no se puede determinar, no se insiste)
 
 
 def _cable_ready() -> bool:
@@ -103,7 +104,7 @@ def _cable_ready() -> bool:
 
 # ---------------------------------------------------------------- instalar
 def _pip_install(progress: Progress) -> str:
-    """Los paquetes de la parte de voz, en el mismo Python con el que corre Bubble."""
+    """Paquetes de la parte de voz, instalados en el mismo Python con el que corre Bubble."""
     if (PROJECT_DIR / "pyproject.toml").exists():
         target = [f"{PROJECT_DIR}[voz]"] if not (PROJECT_DIR / ".git").exists() else ["-e", f"{PROJECT_DIR}[voz]"]
     else:
@@ -116,7 +117,7 @@ def _pip_install(progress: Progress) -> str:
         if line.startswith(("Collecting", "Downloading", "Installing collected", "Building")):
             progress(line.split(" (")[0][:80], -1)
     if process.wait() != 0:
-        raise RuntimeError("pip no pudo instalar la parte de voz (¿hay internet?)")
+        raise RuntimeError("pip no pudo instalar la parte de voz (¿hay conexión?)")
     importlib.invalidate_caches()
     return "Parte de voz instalada."
 
@@ -151,7 +152,7 @@ def _download_voice(progress: Progress) -> str:
 
 
 def _install_claude(progress: Progress) -> str:
-    """El instalador oficial de Claude Code, en una ventana a la vista (después hay que iniciar sesión)."""
+    """Instalador oficial de Claude Code, en una ventana visible (luego hay que iniciar sesión)."""
     script = ("irm https://claude.ai/install.ps1 | iex; "
               "Write-Host ''; Write-Host 'Ahora inicia sesion con tu suscripcion:' -ForegroundColor Yellow; "
               "& \"$env:USERPROFILE\\.local\\bin\\claude.exe\"")
@@ -161,7 +162,7 @@ def _install_claude(progress: Progress) -> str:
 
 
 def _install_runtime(progress: Progress) -> str:
-    """El instalador oficial de Microsoft (Windows pide permiso de administrador)."""
+    """Instalador oficial de Microsoft (Windows solicita permisos de administrador)."""
     import ctypes
     import shutil
 
@@ -172,12 +173,13 @@ def _install_runtime(progress: Progress) -> str:
     import webbrowser
 
     webbrowser.open("https://aka.ms/vs/17/release/vc_redist.x64.exe")
-    return "Ya bajé el instalador de Microsoft. Abrilo, instalalo y volvé a abrir Bubble."
+    return "Ya descargué el instalador de Microsoft. Abrilo, instalalo y volvé a abrir Bubble."
 
 
 def _login_claude(progress: Progress) -> str:
-    """Iniciar sesión en Claude Code con tu suscripción: se abre el navegador (en una ventanita a la vista). También
-    sirve después de suscribirte: Claude Code se entera del plan nuevo al volver a entrar."""
+    """Inicia sesión en Claude Code con la suscripción del jugador: se abre el navegador en una ventana pequeña y
+    visible. También sirve tras suscribirse: Claude Code detecta el plan nuevo al volver a iniciar sesión.
+    """
     from .claude_cli import find_claude_cli
 
     subprocess.Popen([find_claude_cli(), "auth", "login", "--claudeai"],
@@ -202,7 +204,7 @@ def steps() -> list[Step]:
              _download_speakers, after=["voz"]),
         Step("tts", "Voces sintéticas", "Tu voz traducida en inglés (femenina y masculina), ~120 MB.", _voice_ready,
              _download_voice, after=["voz"]),
-        # (Claude no es obligatorio: sin él, Bubble Pro traduce con créditos. Lo explica ui/no_claude_window.py)
+        # (Claude no es obligatorio: sin él, Bubble Pro traduce con créditos; ver ui/no_claude_window.py)
         Step("claude", "Claude Code", "Es lo que traduce, con tu cuenta de Claude. Se instala y después "
                                       "iniciás sesión.",
              _claude_ready, _install_claude, required=False, action="Instalar Claude Code"),
@@ -216,7 +218,7 @@ def steps() -> list[Step]:
 
 
 def missing(only_required: bool = True) -> list[Step]:
-    """Lo que falta (rápido: no descarga nada)."""
+    """Pasos pendientes (revisión rápida, sin descargar nada)."""
     result = []
     for step in steps():
         if only_required and not step.required:
@@ -231,7 +233,7 @@ def missing(only_required: bool = True) -> list[Step]:
 
 
 def automatic(step: Step) -> bool:
-    """¿Se instala solo (sin pedirte nada)?"""
+    """Indica si el paso se instala automáticamente, sin intervención del usuario."""
     return step.run is not None and not step.action
 
 
@@ -240,5 +242,5 @@ def voice_ready() -> bool:
 
 
 def environment_note() -> str:
-    """Dónde corre Bubble (para mostrar)."""
+    """Entorno en el que corre Bubble (para mostrar en la interfaz)."""
     return f"Python {sys.version.split()[0]} · {os.path.dirname(sys.executable)}"
