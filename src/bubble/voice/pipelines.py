@@ -98,6 +98,7 @@ class VoiceOut:
         """Bloquea hasta que termina de sonar. False si no hay voz para ese idioma. `on_ready(segundos)`: la voz ya
         está lista y empieza a sonar (para medir cuánto tardó). `style`: cómo lo dijiste (gritando, bajito…)."""
         started = time.perf_counter()
+        style = style or written_style(text)
         streaming = getattr(self.voices, "stream", None)
         if streaming is not None:
             opened = streaming(text, language, style=style)
@@ -177,10 +178,20 @@ class VoiceOut:
 _SENTENCE_BOUNDARY = re.compile(r"[.!?…]+['\"»”)]*\s")
 
 
+def written_style(text: str) -> str:
+    """Cómo suena lo escrito, por el signo del final: "question" ("¿venís?"), "exclaim" ("¡vamos!") o ""."""
+    end = text.rstrip(" \"'»”)")
+    if end.endswith(("?", "？")):
+        return "question"
+    return "exclaim" if end.endswith(("!", "！")) else ""
+
+
 class Sentences:
-    """Junta la traducción a medida que llega y avisa cada oración completa, para empezar a decirla ya: en una frase
-    larga, la primera oración suena mientras Claude sigue traduciendo el resto (antes se esperaba la traducción
-    entera). Las oraciones muy cortas se juntan con la siguiente (una voz que dice "Ok." y frena suena rara)."""
+    """Junta la traducción a medida que llega y avisa la primera oración completa, para empezar a decirla ya: en una
+    frase larga, la primera oración suena mientras Claude sigue traduciendo el resto (antes se esperaba la traducción
+    entera). El resto se dice junto, al final: cada pedido a la voz de la nube sale con un tono un poco distinto, y
+    oración por oración parecía que cambiaba de persona. Las oraciones muy cortas se juntan con la siguiente (una voz
+    que dice "Ok." y frena suena rara)."""
 
     MIN_CHARS = 14
 
@@ -191,12 +202,12 @@ class Sentences:
 
     def add(self, chunk: str) -> None:
         self.text += chunk
-        while True:
-            rest = self.text[self.done:]
-            cut = next((m.end() for m in _SENTENCE_BOUNDARY.finditer(rest) if len(rest[:m.end()].strip()) >= self.MIN_CHARS),
-                       None)
-            if cut is None:
-                return
+        if self.done:
+            return  # la primera ya se está diciendo: lo demás, junto al final
+        rest = self.text
+        cut = next((m.end() for m in _SENTENCE_BOUNDARY.finditer(rest) if len(rest[:m.end()].strip()) >= self.MIN_CHARS),
+                   None)
+        if cut is not None:
             self.emit(rest[:cut].strip())
             self.done += cut
 
@@ -644,7 +655,7 @@ class DirectVoice:
             if asked is None or not same_words(asked[0], caption.text):
                 asked = (caption.text, self._pool.submit(self.translate, caption.text, caption.intonation))
             self.on_event("entendi", caption.text)
-            self._queue.put(asked)
+            self._queue.put((*asked, caption.intonation))
         elif caption.stable and caption.id not in self._asked:
             self._asked[caption.id] = (caption.text,
                                        self._pool.submit(self.translate, caption.text, caption.intonation))
@@ -654,7 +665,7 @@ class DirectVoice:
             item = self._queue.get()
             if item is None:
                 break
-            _text, future = item
+            _text, future, intonation = item
             try:
                 translated = future.result(timeout=25)
                 if translated is None:
@@ -662,7 +673,7 @@ class DirectVoice:
                     continue
                 text, language = translated
                 self.on_event("traduccion", text)
-                if not self.out.say(text, language):
+                if not self.out.say(text, language, style=intonation):
                     self.on_event("error", f"No hay voz para el idioma «{language}»")
             except Exception as exc:  # noqa: BLE001
                 log.exception("Falló la traducción directa")

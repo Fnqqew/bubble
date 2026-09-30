@@ -102,7 +102,16 @@ Cinco páginas, arriba:
   - el chat de Roblox (buscarlo, marcarlo a mano, probar la lectura) y el rendimiento.
 - **Actividad:** todo lo que se fue traduciendo, y un lugar para probar sin Roblox.
 
-Al abrir aparece un cartelito con el logo y, en un par de segundos, la ventana completa.
+Al abrir aparece un cartelito con el logo (dice en qué anda) y, cuando la ventana está entera y dibujada, la ventana.
+Mientras se ve el cartel se carga lo más pesado: la conexión con Claude (2 s), la lectura del chat (0,7 s) y las piezas
+de la voz. Antes el cartel se iba enseguida y todo eso se cargaba con la ventana abierta: mientras Python carga algo,
+la ventana no puede dibujarse, y se trababa hasta 2 s varias veces en los primeros segundos. También:
+
+- Los símbolos de la ventana (🔒, ⚠, ✦…) no están en la letra de Windows: la primera vez que se dibuja cada uno,
+  Windows busca cuál letra lo tiene (el candado tardaba medio segundo). Se buscan durante el cartel.
+- La ventana de Roblox se busca como mucho dos veces por segundo (antes, en cada cuadro de los subtítulos: con otro
+  hilo ocupado, recorrer las ~250 ventanas abiertas llegó a tardar 1 s).
+- Los modelos chicos de la voz (¿hay alguien hablando? ¿quién?) se crean una sola vez y se comparten.
 
 ## Leer el chat y las burbujas
 
@@ -153,7 +162,10 @@ En el juego apretá el atajo (**°** por defecto) y se abre una barra para escri
   escribe «}» en la barra del chat: Bubble lo borra antes de escribir.)
 - **Ctrl+Enter:** lo dice en voz en vez de mandarlo al chat (ver [Voz](#voz)).
 - **Tab** cambia el idioma (el chip de la izquierda: EN, PT…), **↑ ↓** el tono (los puntitos de la derecha: más
-  llenos, más informal) y **Esc** cierra. Si la reabrís enseguida, lo que escribiste sigue ahí.
+  llenos, más informal) y **Esc** cierra. Si la reabrís enseguida, lo que escribiste sigue ahí. Con Tab la traducción
+  del idioma nuevo se pide enseguida (antes esperaba lo mismo que al escribir, 650 ms) y, si vas recorriendo idiomas,
+  la del siguiente ya se pide antes de que llegues. Cambiar de idioma tampoco traba nada mientras se prepara la voz
+  de ese idioma.
 - Si el atajo lleva Shift (como «°»), podés apretar **la misma tecla sola**. En Roblox el Shift activa el Shift
   Lock y mueve la cámara.
 - El atajo solo funciona con Roblox al frente; en otros programas la tecla escribe normalmente.
@@ -168,7 +180,9 @@ opción **Todos los del chat** manda el mensaje en varios a la vez (tu voz usa e
 ## Voz
 
 Todo el audio se procesa en tu PC: Whisper entiende la voz, un modelo chico reconoce quién habla y Piper habla. Los
-tres son locales. Claude solo traduce el texto. Hace falta instalar la parte de voz (`".[voz]"`, ver
+tres son locales. Claude solo traduce el texto. Las voces de Piper se cargan y hablan en un proceso aparte: cargar
+una voz tarda ~2 s y, en el mismo proceso, congelaba la ventana y la barra para escribir todo ese rato (por ejemplo,
+al cambiar de idioma con Tab). Hace falta instalar la parte de voz (`".[voz]"`, ver
 [Instalación](#instalación)).
 
 La primera vez se descargan el reconocimiento de voz (hasta ~500 MB, según tu PC), el de voces (~30 MB) y cada voz
@@ -223,7 +237,17 @@ Así no te corta a mitad de frase y, cuando terminás, sale enseguida.
 **Preguntas, gritos y emociones.** En español "¿vamos a la torre?" y "vamos a la torre" tienen las mismas palabras:
 lo que cambia es la entonación. Bubble mide en tu voz si subió al final (pregunta), si gritaste o exclamaste
 (comparado con cómo hablás normalmente, que va aprendiendo) o si hablaste bajito, y se lo pasa a Claude. La voz
-sintética lo acompaña: más rápida y fuerte si gritaste, más suave si hablaste bajito.
+sintética lo acompaña, en todas las voces (las de tu PC y las de Pro), con el botón, en modo directo y con Ctrl+Enter
+(ahí cuenta el signo: "¡vamos!", "¿venís?"):
+
+- **gritaste:** más aguda (2,5 semitonos), más fuerte, un poco más rápida y con la melodía más marcada;
+- **exclamaste:** algo más aguda y más fuerte;
+- **bajito:** más grave y más suave;
+- **preguntaste:** la voz sube al final (si la voz ya sube sola, no se toca).
+
+Para que una afirmación no se tome como pregunta, la voz tiene que subir al final al menos 1,5 semitonos: con lo que
+había aprendido «Entrenar tu voz» (0,5) las frases rioplatenses que suben un poquito al final salían traducidas como
+preguntas.
 
 **Aprende tu forma de hablar.** Cuanto más lo usás, mejor te entiende y más rápido traduce:
 
@@ -243,10 +267,23 @@ Todo queda en `%LOCALAPPDATA%\Bubble\perfil_voz.json` (solo en tu PC); se borra 
 Lo que se va a decir en voz se traduce como se habla (palabras completas, sin "vc" ni "kkkk", y en la escritura del
 idioma: el hindi, en devanagari), para que la voz no lea abreviaturas letra por letra.
 
-**Cómo suena:** voz **femenina** o **masculina** (elegidas a mano para cada idioma; si un idioma tiene una sola, se
-usa esa), **velocidad** y **Probar voz**. Con **Escucharla yo también**, tu voz traducida suena en tus auriculares,
-más bajo, así sabés qué dijo. Hay voz para español, inglés, portugués, francés, alemán, italiano, ruso, polaco,
-neerlandés, chino, hindi, turco, árabe, coreano, indonesio y vietnamita.
+**Cómo suena:** voz **femenina** o **masculina**, **velocidad** y **Probar voz**. Con **Escucharla yo también**, tu
+voz traducida suena en tus auriculares, más bajo, así sabés qué dijo.
+
+- Hay voz para español, inglés, portugués, francés, alemán, italiano, ruso, polaco, neerlandés, chino, hindi, turco,
+  árabe, coreano, indonesio, vietnamita y tagalo (con la voz indonesia: se escriben y se leen casi igual). Japonés y
+  tailandés, con las voces de Windows si agregaste ese idioma en Windows (Configuración › Hora e idioma › Voz); con
+  Pro, el japonés lo dice la nube.
+- **Mujer y hombre en cada idioma.** Las voces están elegidas a mano. Si Piper tiene una sola (portugués, turco y
+  árabe solo tienen hombre; coreano, indonesio, vietnamita y chino, solo mujer), la otra es una voz de Windows de ese
+  idioma si la tenés y, si no, se arma a partir de la que hay: se corren los formantes (el timbre) y se lleva el tono
+  al de una voz de ese género, sin cambiar la duración.
+- **Siempre la misma voz.** Cada frase se lleva al tono y al volumen de siempre de esa voz: la voz de la nube varía
+  sola de un pedido al otro (medido: la misma voz salía a 100 Hz en una frase y a 250 Hz en la siguiente, y hasta 10 dB
+  más baja) y parecía otra persona a cada rato. Las de tu PC salían ~5 dB más fuertes que las de la nube: ahora todas
+  suenan igual de fuerte. Y la traducción se dice en dos tandas como mucho (la primera oración apenas está lista y el
+  resto junto), porque cada pedido separado era una oportunidad de que cambiara.
+- Si elegiste un idioma con región (por ejemplo, inglés del Reino Unido), la voz es de esa región, siempre la misma.
 
 **Que te escuchen los demás (como Soundpad).** Windows no deja que un programa hable "por tu micrófono": hace falta
 un micrófono virtual. Bubble usa **VB-Audio Virtual Cable**, gratis (es el "driver" que se descarga):
@@ -362,12 +399,20 @@ entiende y habla mejor. La traducción, en los dos, la hace tu suscripción de C
 | | Basic (tu PC) | ✦ Pro (la nube) |
 |---|---|---|
 | Entender voces | Whisper | Nova-3: mucho mejor con gente que habla rápido o se pisa (en una pelea real, tu PC erraba 2 de cada 3 palabras) |
-| Idiomas | ~100, uno por frase | más de 60; inglés, español, portugués, francés, alemán, italiano, ruso, hindi, japonés y neerlandés mezclados en la misma frase |
+| Idiomas | ~100, uno por frase | más de 60; inglés, español, portugués, francés, alemán, italiano, ruso, hindi, japonés y neerlandés mezclados en la misma frase, y los demás (coreano, chino, polaco, turco, vietnamita, indonesio…) averiguando el idioma de cada frase dudosa |
 | Voces que hablan por vos | Piper | Aura-2: naturales y con personalidad (ver abajo) |
 | Tu voz traducida | suena cuando está lista | empieza a sonar a los ~0,35 s (mientras la nube la sigue armando), sin cortes |
-| Palabras tuyas y de juego | Whisper con ejemplos | la nube las prioriza (*pvp*, *Blox Fruits*, *farmear* y lo que aprendió de vos) |
+| Palabras tuyas y de juego | Whisper con ejemplos | la nube las prioriza, en tu voz y en las del juego (*robux*, *obby*, *gamepass*, *Blox Fruits*, *Bubble Gum Simulator*, *farmear*, los nombres del chat y lo que aprendió de vos) |
 | Tu procesador | trabaja para la voz | libre: Whisper ni se carga (queda de respaldo) |
 | Se ve | como siempre, con la insignia BASIC | dorado: ventana, insignia PRO, barra para escribir y traducciones en el juego |
+
+**Idiomas que la nube no mezcla.** Las voces del juego se escuchan mezclando idiomas (alguien puede decir "hagamos
+pvp"). Mezclando, lo que la nube no entiende lo escribe en otro idioma: medido con frases de prueba, el coreano y el
+chino salían en japonés, el polaco en ruso, el vietnamita en hindi (¡con 88 % de confianza!), el turco y el árabe como
+inglés inventado, y el indonesio ni salía. Claude no podía traducir eso. Ahora, si una frase sale dudosa (confianza
+menor a 90 %, o en hindi, japonés o ruso, que es donde caen los demás), ese mismo tramo se escucha de nuevo con la
+detección de idioma de Deepgram, que los reconoce al 99 %, y queda la mejor versión. Solo las dudosas: las claras no
+se pagan dos veces. Tu voz no pasa por esto (tu idioma ya se sabe).
 
 **Tu voz con el botón, en vivo:** mientras mantenés el botón, tu voz va a la nube; cuando hacés la pausa final, la
 nube lo nota (~0,9 s) y el texto ya está: no se manda de nuevo (antes se leía todo lo dicho en cada pausa, ~1 s cada
@@ -405,18 +450,27 @@ se rearman solas en menos de un segundo.
 - **Canchera:** casual y expresiva (la de siempre). En español rioplatense, la femenina es **Antonia**, argentina.
 - **Tranquila:** calma y natural.
 
-Hay voces en inglés (también británico y australiano), español (argentino, mexicano, colombiano, de España y
-latinoamericano), francés, alemán, italiano, neerlandés y japonés. En los demás idiomas (portugués, ruso…) habla la
-voz de tu PC. **Probar voz Pro** la hace sonar en tus auriculares, aunque estés en Basic.
+Están todas las voces de Deepgram, con mujer y hombre en cada idioma y repartidas por personalidad según cómo las
+describe Deepgram: inglés (de EE. UU., británico, australiano y filipino), español (argentino, mexicano, colombiano,
+de España y latinoamericano), francés, alemán, italiano, neerlandés y japonés. Con la región del que te escucha
+(la que elegiste), la voz es de esa zona: en México, Olivia y Javier; en España, Carina y Álvaro; en Argentina,
+Antonia (Deepgram no tiene un hombre argentino: habla Aquila, latinoamericano). En los demás idiomas (portugués,
+ruso…) habla la voz de tu PC, con el mismo volumen. **Probar voz Pro** la hace sonar en tus auriculares, aunque estés
+en Basic.
+
+El signo del final lo pone tu expresión: la nube corta el final de las palabras sueltas sin signo ("nice"), así que
+se les agrega uno, pero antes era siempre "!" y "ok" sonaba exaltado aunque lo dijeras tranquilo. Ahora es "?" si
+preguntaste, "!" si exclamaste o gritaste y "." si no.
 
 **Cómo se paga:** con tu propia cuenta de [Deepgram](https://console.deepgram.com/signup), por uso (precios de
 septiembre de 2026):
 
 | | US$ |
 |---|---|
-| Voces del juego, en vivo (varios idiomas mezclados) | 0,0058 por minuto de voz (~0,35 por hora) |
+| Voces del juego, en vivo (varios idiomas mezclados) | 0,0058 por minuto de voz (~0,35 por hora) + 0,0013 por las palabras priorizadas (las de Roblox) |
 | Tu voz, en vivo (tu idioma) | 0,0048 por minuto + 0,0013 por las palabras priorizadas |
 | Una frase con el botón | 0,0052 por minuto |
+| Una frase dudosa del juego, escuchada de nuevo con su idioma | lo mismo que una frase con el botón (solo esas) |
 | Voces de Pro | 0,030 cada 1.000 letras (una frase típica: ~0,001) |
 | Quién habla, según la nube (opcional) | +0,0020 por minuto |
 
@@ -472,14 +526,21 @@ entiende un idioma con su modelo nuevo, usa el anterior (Nova-2).
 El diccionario de jerga por idioma y país está en
 [src/bubble/translate/slang.py](../src/bubble/translate/slang.py).
 
-**Tono de lo que enviás.** Solo cambia *cómo* se dice, nunca *qué* se dice. Ejemplo con "che boludo, posta que ese
-pet está re zarpado, me lo cambiás? ahre":
+**Tono de lo que enviás.** Solo cambia *cómo* se dice, nunca *qué* se dice. Cada nivel tiene que sonar claramente
+distinto del siguiente: antes el 1, el 2 y el 3 salían casi iguales, porque el idioma de destino se describía "como
+lo escriben los gamers" hasta en el tono neutro (y en voz, "Hey dude, for real…" con tono 1). Ahora, en los tonos 1 y
+2 la variante va sin su jerga, Claude recibe un ejemplo de la misma frase en los 5 niveles y, en cada pedido, lo que
+no puede faltar de ese nivel. Medido con "no me jodas, me mataron de nuevo por el lag":
 
-| Nivel | Inglés |
+| Nivel | Chat (inglés) |
 |---|---|
-| 1 · Neutro | Hey, seriously, that pet is really awesome. Would you trade it to me? Just kidding. |
-| 3 · Casual | hey dude, for real that pet is super sick, wanna trade it to me? lol |
-| 5 · Jerga nativa | yo bro ngl that pet is lowkey insane fr, trade me it? jk lol |
+| 1 · Neutro | I cannot believe it. I was killed again because of the lag. |
+| 2 · Amable | Oh, come on! I got killed again because of the lag. |
+| 3 · Casual | You gotta be kidding me, the lag got me killed again. |
+| 4 · Gamer | bruh no way, died again cuz of lag smh |
+| 5 · Jerga nativa | bro ur fr kidding me, this lag got me killed AGAIN wtf 💀 |
+
+Lo que va a voz mantiene el nivel pero sin abreviaturas ("for real", no "fr").
 
 ## Configuración
 

@@ -264,7 +264,12 @@ class FakeWindowsVoices:
     def has(self, language):
         return language.split("-")[0] in ("es", "en")
 
-    def synthesize(self, text, language, gender="femenina", speed=1.0, style=""):
+    def voice_for(self, language, gender="femenina"):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(name=f"Microsoft {language}", gender=gender) if self.has(language) else None
+
+    def synthesize(self, text, language, gender="femenina", speed=1.0, style="", name=""):
         self.said.append((text, language, gender, style))
         return (np.zeros(2205, np.float32), 22050) if self.has(language) else None
 

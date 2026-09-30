@@ -11,6 +11,7 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
+from typing import Callable
 
 from .. import roblox, shortcut, win32
 from .. import pro
@@ -240,13 +241,19 @@ class BubbleWindow:
         self._redetect_chat = False
         self._connect()
 
-    def show(self) -> None:
-        """Muestra la ventana ya armada (una sola vez, completa), apareciendo suave."""
+    def show(self, ready: Callable[[], None] | None = None) -> None:
+        """Muestra la ventana ya armada (una sola vez, completa), apareciendo suave. `ready`: ya está dibujada entera
+        (para cerrar el cartel de «Abriendo…» recién ahí)."""
         from . import motion
 
         self.root.update_idletasks()
         self.root.attributes("-alpha", 0.0)
         self.root.deiconify()
+        # Dibujarla entera por primera vez tarda ~1 s (Tk en Windows): se hace todavía invisible, detrás del cartel.
+        # Antes pasaba en el primer cuadro del fundido: el cartel se iba, no se veía nada y la ventana aparecía de golpe.
+        self.root.update()
+        if ready is not None:
+            ready()
         self.root.lift()
         self.root.focus_set()  # que ninguna lista arranque con el texto resaltado
         motion.appear(self.root, rise=0, seconds=0.22)
@@ -1168,7 +1175,7 @@ class BubbleWindow:
             results = await asyncio.gather(
                 *(self.translator.translate_outgoing(text, language, tone=tone, spoken=True) for language in languages),
                 return_exceptions=True)
-            spoken = [(result.target_lang or language, result.translation)
+            spoken = [(self.translator.voice_locale(language), result.translation)
                       for language, result in zip(languages, results)
                       if not isinstance(result, BaseException) and result.status != "error"
                       and result.translation.strip()]

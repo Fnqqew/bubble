@@ -152,7 +152,7 @@ def synthesize(voices, speaker: Speaker, text: str, speed: float) -> np.ndarray:
         return np.load(path)
     from piper.config import SynthesisConfig
 
-    voice = voices._load(speaker.voice)
+    voice = voices._load_here(speaker.voice)  # (acá, en este proceso: se necesita la voz con varios hablantes)
     config = SynthesisConfig(speaker_id=speaker.id, length_scale=1.0 / speed)
     audio = np.concatenate([chunk.audio_float_array for chunk in voice.synthesize(text, config)])
     audio = resample(audio.astype(np.float32), voice.config.sample_rate, RATE)

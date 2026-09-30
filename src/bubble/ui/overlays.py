@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import threading
 import time
 import tkinter as tk
@@ -136,6 +137,9 @@ class ComposeBar:
 
     WIDTH = 640
     PREVIEW_DELAY_MS = 650  # se traduce para la vista previa cuando dejás de escribir un momento
+    # Con Tab o ↑/↓ se pide enseguida (antes esperaba lo mismo que al escribir: el idioma nuevo tardaba en aparecer).
+    # Un poquito igual, por si pasás por varios seguidos.
+    SWITCH_DELAY_MS = 150
     KEEP_DRAFT_S = 120
     BG = "#16171b"
     FIELD = BG  # una sola superficie: sin cajas adentro de cajas
@@ -173,6 +177,7 @@ class ComposeBar:
         self._after: str | None = None
         self._dots: str | None = None
         self._requested: tuple[str, str, int] | None = None
+        self._cycling = False  # ya usaste Tab: se adelanta la traducción del idioma siguiente
         self._draft = ""
         self._draft_at = 0.0
         self._x = self._bottom = 0
@@ -241,6 +246,7 @@ class ComposeBar:
         self.tone = clamp_tone(tone)
         self.busy = False
         self._requested = None
+        self._cycling = False
         self.entry.configure(state="normal")
         self.entry.delete(0, "end")
         if self._draft and time.monotonic() - self._draft_at < self.KEEP_DRAFT_S:
@@ -285,6 +291,7 @@ class ComposeBar:
             self._show_preview(text, "#6f8fbf", working=True)
         else:
             self._show_preview(text)
+            self._prefetch()
 
     def unlock(self) -> None:
         """Falló la traducción al enviar: se puede corregir y volver a intentar."""
@@ -375,10 +382,10 @@ class ComposeBar:
             return
         self._schedule_preview()
 
-    def _schedule_preview(self) -> None:
+    def _schedule_preview(self, delay_ms: int | None = None) -> None:
         if self._after:
             self.win.after_cancel(self._after)
-        self._after = self.win.after(self.PREVIEW_DELAY_MS, self._request_preview)
+        self._after = self.win.after(delay_ms or self.PREVIEW_DELAY_MS, self._request_preview)
         if not self.entry.get().strip():
             self._show_preview("")
 
@@ -390,11 +397,20 @@ class ComposeBar:
             self._show_preview("", working=True)
             self.on_preview(*key)
 
+    def _prefetch(self) -> None:
+        """Recorriendo idiomas con Tab: la traducción del siguiente se pide ya, así aparece al instante."""
+        text, _target, tone = self.current()
+        if self._cycling and text and len(self.targets) > 1:
+            following = self.targets[(self.index + 1) % len(self.targets)]
+            if following != MULTI_TARGET:  # ("todos los del chat" son varias traducciones: solo si llegás)
+                self.on_preview(text, following, tone)
+
     def _next_target(self, _event=None) -> str:
         if self.targets and not self.busy:
             self.index = (self.index + 1) % len(self.targets)
+            self._cycling = True
             self._render_target()
-            self._schedule_preview()
+            self._schedule_preview(self.SWITCH_DELAY_MS)
             if self.on_target:
                 self.on_target(self.targets[self.index])
         return "break"
@@ -404,7 +420,7 @@ class ComposeBar:
         if tone != self.tone and not self.busy:
             self.tone = tone
             self._render_target()
-            self._schedule_preview()
+            self._schedule_preview(self.SWITCH_DELAY_MS)
             if self.on_tone:
                 self.on_tone(tone)
         return "break"
@@ -442,15 +458,23 @@ def _rgb(color: str) -> tuple[int, int, int]:
     return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
 
 
+@functools.lru_cache(maxsize=4)
+def _chip_font(size: int):
+    """Segoe UI Semibold (leerla del disco en cada Tab tardaba)."""
+    from PIL import ImageFont
+
+    try:
+        return ImageFont.truetype("seguisb.ttf", size)
+    except OSError:
+        return ImageFont.load_default(size)
+
+
 def _chip_image(text: str, background: tuple, foreground: tuple, surface: tuple):
     """Chip redondeado con el idioma (dibujado suave, a 3x, y achicado)."""
-    from PIL import Image, ImageDraw, ImageFont, ImageTk
+    from PIL import Image, ImageDraw, ImageTk
 
     scale = 3
-    try:
-        font = ImageFont.truetype("seguisb.ttf", 12 * scale)  # Segoe UI Semibold
-    except OSError:
-        font = ImageFont.load_default(12 * scale)
+    font = _chip_font(12 * scale)
     width = int(font.getlength(text)) + 22 * scale
     height = 26 * scale
     image = Image.new("RGB", (width, height), surface)

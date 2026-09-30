@@ -100,7 +100,10 @@ def test_each_language_gets_a_voice_with_personality():
     assert voice_name("es-AR", "masculina") == "aura-2-aquila-es"
     assert voice_name("en", "femenina", "alegre") == "aura-2-thalia-en"
     assert voice_name("en-GB", "masculina") == "aura-2-draco-en"
-    assert voice_name("ja", "masculina") == "aura-2-fujin-ja"
+    assert voice_name("ja", "masculina") == "aura-2-ebisu-ja"
+    assert voice_name("es-MX", "femenina", "tranquila") == "aura-2-estrella-es"  # todas las de Deepgram, por zona
+    assert voice_name("es-ES", "masculina", "tranquila") == "aura-2-nestor-es"
+    assert voice_name("es", "masculina", "alegre") == "aura-2-luciano-es"
     assert voice_name("pt-BR") is None  # la nube no tiene portugués: la voz de tu PC
 
 
@@ -164,7 +167,8 @@ def test_cloud_voices_are_cached_and_fall_back_to_your_pc(monkeypatch):
 def test_short_cloud_words_get_a_sign_and_a_soft_ending():
     from bubble.cloud.speak import SAMPLE_RATE, soften_end, speakable
 
-    assert speakable("nice") == "nice!" and speakable("gg") == "gg!"
+    assert speakable("nice") == "nice." and speakable("gg", "exclaim") == "gg!"  # el signo es el de cómo lo dijiste
+    assert speakable("vamos", "question") == "vamos?"
     assert speakable("wait for me at the tower") == "wait for me at the tower."
     assert speakable("Good.") == "Good." and speakable("¿vamos?") == "¿vamos?"
     t = np.arange(SAMPLE_RATE // 2) / SAMPLE_RATE

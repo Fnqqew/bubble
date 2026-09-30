@@ -36,7 +36,10 @@ SAVE_UP_TO_WORDS = 8  # frases más largas dependen del contexto: no se reusan
 MIN_MELODIES = 5  # con menos frases no se sabe cómo hablás normalmente
 MAX_WORDS = 120
 WORDS_FOR_CLAUDE = 60
-QUESTION_RISE_RANGE = (0.5, 4.0)  # una pregunta tiene que SUBIR: antes podía quedar negativo y todo era pregunta
+# Una pregunta tiene que SUBIR: antes podía quedar negativo y todo era pregunta. Y subir de verdad: con 0,5 semitonos
+# (lo que había aprendido «Entrenar tu voz») las afirmaciones que suben un poquito al final, muy comunes al hablar
+# rioplatense, salían traducidas como preguntas.
+QUESTION_RISE_RANGE = (1.5, 4.0)
 _WORDS = re.compile(r"\w+", re.UNICODE)
 
 
@@ -200,7 +203,13 @@ class VoiceProfile:
 
     def intonation(self, melody: Melody | None) -> str:
         """Cómo lo dijiste, con tus umbrales si ya los aprendió (si no, los de todos)."""
-        return melody.kind(self.usual(), **self.data["calibration"]) if melody else ""
+        if not melody:
+            return ""
+        calibration = dict(self.data["calibration"])
+        if "question_rise" in calibration:
+            low, high = QUESTION_RISE_RANGE
+            calibration["question_rise"] = min(high, max(low, calibration["question_rise"]))
+        return melody.kind(self.usual(), **calibration)
 
     def calibrate(self, found: dict[str, float]) -> None:
         with self._lock:

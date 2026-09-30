@@ -84,7 +84,29 @@ def set_app_id(app_id: str) -> None:
 
 
 # ---------- ventana de Roblox ----------
+# Se pregunta muchas veces por segundo (subtítulos, burbujas, la barra para escribir) y cada pregunta a Windows
+# necesita a Python: con otro hilo ocupado (al abrir Bubble, cargando la voz), recorrer las ~250 ventanas abiertas
+# llegó a tardar 1 s y trababa la ventana de Bubble. Lo que no cambia se recuerda un momento.
+PATH_MEMORY_S = 10.0
+WINDOW_MEMORY_S = 0.5  # la ventana de Roblox: se vuelve a buscar como mucho dos veces por segundo…
+WINDOW_KEEP_S = 2.0  # …o cada 2 s, si la que se encontró sigue a la vista
+_paths: dict[int, tuple[str, float]] = {}
+_window: list = [None, -1e9]  # (la ventana encontrada, cuándo)
+
+
 def _process_path(pid: int) -> str:
+    now = time.monotonic()
+    known = _paths.get(pid)
+    if known is not None and now - known[1] < PATH_MEMORY_S:
+        return known[0]
+    path = _query_process_path(pid)
+    if len(_paths) > 512:
+        _paths.clear()
+    _paths[pid] = (path, now)
+    return path
+
+
+def _query_process_path(pid: int) -> str:
     handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     if not handle:
         return ""
@@ -202,6 +224,17 @@ def roblox_process_id() -> int:
 
 def find_roblox_window() -> int | None:
     """La ventana visible más grande de RobloxPlayerBeta.exe (o None si Roblox no está abierto)."""
+    now = time.monotonic()
+    hwnd, at = _window
+    if now - at < WINDOW_MEMORY_S or (hwnd and now - at < WINDOW_KEEP_S and user32.IsWindowVisible(hwnd)
+                                     and not user32.IsIconic(hwnd)):
+        return hwnd
+    hwnd = _search_roblox_window()
+    _window[:] = [hwnd, now]
+    return hwnd
+
+
+def _search_roblox_window() -> int | None:
     found: list[tuple[int, int]] = []
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)

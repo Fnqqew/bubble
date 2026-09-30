@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 3.6" src="https://img.shields.io/badge/versión-3.6-4a90e2?style=flat-square">
+  <img alt="Versión 3.7" src="https://img.shields.io/badge/versión-3.7-4a90e2?style=flat-square">
   <img alt="Basic gratis" src="https://img.shields.io/badge/Basic-gratis-5b6270?style=flat-square">
   <img alt="Bubble Pro" src="https://img.shields.io/badge/✦%20Bubble-Pro-f2c14e?style=flat-square&labelColor=2b2f36">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">

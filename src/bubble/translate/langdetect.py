@@ -150,10 +150,28 @@ def words_in(text: str) -> list[str]:
     return _WORD_TOKEN.findall(text)
 
 
+# Palabras sueltas muy comunes de los otros idiomas (gracias, hola, sí, por favor, esperá, ayuda…). Una palabra sola
+# que no está en ninguna lista se toma como un nombre o un error de tipeo y no se traduce: sin esto, "merci", "danke",
+# "grazie" o "salamat" quedaban sin traducir.
+OTHER_WORDS: dict[str, set[str]] = {
+    "fr": set("merci bonjour salut bonsoir oui non stp svp pardon desole attends viens aide ami bravo mdr ptdr wesh "
+              "frere allez pourquoi comment quoi ouais".split()),
+    "de": set("danke hallo nein bitte tschuss hilfe warte komm freund alter digga warum genau doch".split()),
+    "it": set("grazie ciao prego scusa aiuto aspetta vieni amico andiamo perche raga boh bene".split()),
+    "nl": set("dankje bedankt hoi doei nee alsjeblieft wacht vriend waarom hoe".split()),
+    "tl": set("salamat oo sige tara tulong hintay kaibigan paano bakit pre lodi petmalu ingat po".split()),
+    "id": set("makasih terimakasih iya tidak gak nggak tolong tunggu ayo teman kenapa gimana wkwk anjir".split()),
+    "pl": set("dzieki dziekuje czesc tak nie prosze pomocy czekaj chodz dobra czemu".split()),
+    "tr": set("tesekkurler sagol merhaba selam evet hayir lutfen yardim bekle gel kanka tamam neden".split()),
+    "vi": set("cam on xin chao vang khong giup doi ban".split()),
+}
+
+
 def known_anywhere(token: str) -> bool:
     """La palabra está en alguna de las listas (o es universal)."""
     forms = _chat_forms(token)
-    return bool(forms & UNIVERSAL_TOKENS) or any(forms & words for words in COMMON_WORDS.values())
+    return bool(forms & UNIVERSAL_TOKENS) or any(forms & words for words in COMMON_WORDS.values()) or any(
+        forms & words for words in OTHER_WORDS.values())
 
 
 def foreign_words(text: str, lang: str) -> list[str]:

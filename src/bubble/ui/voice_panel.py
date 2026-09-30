@@ -429,7 +429,8 @@ class VoicePanel:
                 self.listener = DeepgramListener(key, self.board.caption, source_factory=audio_io.game_audio,
                                                  on_error=lambda msg: self._set_status(msg),
                                                  on_fatal=self._cloud_failed, diarize=self.app.config.pro.diarize,
-                                                 earshot=self.earshot, noise_filter=True, speakers=speakers)
+                                                 earshot=self.earshot, noise_filter=True, speakers=speakers,
+                                                 keyterms=self._game_keyterms, recheck=True)
             elif self.listener is None:
                 self.listener = LiveListener(final, self.board.caption, partial_asr=quick, speakers=speakers,
                                              on_error=lambda msg: self._set_status(msg),
@@ -717,6 +718,7 @@ class VoicePanel:
 
         translator = self.app.translator
         target = translator.outgoing_target()
+        voice = translator.voice_locale(target)  # (con la región que elegiste, si elegiste una)
         marks = set(intonation.split("+")) if intonation else set()
         key = text + ("?" if "question" in marks and "?" not in text else "") + (
             "!" if marks & {"shout", "exclaim"} and "!" not in text else "")
@@ -725,9 +727,9 @@ class VoicePanel:
             translator.remember_target(target)
             self.app.tracker.mark_sent(saved)
             if on_sentence:
-                on_sentence(saved, target)
-            return saved, target
-        sentences = Sentences(lambda sentence: on_sentence(sentence, target)) if on_sentence else None
+                on_sentence(saved, voice)
+            return saved, voice
+        sentences = Sentences(lambda sentence: on_sentence(sentence, voice)) if on_sentence else None
         result = self.app.runner.submit(
             translator.translate_outgoing(text, target, tone=self.app.config.user.tone, spoken=True,
                                           from_speech=True, intonation=intonation,
@@ -739,7 +741,7 @@ class VoicePanel:
         translator.remember_target(target)
         self.profile.remember(key, target, result.translation)
         self.app.tracker.mark_sent(result.translation)
-        return result.translation, result.target_lang or target
+        return result.translation, voice
 
     def my_asr(self):
         """Con qué se entiende TU voz: con Bubble Pro, la nube (y si falla, tu PC); si no, el modelo de siempre ("small"
@@ -775,6 +777,12 @@ class VoicePanel:
 
         return [*self.profile.vocabulary(self.app.config.user.language)[::-1], *spoken_names(self._chat_names()),
                 *GAME_TERMS]
+
+    def _game_keyterms(self) -> list[str]:
+        """Palabras que la nube tiene que entender en las voces del juego: los nombres del chat y la jerga de Roblox."""
+        from ..cloud.deepgram import GAME_TERMS, spoken_names
+
+        return [*spoken_names(self._chat_names()), *GAME_TERMS]
 
     def _vocabulary_for_claude(self, language: str) -> tuple[str, ...]:
         """Para Claude, al traducir tu voz: tus palabras y los nombres de los jugadores del chat (si el reconocimiento

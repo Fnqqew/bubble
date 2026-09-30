@@ -16,6 +16,7 @@ def window(monkeypatch, tmp_path):
     for name in ("_connect", "_start_hotkey", "_start_screenshots", "_sync_shortcut", "open_tutorial"):
         monkeypatch.setattr(mw.BubbleWindow, name, lambda self: None)
     monkeypatch.setattr(VoicePanel, "early_start", lambda self: None)
+    monkeypatch.setattr(VoicePanel, "warm_up", lambda self: None)  # (preparar la voz la bajaría: ~60 MB)
     root = tk.Tk()
     root.withdraw()
     root.attributes("-alpha", 0.0)
@@ -197,6 +198,7 @@ def test_without_claude_or_a_key_it_shows_how_to_continue(window, monkeypatch):
 
     opened = []
     monkeypatch.setattr(window, "open_no_claude", lambda reason="": opened.append(reason))
+    monkeypatch.setattr(window, "_in_game", lambda: False)  # (con Roblox al frente, la ventana espera a que salgas)
     window.link = "conectando"
     window._ev_claude_access(("sin_sesion", False))
     window._ev_started(mw.NoClaudeError("Falta Claude para traducir"))

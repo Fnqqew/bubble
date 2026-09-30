@@ -40,10 +40,11 @@ _WORDS = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)?", re.UNICODE)
 # Cómo hablás, para Whisper (con signos de pregunta y exclamación: los copia).
 EXAMPLES = {
     "es": "¿Vamos a la torre? ¡Dale, esperame! Che, ¿querés tradear? No, pará, ese es mi ítem. ¿Hacemos PvP? Tengo "
-          "lag. ¿Alguien viene conmigo a farmear?",
+          "lag. ¿Cuántos robux tenés? ¿Alguien viene conmigo a farmear?",
     "en": "Wait, are you coming? Let's go fight the boss! Bro, do you wanna trade? No way, that's my item. Wanna PvP? "
-          "I'm lagging.",
-    "pt": "Mano, bora pro boss? Espera aí! Quer trocar? Não, esse item é meu. Alguém vem comigo?",
+          "I'm lagging. How many robux do you have?",
+    "pt": "Mano, bora pro boss? Espera aí! Quer trocar? Não, esse item é meu. Quantos robux você tem? Alguém vem "
+          "comigo?",
     "fr": "Tu viens avec moi ? Allez, on y va ! Tu veux échanger ? Non, c'est mon objet.",
     "de": "Kommst du mit? Los, gehen wir! Willst du tauschen? Nein, das ist mein Item.",
     "it": "Vieni con me? Dai, andiamo! Vuoi scambiare? No, quello è il mio oggetto.",

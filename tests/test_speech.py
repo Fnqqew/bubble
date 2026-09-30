@@ -96,10 +96,13 @@ def test_your_own_question_and_shout_thresholds_are_used(tmp_path):
     profile = VoiceProfile(tmp_path / "perfil.json")
     for _ in range(5):
         profile.learn_melody(Melody(0.0, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0))
-    question = Melody(1.2, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0)
+    question = Melody(1.7, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0)
     assert profile.intonation(question) == ""  # con el umbral de todos (2 semitonos) no parecía pregunta
-    profile.calibrate({"question_rise": 0.8, "shout_db": 5.0})  # esta persona casi no sube la voz al preguntar
+    profile.calibrate({"question_rise": 1.6, "shout_db": 5.0})  # esta persona sube poco la voz al preguntar
     assert profile.intonation(question) == "question"  # con el suyo, sí
+    profile.calibrate({"question_rise": 0.5})  # (lo que aprendía «Entrenar tu voz»: casi todo era pregunta)
+    statement = Melody(0.8, 150.0, -30.0, -15.0, 4.0, 0.0, 1.0)
+    assert profile.intonation(statement) == ""  # una afirmación que sube un poquito al final no es pregunta
 
 
 def test_whisper_echoes_and_copies_are_undone():
@@ -137,7 +140,7 @@ def test_only_clean_things_are_learned_and_old_junk_is_removed(tmp_path):
     assert profile.data["phrases"]["es"] == ["Hola, ¿cómo te va?"]
     assert profile.data["saved"] == {"en|dale esperame": "wait for me"}
     assert profile.vocabulary("es") == ("tradear", "lauti")  # las comunes no hacen falta
-    assert profile.data["calibration"]["question_rise"] == 0.5  # una pregunta tiene que subir
+    assert profile.data["calibration"]["question_rise"] == 1.5  # una pregunta tiene que subir
     assert profile.hint("es") and "lauti" not in profile.hint("es")  # a Whisper, solo el ejemplo fijo
     profile.remember("Hola Hola Hola", "en", "Hey hey hey")
     assert profile.saved("hola hola hola", "en") is None

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from bubble.voice import audio as audio_io
 from bubble.voice.asr import cut_repetitions, pick_models
@@ -277,15 +278,49 @@ def test_bridge_does_not_start_without_a_virtual_microphone(monkeypatch):
     assert not loop.start() and "virtual" in loop.error
 
 
-def test_voices_have_both_genders_where_piper_has_them():
-    from bubble.voice.tts import CURATED, NO_VOICE, Voices
+def test_every_language_gets_both_genders(monkeypatch):
+    """Mujer y hombre en cada idioma: la de Piper; si Piper no tiene ese género, una de Windows; si tampoco, la del
+    otro género convertida (prosody.change_gender)."""
+    from types import SimpleNamespace
 
-    voices = Voices.__new__(Voices)
-    voices._catalog = {name: {} for pair in CURATED.values() for name in pair if name}
+    from bubble.voice import tts
+
+    class Windows:
+        def __init__(self, voices):
+            self.list = voices
+
+        def voice_for(self, language, gender="femenina"):
+            family = language.split("-")[0]
+            found = [v for v in self.list if v.language.startswith(family)]
+            return min(found, key=lambda v: v.gender != gender) if found else None
+
+    monkeypatch.setitem(tts._piper_state, "error", "")
+    voices = tts.Voices(use_process=False)
+    voices._catalog = {name.split("#")[0]: {} for pair in tts.CURATED.values() for name in pair if name}
+    voices._windows = Windows([])
     assert voices.voice_for("en", "masculina") == "en_US-ryan-medium"
     assert voices.voice_for("es-AR", "femenina") == "es_AR-daniela-high"
-    assert voices.voice_for("pt", "femenina") == "pt_BR-faber-medium"  # sin voz femenina: la otra
-    assert all(voices.voice_for(code) is None for code in NO_VOICE)
+    assert voices.voice_for("pt", "femenina") == "pt_BR-faber-medium~femenina"  # hecha a partir de la masculina
+    assert voices.voice_for("ko", "masculina") == "ko_KR-kss-medium~masculina"
+    assert voices.voice_for("tl", "femenina") == "id_ID-news_tts-medium"  # el tagalo, con la voz indonesia
+    voices._windows = Windows([SimpleNamespace(name="Microsoft Maria", language="pt-BR", gender="femenina")])
+    assert voices.voice_for("pt", "femenina") == "windows:Microsoft Maria"  # una de verdad, si Windows la tiene
+    assert voices.voice_for("pt", "masculina") == "pt_BR-faber-medium"
+    monkeypatch.setattr(tts, "_has_modules", lambda family: family not in ("ja", "th"))
+    assert voices.voice_for("ja") is None and voices.voice_for("th") is None  # (sin sus paquetes ni voz de Windows)
+
+
+def test_the_other_gender_sounds_like_one():
+    from bubble.voice import prosody
+
+    rate = 22050
+    t = np.arange(int(rate * 1.2)) / rate
+    pitch = 220 * (1 + 0.03 * np.sin(2 * np.pi * 3 * t))  # una "voz" de mujer, con algo de melodía
+    phase = 2 * np.pi * np.cumsum(pitch) / rate
+    woman = (0.3 * sum(np.sin(k * phase) / k for k in range(1, 12))).astype(np.float32)
+    man = prosody.change_gender(woman, rate, "masculina")
+    assert len(man) == len(woman)  # misma duración
+    assert 100 < prosody.median_pitch(man, rate) < 130  # tono de hombre
 
 
 # ---------------------------------------------------------------- el botón para hablar: tocar o mantener
@@ -373,13 +408,46 @@ def test_only_the_latest_synthetic_voices_stay_loaded(monkeypatch):
     monkeypatch.setitem(sys.modules, "piper", types.SimpleNamespace(
         PiperVoice=types.SimpleNamespace(load=lambda model, config_path=None: model)))
     monkeypatch.setattr(tts, "download", lambda url, path, *args: str(path))
-    voices = tts.Voices()
+    voices = tts.Voices(use_process=False)  # (sin el proceso aparte: se cargan en este)
     catalog = {n: {"files": {f"{n}.onnx": {}, f"{n}.onnx.json": {}}} for n in "abcd"}
     monkeypatch.setattr(voices, "catalog", lambda: catalog)
     for name in "abca":  # "a" se vuelve a usar: pasa a ser la más reciente
-        voices._load(name)
-    voices._load("d")
+        voices._load_here(name)
+    voices._load_here("d")
     assert list(voices._loaded) == ["c", "a", "d"]  # "b", la menos usada hace más tiempo, se liberó
+
+
+def test_piper_voices_load_in_another_process_without_freezing(monkeypatch):
+    """Cargar una voz congelaba la ventana ~2 s (onnxruntime no suelta el candado de Python): va en otro proceso."""
+    import threading
+    import time
+
+    from bubble.voice import tts
+
+    if tts.piper_blocked():
+        pytest.skip("Windows no deja usar Piper en esta PC")
+    voices = tts.Voices()
+    if not voices.is_downloaded("en", "femenina"):
+        pytest.skip("la voz en inglés no está bajada")
+    worst, done = [0.0], threading.Event()
+
+    def speak():
+        speech[0] = voices.synthesize("Wait for me at the tower.", "en", "femenina")
+        done.set()
+
+    speech = [None]
+    threading.Thread(target=speak).start()
+    last = time.perf_counter()
+    while not done.wait(0.01):
+        now = time.perf_counter()
+        worst[0], last = max(worst[0], now - last), now
+    try:
+        assert speech[0] is not None and len(speech[0].audio) > speech[0].sample_rate * 0.5
+        assert worst[0] < 0.3  # antes: 1,6 a 1,9 s sin responder
+        assert voices._process is not None and not voices._process.failed
+    finally:
+        if voices._process is not None:
+            voices._process.close()
 
 
 def test_a_pause_in_the_middle_of_your_sentence_does_not_cut_it():

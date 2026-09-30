@@ -117,9 +117,20 @@ async def test_outgoing_tone_is_sent_and_cached_separately():
 def test_tone_only_in_outgoing_prompt():
     outgoing = build_user_prompt(TranslationRequest("hola", "en", "outgoing", tone=2))
     incoming = build_user_prompt(TranslationRequest("hello", "es", "incoming", tone=2))
-    assert "Tone level: 2." in outgoing
+    assert "Tone level: 2 (Friendly)" in outgoing
     assert "Tone level" not in incoming
     assert "1 = Neutral" in build_system_prompt()
+
+
+def test_each_tone_level_is_clearly_different():
+    """Los tonos 1, 2 y 3 salían casi iguales: el destino se describía "como escriben los gamers" hasta en neutro."""
+    neutral = build_user_prompt(TranslationRequest("che boludo", "es", "outgoing", target_region="AR", tone=1))
+    native = build_user_prompt(TranslationRequest("che boludo", "es", "outgoing", target_region="AR", tone=5))
+    assert "Rioplatense" in neutral and "che, re, posta" not in neutral and "drop every slang" in neutral
+    assert "che, re, posta" in native and "heaviest local slang" in native
+    assert "1: Hi, would you like to farm together?" in build_system_prompt()  # el mismo mensaje en los 5 niveles
+    spoken = build_user_prompt(TranslationRequest("dale", "en", "outgoing", tone=1, spoken=True))
+    assert "Keep the meaning and the requested tone level." in spoken
 
 
 def test_prompts_include_variant_direction_and_hints():

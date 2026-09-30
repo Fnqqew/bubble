@@ -70,21 +70,35 @@ class _Voice:
     samples: list[np.ndarray] = field(default_factory=list)
 
 
+_sessions: dict[str, object] = {}
+_sessions_lock = threading.Lock()
+
+
+def session(path: Path):
+    """El modelo de huellas de voz, uno solo para todo Bubble (crearlo congela la ventana ~0,2 s: onnxruntime no
+    suelta a Python mientras tanto)."""
+    with _sessions_lock:
+        if str(path) not in _sessions:
+            import onnxruntime
+
+            options = onnxruntime.SessionOptions()
+            options.intra_op_num_threads = 2
+            options.inter_op_num_threads = 1
+            options.log_severity_level = 3
+            _sessions[str(path)] = onnxruntime.InferenceSession(str(path), options,
+                                                                providers=["CPUExecutionProvider"])
+        return _sessions[str(path)]
+
+
 class SpeakerTracker:
     """Asigna un número a cada voz. `same` y `maybe` son umbrales de parecido (coseno) que se ajustaron con el
     laboratorio de voz (tools/voice_lab.py)."""
 
     def __init__(self, model_path: Path | None = None, same: float = 0.6, maybe: float = 0.5,
                  progress: Progress | None = None) -> None:
-        import onnxruntime
-
         path = model_path or download(MODEL_URL, models_dir() / "speaker" / MODEL_NAME, "reconocimiento de voces",
                                       progress)
-        options = onnxruntime.SessionOptions()
-        options.intra_op_num_threads = 2
-        options.inter_op_num_threads = 1
-        options.log_severity_level = 3
-        self._session = onnxruntime.InferenceSession(str(path), options, providers=["CPUExecutionProvider"])
+        self._session = session(path)
         self._input = self._session.get_inputs()[0].name
         self.same = same
         self.maybe = maybe

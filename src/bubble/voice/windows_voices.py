@@ -21,8 +21,8 @@ CATEGORIES = (r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech_OneCore\Voices",  #
               r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices")
 SAMPLE_RATE = 22050
 FORMAT_22K_16BIT_MONO = 22  # SAFT22kHz16BitMono
-# Cómo acompaña la voz lo que sentiste (como en tts.STYLES): (velocidad, volumen 0..100).
-STYLES = {"": (1.0, 100), "shout": (1.12, 100), "exclaim": (1.06, 100), "soft": (0.94, 70)}
+# Cómo acompaña la voz lo que sentiste (como en tts.STYLES): la velocidad. El volumen y el tono los pone prosody.py.
+STYLES = {"": 1.0, "shout": 1.12, "exclaim": 1.06, "soft": 0.94}
 # Sin la región exacta, la más cercana a la mayoría de los jugadores (como con Piper): español latino, no de España.
 PREFERRED_REGION = {"es": "es-mx", "en": "en-us", "pt": "pt-br", "fr": "fr-fr", "de": "de-de", "zh": "zh-cn"}
 
@@ -118,16 +118,19 @@ class WindowsVoices:
     def has(self, language: str) -> bool:
         return self.voice_for(language) is not None
 
+    def named(self, name: str) -> WindowsVoice | None:
+        return next((voice for voice in self.voices() if voice.name == name), None)
+
     def synthesize(self, text: str, language: str, gender: str = "femenina", speed: float = 1.0,
-                   style: str = "") -> tuple[np.ndarray, int] | None:
-        """(audio float32 -1..1, frecuencia) o None si Windows no tiene voz para ese idioma."""
-        voice = self.voice_for(language, gender)
+                   style: str = "", name: str = "") -> tuple[np.ndarray, int] | None:
+        """(audio float32 -1..1, frecuencia) o None si Windows no tiene voz para ese idioma. `name`: esa voz."""
+        voice = (self.named(name) if name else None) or self.voice_for(language, gender)
         if voice is None or not text.strip():
             return None
         client = _comtypes()
         marks = set(style.split("+")) if style else set()
         mood = next((mark for mark in ("shout", "exclaim", "soft") if mark in marks), "")
-        pace, volume = STYLES[mood]
+        pace = STYLES[mood]
         with self._lock:
             _com()
             tokens = client.CreateObject("SAPI.SpObjectTokenCategory")
@@ -144,7 +147,7 @@ class WindowsVoices:
             speaker.AudioOutputStream = stream
             # SAPI: -10 (lento) a 10 (rápido); 0 es la velocidad normal de la voz.
             speaker.Rate = max(-10, min(10, round((speed * pace - 1.0) * 10)))
-            speaker.Volume = volume
+            speaker.Volume = 100
             speaker.Speak(text, 0)
             data = bytes(stream.GetData())
         if not data:

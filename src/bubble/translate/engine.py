@@ -124,6 +124,15 @@ class Translator:
         if code.isalpha():  # no "*" (todos los del chat)
             self.last_target = code
 
+    def voice_locale(self, lang: str) -> str:
+        """Con qué voz se dice algo en ese idioma: con la región que elegiste en Ajustes (inglés del Reino Unido, español
+        de México…), si elegiste una; si no, sin región. Siempre la misma: la región del chat va cambiando y la voz
+        cambiaría de acento a cada rato."""
+        configured = self.config.user.outgoing_language
+        if configured and configured != "auto" and "-" in configured and                 split_locale(configured)[0] == split_locale(lang)[0]:
+            return configured
+        return lang
+
     def outgoing_region(self, lang: str) -> str:
         """Variante del idioma destino: la configurada o la que más aparece en la jerga del chat."""
         configured = self.config.user.outgoing_language

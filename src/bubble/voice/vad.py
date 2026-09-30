@@ -5,6 +5,8 @@ Distingue la voz de la música del juego, pasos, explosiones o viento mucho mejo
 
 from __future__ import annotations
 
+import threading
+
 import numpy as np
 
 FRAME = 512  # 32 ms a 16 kHz
@@ -19,15 +21,28 @@ def _model_path() -> str:
     return os.path.join(get_assets_path(), "silero_vad_v6.onnx")
 
 
+_shared: list = []
+_lock = threading.Lock()
+
+
+def session():
+    """Un solo modelo para todas las escuchas (cada una guarda su propio estado): crearlo congela la ventana un
+    momento (onnxruntime no suelta a Python mientras tanto), así que se crea una vez, al abrir Bubble."""
+    with _lock:
+        if not _shared:
+            import onnxruntime
+
+            options = onnxruntime.SessionOptions()
+            options.intra_op_num_threads = 1
+            options.inter_op_num_threads = 1
+            options.log_severity_level = 3
+            _shared.append(onnxruntime.InferenceSession(_model_path(), options, providers=["CPUExecutionProvider"]))
+        return _shared[0]
+
+
 class StreamingVad:
     def __init__(self) -> None:
-        import onnxruntime
-
-        options = onnxruntime.SessionOptions()
-        options.intra_op_num_threads = 1
-        options.inter_op_num_threads = 1
-        options.log_severity_level = 3
-        self._session = onnxruntime.InferenceSession(_model_path(), options, providers=["CPUExecutionProvider"])
+        self._session = session()
         self.reset()
 
     def reset(self) -> None:
