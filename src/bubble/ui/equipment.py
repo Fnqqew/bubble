@@ -17,9 +17,9 @@ LEVELS = {"ok": ("✓", "good"), "aviso": ("●", "warn"), "problema": ("✗", "
 class EquipmentCard:
     def __init__(self, app: BubbleWindow, page) -> None:
         self.app = app
-        box = widgets.card(page, "Tu equipo", "Bubble lo revisa solo al abrirse y se adapta: cuántas sesiones de "
-                                              "Claude abre y qué reconocimiento de voz usa según tu memoria, cómo "
-                                              "captura según tu Windows y cómo arranca la voz según tu internet.")
+        box = widgets.card(page, "Tu equipo", "Cada vez que abrís Bubble reviso tu PC y me acomodo: uso más o "
+                                              "menos memoria, elijo cómo leer la pantalla y cómo arrancar la "
+                                              "voz según tu internet.")
         self.table = ttk.Frame(box)
         self.table.pack(fill="x")
         self.table.columnconfigure(1, weight=1)

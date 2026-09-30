@@ -209,7 +209,7 @@ def download(release: Release, folder: Path, progress: Progress, timeout: float 
         raise UpdateError("La descarga vino rota: probá de nuevo más tarde.") from exc
     roots = [path.parent.parent.parent for path in target.glob("*/src/bubble/__init__.py")]
     if len(roots) != 1 or not (roots[0] / "pyproject.toml").exists():
-        raise UpdateError("La descarga no tiene a Bubble adentro: probá de nuevo más tarde.")
+        raise UpdateError("La descarga vino rara. Probá de nuevo más tarde.")
     return roots[0]
 
 
@@ -218,7 +218,7 @@ def prepare(release: Release, progress: Progress, folder: Path = PROJECT_DIR) ->
     trabajo con el plan para update_helper.py."""
     kind = install_kind(folder)
     if not kind:
-        raise UpdateError("Esta copia de Bubble no se puede actualizar sola: bajá la versión nueva de GitHub.")
+        raise UpdateError("Esta copia de Bubble no se puede actualizar sola. Bajá la versión nueva de GitHub.")
     work = work_dir()
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
@@ -235,11 +235,11 @@ def prepare(release: Release, progress: Progress, folder: Path = PROJECT_DIR) ->
             "result": str(state_path().with_name("actualizacion.json"))}
     if kind == "git":
         if not shutil.which("git"):
-            raise UpdateError("Falta git para actualizar esta copia: instalalo o usá el ZIP de GitHub.")
+            raise UpdateError("Para actualizar esta copia hace falta git. Instalalo o usá el ZIP de GitHub.")
         progress("Revisando tus cambios…", -1)
         if _git(folder, "status", "--porcelain", "--untracked-files=no").stdout.strip():
-            raise UpdateError("Tenés cambios propios sin guardar en la carpeta de Bubble: guardalos (commit) o "
-                              "descartalos y probá de nuevo.")
+            raise UpdateError("Tenés cambios sin guardar en la carpeta de Bubble. Guardalos (commit) o "
+                              "descartalos y probá otra vez.")
     else:
         if not release.zip_url:
             raise UpdateError("No encontré la descarga de esa versión: bajala de GitHub.")
@@ -250,9 +250,13 @@ def prepare(release: Release, progress: Progress, folder: Path = PROJECT_DIR) ->
     return work
 
 
-def launch(work: Path) -> None:
-    """Arranca el que termina la actualización (espera a que Bubble se cierre). Después hay que cerrar Bubble."""
+def launch(work: Path, reopen: bool = True) -> None:
+    """Arranca el que termina la actualización (espera a que Bubble se cierre). Después hay que cerrar Bubble.
+    `reopen`: al terminar, abrir Bubble de nuevo (no, si se actualiza porque lo cerraste)."""
     plan = json.loads((work / "plan.json").read_text(encoding="utf-8"))
+    if not reopen:
+        plan["reopen"] = False
+        (work / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=1), encoding="utf-8")
     command = [plan["relaunch"][0], str(work / "actualizar.py"), str(work / "plan.json")]
     detached = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: sigue al cerrarse Bubble
     try:

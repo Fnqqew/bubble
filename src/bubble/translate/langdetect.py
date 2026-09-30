@@ -64,6 +64,7 @@ COMMON_WORDS: dict[str, set[str]] = {
         tal vez feliz felices viaje viajes ano anos visito visita hembra macho gato gata perro peso pesos plata
         dinero comprar compra vender cuenta hermano hermana mama papa novio novia chica chico nena nene sisi
         nono jsjs jsjsjs jajs jaj jsj bueh buah ahre alta mala onda qonda ke kiero xk yaya yayaya
+        pasame esperame ayudame fijate quedate seguime sigueme toma agarra atras izquierda derecha cuidado
     """.split()),
     "pt": set("""
         o a os as um uma de do da dos das no na nos nas em e ou mas que quem como quando onde por para pra pro
@@ -164,7 +165,52 @@ OTHER_WORDS: dict[str, set[str]] = {
     "pl": set("dzieki dziekuje czesc tak nie prosze pomocy czekaj chodz dobra czemu".split()),
     "tr": set("tesekkurler sagol merhaba selam evet hayir lutfen yardim bekle gel kanka tamam neden".split()),
     "vi": set("cam on xin chao vang khong giup doi ban".split()),
+    "sv": set("tack hej nej hjalp vanta kompis varfor".split()),
+    "no": set("takk hei nei hjelp vent venn hvorfor".split()),
+    "da": set("tak hej nej hjaelp vent ven hvorfor".split()),
+    "fi": set("kiitos moi hei kylla ei apua odota kaveri miksi".split()),
+    "cs": set("diky dekuji ahoj ano pomoc pockej kamarad proc".split()),
+    "sk": set("dakujem ahoj ano nie pomoc pockaj kamarat preco".split()),
+    "hu": set("koszi koszonom szia igen nem segits varj haver miert".split()),
+    "ro": set("mersi multumesc salut da nu ajutor asteapta prieten".split()),
+    "hr": set("hvala bok da ne pomoc cekaj prijatelj zasto".split()),
+    "sl": set("hvala zivjo ja ne pomoc pocakaj prijatelj zakaj".split()),
+    "lt": set("aciu labas taip ne padek palauk draugas kodel".split()),
+    "lv": set("paldies sveiki ja ne palidzi pagaidi draugs kapec".split()),
+    "et": set("aitah tere jah ei appi oota sober miks".split()),
+    "ca": set("gracies hola si adeu ajuda espera amic perque".split()),
+    "eu": set("eskerrik kaixo bai ez lagundu itxaron lagun zergatik".split()),
+    "cy": set("diolch helo ie na help aros ffrind pam".split()),
+    "is": set("takk hallo ja nei hjalp bidu vinur hvers".split()),
+    "sq": set("faleminderit pershendetje po jo ndihme prit shok pse".split()),
+    "af": set("dankie hallo ja nee help wag vriend hoekom".split()),
+    "sw": set("asante habari ndiyo hapana msaada subiri rafiki kwa".split()),
+    "az": set("sagol salam beli xeyr komek gozle dost niye".split()),
+    "ms": set("terima kasih hai ya tidak tolong tunggu kawan kenapa".split()),
 }
+
+
+# La escritura de cada idioma (los demás, letras latinas): una palabra sola en otra escritura que la tuya no es tuya.
+SCRIPTS = {"ru": "cyrillic", "uk": "cyrillic", "bg": "cyrillic", "mk": "cyrillic", "be": "cyrillic", "kk": "cyrillic",
+           "sr": "latin", "el": "greek", "he": "hebrew", "ar": "arabic", "fa": "arabic", "ur": "arabic", "hi": "indic",
+           "mr": "indic", "bn": "indic", "te": "indic", "ta": "indic", "gu": "indic", "pa": "indic", "th": "thai",
+           "ka": "georgian", "hy": "armenian", "ja": "cjk", "zh": "cjk", "ko": "hangul"}
+_SCRIPT_RANGES = [("cyrillic", 0x0400, 0x052F), ("greek", 0x0370, 0x03FF), ("hebrew", 0x0590, 0x05FF),
+                  ("arabic", 0x0600, 0x06FF), ("armenian", 0x0530, 0x058F), ("indic", 0x0900, 0x0DFF),
+                  ("thai", 0x0E00, 0x0E7F), ("georgian", 0x10A0, 0x10FF), ("hangul", 0xAC00, 0xD7AF),
+                  ("cjk", 0x3040, 0x9FFF)]
+
+
+def script_of(text: str) -> str:
+    """La escritura en la que está `text` ("latin", "cyrillic"…): la de la mayoría de sus letras."""
+    counts: dict[str, int] = {}
+    for char in text:
+        if not char.isalpha():
+            continue
+        code = ord(char)
+        name = next((script for script, low, high in _SCRIPT_RANGES if low <= code <= high), "latin")
+        counts[name] = counts.get(name, 0) + 1
+    return max(counts, key=counts.get) if counts else "latin"
 
 
 def known_anywhere(token: str) -> bool:
@@ -206,12 +252,22 @@ class Detection:
     confidence: float
     # Confianza del segundo idioma más probable: sirve para medir qué tan claro es el ganador.
     runner_up: float = 0.0
+    # Los más probables con su confianza (para saber si un idioma dado quedó casi empatado arriba).
+    scores: tuple[tuple[str, float], ...] = ()
+
+    def score(self, lang: str) -> float:
+        return next((value for code, value in self.scores if code == lang), 0.0)
 
     def is_confident(self, min_confidence: float, min_lead: float = 2.5, floor: float = 0.3) -> bool:
         """Seguro si supera el umbral, o si le saca amplia ventaja al segundo idioma."""
         if self.confidence >= min_confidence:
             return True
         return self.confidence >= floor and self.confidence >= min_lead * self.runner_up
+
+
+# Códigos que lingua llama distinto (el noruego escrito es el bokmål).
+_TO_LINGUA = {"no": "nb"}
+_FROM_LINGUA = {lingua: ours for ours, lingua in _TO_LINGUA.items()}
 
 
 class LanguageDetector:
@@ -228,7 +284,8 @@ class LanguageDetector:
                 return
             from lingua import IsoCode639_1, Language, LanguageDetectorBuilder
 
-            langs = [Language.from_iso_code_639_1(getattr(IsoCode639_1, c.upper())) for c in self._codes]
+            langs = [Language.from_iso_code_639_1(getattr(IsoCode639_1, _TO_LINGUA.get(c, c).upper()))
+                     for c in self._codes]
             self._detector = LanguageDetectorBuilder.from_languages(*langs).with_preloaded_language_models().build()
 
     def detect(self, text: str) -> Detection | None:
@@ -238,4 +295,6 @@ class LanguageDetector:
             return None
         top = values[0]
         runner_up = float(values[1].value) if len(values) > 1 else 0.0
-        return Detection(top.language.iso_code_639_1.name.lower(), float(top.value), runner_up)
+        scores = tuple((_FROM_LINGUA.get(code, code), float(value.value)) for value in values[:8]
+                       for code in [value.language.iso_code_639_1.name.lower()])
+        return Detection(scores[0][0], float(top.value), runner_up, scores)

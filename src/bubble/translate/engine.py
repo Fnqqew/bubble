@@ -14,8 +14,8 @@ from ..config import Config
 from .batcher import Batcher
 from .base import ChatLine, DeltaCallback, Direction, Mode, TranslationRequest, TranslationResult, clamp_tone
 from .cache import TranslationCache
-from .langdetect import (LanguageDetector, foreign_words, is_filtered, is_universal, known_anywhere,
-                         native_by_words, without_gaming, words_in)
+from .langdetect import (SCRIPTS, LanguageDetector, foreign_words, is_filtered, is_universal, known_anywhere,
+                         native_by_words, script_of, without_gaming, words_in)
 from .languages import DEFAULT_REGION, split_locale
 from .router import Router
 from .slang import Slang, laugh_for, laugh_only, scan
@@ -26,6 +26,7 @@ SKIP_CONFIDENCE = 0.6
 TRACK_CONFIDENCE = 0.5
 # Si al menos esta fracción de las palabras son comunes en tu idioma (y ninguna delata otro), se saltea.
 LEXICAL_SKIP = 0.6
+CLOSE_TO_MINE = 0.75  # tu idioma, al menos así de cerca del primero (ver Translator._close_to_mine)
 MY_SPEAKER = "Yo"
 MAX_HINTS = 6
 # Mensajes recientes que se miran para decidir en qué idioma(s) escribir.
@@ -245,7 +246,8 @@ class Translator:
         # comunes en ese idioma (clave para mensajes cortos como "hola", "dale voy", "todo bien?").
         looks_native = (source == target and (confident or hints)) or native_by_words(text, target, LEXICAL_SKIP)
         if direction == "incoming" and not looks_native and not foreign and not confident:
-            looks_native = self._short_from_my_side(text, speaker, target)
+            looks_native = self._short_from_my_side(text, speaker, target) or (
+                not stray and len(words_in(without_gaming(text))) >= 3 and self._close_to_mine(detection, target))
         if not foreign and looks_native:
             source = target
             if self.config.translation.adapt_slang and self._foreign_region(hints, target, region):
@@ -382,6 +384,16 @@ class Translator:
                 raise chosen.exception()
         raise error or RuntimeError("No se pudo traducir")
 
+    @staticmethod
+    def _close_to_mine(detection, target: str) -> bool:
+        """El detector dudó entre idiomas parecidos y el tuyo quedó casi empatado arriba ("esperame en la torre": 17 %
+        catalán, 15 % español). Con muchos idiomas para elegir, la seguridad se reparte entre los vecinos (español,
+        catalán, portugués, italiano…): si el tuyo está ahí, es tuyo. Solo en frases (en una o dos palabras la
+        seguridad no dice nada) y sin palabras típicas de otro idioma."""
+        if detection is None or detection.lang == target or detection.confidence >= TRACK_CONFIDENCE:
+            return False
+        return detection.score(target) >= CLOSE_TO_MINE * detection.confidence
+
     def _short_from_my_side(self, text: str, speaker: str, target: str) -> bool:
         """Un mensaje corto que el detector no sabe de qué idioma es ("alm", "visito", "sofiiii"). Se deja como está si
         ese jugador viene escribiendo en tu idioma, o si es una sola palabra que no es de ningún idioma conocido (un
@@ -389,6 +401,8 @@ class Translator:
         tokens = words_in(text)
         if not tokens or len(tokens) > 4:
             return False
+        if script_of(text) != SCRIPTS.get(target, "latin"):
+            return False  # en otra escritura que la tuya ("дякую", "תודה"): seguro que es de otro idioma
         recent = list(self._speaker_langs.get(speaker, ()))
         if recent and recent.count(target) * 2 > len(recent):
             return True

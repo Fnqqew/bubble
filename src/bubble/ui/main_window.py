@@ -29,7 +29,8 @@ from ..geometry import Rect
 from ..performance import detect_hardware
 from ..translate import build_translator
 from ..translate.base import TONE_NAMES, ChatLine, TranslationResult
-from ..translate.languages import LOCALE_CHOICES
+from ..i18n import t
+from ..translate.languages import DISPLAY_NAMES, LANGUAGES, LOCALE_CHOICES
 from ..state import load_state, update_state
 from .inline import BubbleView, Entry, InlineChatView
 from .overlays import CalibrationOverlay, ComposeBar, HotkeyCaptureDialog, TranslationOverlay
@@ -52,14 +53,18 @@ STATUS_TEXT = {
     "cache": "desde cache",
     "error": "ERROR",
 }
-LANG_CHOICES = [name for _code_, name in LOCALE_CHOICES]  # en la lista se ve solo el nombre
-_BY_NAME = {name: code for code, name in LOCALE_CHOICES}
-AUTO_CHOICE = "Automático (el último que usaste)"
+LOCALE_NAMES = [(code, t(name)) for code, name in LOCALE_CHOICES]  # (en el idioma de la ventana)
+LANG_CHOICES = [name for _code_, name in LOCALE_NAMES]  # en la lista se ve solo el nombre
+# Con Tab, después de los del chat: los más hablados en Roblox (y después todos los demás, por nombre).
+COMMON_TARGETS = ("en", "es", "pt", "fr", "de", "it", "ru", "tr", "pl", "id", "tl", "vi", "th", "ar", "ja", "ko", "zh",
+                  "hi", "nl", "uk")
+_BY_NAME = {name: code for code, name in LOCALE_NAMES}
+AUTO_CHOICE = t("Automático (el último que usaste)")
 MULTI = "*"  # destino especial: todos los idiomas principales del chat
 MULTI_MAX = 3
-TONE_CHOICES = [name for _level, name in sorted(TONE_NAMES.items())]
+TONE_CHOICES = [t(name) for _level, name in sorted(TONE_NAMES.items())]
 TONE_HINTS = {
-    1: "Claro y correcto, sin jerga: el que menos confusiones genera.",
+    1: "Claro y correcto, sin jerga. El que mejor se entiende.",
     2: "Natural y cálido, con palabras completas.",
     3: "Relajado, solo jerga muy conocida.",
     4: "Abreviaturas y jerga comunes de los jugadores de ese idioma.",
@@ -86,11 +91,11 @@ def _code(choice: str) -> str:
 def _choice(code: str) -> str:
     if code == "auto":
         return AUTO_CHOICE
-    exact = next((name for known, name in LOCALE_CHOICES if known == code), None)
+    exact = next((name for known, name in LOCALE_NAMES if known == code), None)
     # "es-PE" (no está en la lista): el de su idioma sin región; "en" (elegido con Tab): el primero de ese idioma.
     language = code.split("-")[0]
-    return exact or next((name for known, name in LOCALE_CHOICES if known == language), None) or next(
-        (name for known, name in LOCALE_CHOICES if known.split("-")[0] == language), code)
+    return exact or next((name for known, name in LOCALE_NAMES if known == language), None) or next(
+        (name for known, name in LOCALE_NAMES if known.split("-")[0] == language), code)
 
 
 def _debug_dir() -> Path:
@@ -158,6 +163,7 @@ class BubbleWindow:
         self._checking_system = False
         self._support = None  # la ventana de Soporte, si está abierta
         self.update_release = None  # la versión nueva, si hay (ver update.py)
+        self._update_ready = None  # (con «Actualizar solo») la versión nueva ya bajada, esperando para instalarse
         # Sin Claude (no está, sin sesión o cuenta gratuita): Bubble Pro traduce con los créditos de Deepgram y Basic
         # queda bloqueado hasta que conectes Claude (ver cloud/agent.py y no_claude_window.py).
         self.claude_problem = ""
@@ -210,6 +216,8 @@ class BubbleWindow:
         self.compose.on_target = self._use_language  # cambiar el idioma con Tab cambia también el de tu voz
         self.compose.on_toggle_plan = self._toggle_plan_in_game  # Ctrl+P: Basic ↔ Pro sin salir del juego
         self.compose.on_tone = self._remember_tone  # el tono elegido con ↑/↓ queda para la próxima
+        self.compose.on_gender = self._gender_from_bar  # mujer u hombre, desde el juego
+        self.compose.on_personality = self._personality_from_bar  # (Pro) alegre, canchera o tranquila
         from .. import layered
         from .toast import Toast
 
@@ -268,6 +276,7 @@ class BubbleWindow:
         # ¿Se acaba de actualizar? ¿Hay una versión nueva? (ver update.py)
         self.root.after(2500, self._update_result)
         self.root.after(8000, self.check_update)
+        self.root.after(self.AUTO_CHECK_MS, self._auto_check_loop)
 
     # ================= instalar y desinstalar (ver install.py, uninstall.py, setup_window.py) =================
     def _check_install(self) -> None:
@@ -371,11 +380,10 @@ class BubbleWindow:
             if not pro.active():
                 self.set_pro(True)
             if not was:
-                self._append("Sin Claude: Bubble Pro traduce con los créditos de Deepgram (~0,075 US$ por minuto con "
-                             "mensajes; la conexión se corta sola cuando el chat está quieto). Conectá Claude para que "
-                             "la traducción no gaste.\n", "info")
-                self._set_status("✦ Traduciendo con Bubble Pro, sin Claude: gasta créditos de Deepgram. Conectá "
-                                 "Claude para que no gaste.")
+                self._append("Sin Claude, Bubble Pro traduce con los créditos de Deepgram (unos 0,075 US$ por "
+                             "minuto de chat activo). Conectá Claude y deja de gastar.\n", "info")
+                self._set_status("✦ Traduciendo con Bubble Pro y los créditos de Deepgram. Si conectás Claude, "
+                                 "no gasta.")
         self.pro_panel.apply_plan()
         self.pro_panel.refresh()
 
@@ -398,7 +406,7 @@ class BubbleWindow:
 
     def claude_connected(self) -> None:
         """Conectaste Claude: se reconecta traduciendo con tu suscripción (sin gastar créditos); Basic se desbloquea."""
-        self._append("Claude conectado: la traducción vuelve a tu suscripción (no gasta créditos).\n", "info")
+        self._append("Claude conectado. Ahora traduce con tu suscripción y no gasta créditos.\n", "info")
         self._refresh()
 
     def _cloud_fatal(self, error) -> None:
@@ -436,12 +444,69 @@ class BubbleWindow:
 
         self.update_release = release
         app_view.show_update_link(self, release)
+        if release is not None and self.config.user.auto_update and not asked:
+            self._auto_update(release)
+            return
         if release is None:
             if asked:
                 self._set_status(f"✓ Estás al día: Bubble {__version__} es la última versión.")
             return
         if asked or update.should_offer(release):
             self._offer_update(release)
+
+    AUTO_CHECK_MS = 2 * 3600 * 1000  # con «Actualizar solo», cada cuánto se busca mientras Bubble está abierto
+    AUTO_RETRY_MS = 60 * 1000
+
+    def _auto_update(self, release) -> None:
+        """«Actualizar solo»: se baja en segundo plano y se instala cuando no estás jugando ni usando la ventana."""
+        from .. import update
+
+        if self._update_ready is not None or getattr(self, "_auto_downloading", False):
+            return
+        self._auto_downloading = True
+
+        def work() -> None:
+            try:
+                folder = update.prepare(release, lambda _label, _part: None)
+            except Exception:  # noqa: BLE001 - no se pudo: queda el aviso de siempre (abajo de todo)
+                log.warning("No se pudo bajar la actualización sola", exc_info=True)
+                folder = None
+            self.events.put(("call", lambda: self._update_downloaded(release, folder)))
+
+        threading.Thread(target=work, name="bubble-actualizar-solo", daemon=True).start()
+
+    def _update_downloaded(self, release, folder) -> None:
+        self._auto_downloading = False
+        if folder is None:
+            return
+        self._update_ready = (release, folder)
+        self._append(f"Ya bajé Bubble {release.version}. Lo instalo cuando no estés jugando.\n", "info")
+        self._install_when_free()
+
+    def _install_when_free(self) -> None:
+        """Nunca en medio de una partida ni mientras usás la ventana: espera y vuelve a mirar cada minuto."""
+        from .. import update
+
+        if self._update_ready is None:
+            return
+        busy = self._in_game() or self._dialog_open() or win32.user32.GetForegroundWindow() == \
+            win32.toplevel_hwnd(self.root)
+        if busy:
+            self.root.after(self.AUTO_RETRY_MS, self._install_when_free)
+            return
+        release, folder = self._update_ready
+        try:
+            update.launch(folder)
+        except OSError:
+            log.warning("No se pudo empezar la actualización sola", exc_info=True)
+            return
+        self._update_ready = None
+        self._on_close()
+
+    def _auto_check_loop(self) -> None:
+        if self.config.user.auto_update:
+            self.check_update()
+        self.root.after(self.AUTO_CHECK_MS, self._auto_check_loop)
 
     def open_update(self) -> None:
         if self.update_release is not None:
@@ -473,7 +538,8 @@ class BubbleWindow:
             self._set_status(f"✓ ¡Listo! Bubble se actualizó a la {result.get('version')}.")
         else:
             self._append(f"No se pudo actualizar a la {result.get('version')}: {result.get('error')}\n", "error")
-            self._set_status("No se pudo actualizar: sigue la versión que tenías (el detalle, en Actividad).")
+            self._set_status("No se pudo actualizar, así que sigue la versión que tenías. El detalle está en "
+                             "Actividad.")
 
     def check_system(self, internet: bool | None = None) -> None:
         """Revisa tu equipo en segundo plano, se adapta y avisa si algo impide que Bubble ande (ver system.py).
@@ -519,7 +585,7 @@ class BubbleWindow:
     def _region_text(self) -> str:
         if not self.saved_region:
             return "Todavía no vi el chat: abrí Roblox y lo busco solo."
-        return "Ya sé dónde está el chat. Si cambiás de juego y no lo encuentro, buscalo en Ajustes."
+        return "Ya encontré el chat. Si cambiás de juego y lo pierdo, buscalo en Ajustes."
 
     # ================= arranque y cierre =================
     async def _startup(self) -> None:
@@ -536,7 +602,7 @@ class BubbleWindow:
         key = await asyncio.to_thread(load_key) if problem in system.NO_CLAUDE else ""
         self.events.put(("claude_access", (problem, bool(key))))
         if problem in system.NO_CLAUDE and not key:
-            raise NoClaudeError("Falta Claude para traducir: activá Bubble Pro (con créditos gratis) o conectá Claude.")
+            raise NoClaudeError("Para traducir falta Claude. Conectalo o activá Bubble Pro, que trae créditos gratis.")
         self.translator = await asyncio.to_thread(build_translator, self.config, key,
                                                   self._cloud_fatal if key else None)
         await self.translator.start()
@@ -618,7 +684,7 @@ class BubbleWindow:
         self.tutorial = None
         update_state(tutorial_seen=True)
         if reason != "completado":
-            self._set_status("Podés volver a ver el tutorial cuando quieras con el botón «Tutorial».")
+            self._set_status("El tutorial lo volvés a ver cuando quieras, con el botón «Tutorial».")
 
     def _sync_shortcut(self) -> None:
         try:
@@ -721,7 +787,7 @@ class BubbleWindow:
             self._roblox_gone_since = now
         elif now - self._roblox_gone_since >= self.GONE_S:
             self._roblox_gone_since = None
-            self._disconnect("Roblox se cerró, así que me desconecté. Cuando lo abras, me conecto solo.",
+            self._disconnect("Cerraste Roblox, así que me desconecté. Cuando lo abras, vuelvo solo.",
                              by_roblox=True)
 
     def _start_screenshots(self) -> None:
@@ -756,16 +822,24 @@ class BubbleWindow:
         if not self.config.appearance.in_screenshots:
             text = "Las traducciones no salen en capturas ni grabaciones."
         elif screen.window_mode():
-            text = ("✓ Salen en tus capturas y en las grabaciones de pantalla: Win + Shift + S, Impr Pant, la "
-                    "Herramienta Recortes (Grabar), OBS con «Captura de pantalla», Discord. Lo que graba solo el juego "
-                    "(el grabador de Roblox, Xbox Game Bar) no puede ver nada de lo que está encima.")
+            text = (("Las traducciones salen en tus capturas y en lo que grabes de la pantalla (Win + Shift + "
+                     "S, Recortes, OBS, Discord). Lo que graba solo el juego, como el grabador de Roblox o la "
+                     "Xbox Game Bar, no las ve."))
         else:
-            text = ("Salen en tus capturas (Impr Pant, Win + Shift + S). En las grabaciones de pantalla, apenas Bubble "
-                    "pueda leer la ventana de Roblox por separado: lo prueba solo cuando jugás.")
+            text = (("Las traducciones salen en tus capturas. Para que salgan también en lo que grabes, pruebo "
+                     "leer Roblox por separado la próxima vez que juegues."))
         label.configure(text=text)
 
     def _on_close(self) -> None:
         self._set_status("Cerrando...")
+        if self._update_ready is not None:  # ya estaba bajada: se instala ahora, sin volver a abrir Bubble
+            from .. import update
+
+            try:
+                update.launch(self._update_ready[1], reopen=False)
+            except OSError:
+                log.warning("No se pudo instalar la actualización al cerrar", exc_info=True)
+            self._update_ready = None
         if self.hotkey:
             self.hotkey.stop()
         if self.screenshots:
@@ -832,15 +906,16 @@ class BubbleWindow:
         busy = link in ("conectando", "desconectando")
         self.refresh_button.state(["disabled"] if busy else ["!disabled"])
         if link == "error" and self.claude_problem in NO_CLAUDE_PROBLEMS and not self.cloud_translation:
-            app_view.set_state(self, "bad", "Falta Claude para traducir: activá Bubble Pro o conectá Claude.",
+            app_view.set_state(self, "bad", "Para traducir falta Claude. Conectalo o activá Bubble Pro.",
                                "Sin Claude")
         elif link == "error":
-            app_view.set_state(self, "bad", "No pude conectarme con Claude. Mirá «Actividad» o tocá Refrescar.",
+            app_view.set_state(self, "bad", "No me pude conectar con Claude. Probá con Refrescar; el detalle "
+                                            "está en Actividad.",
                                "Sin conexión")
         elif link == "desconectando":
             app_view.set_state(self, "muted", "Desconectando…", "Desconectando")
         elif link == "desconectado" and self._closed_by_roblox:
-            app_view.set_state(self, "muted", "Roblox se cerró, así que me desconecté. Cuando lo abras, vuelvo solo.",
+            app_view.set_state(self, "muted", "Cerraste Roblox, así que me desconecté. Cuando lo abras, vuelvo solo.",
                                "En pausa")
         elif not self.ready:
             app_view.set_state(self, "warn", "Preparando todo… dame un segundito.", "Conectando")
@@ -890,7 +965,7 @@ class BubbleWindow:
         hwnd = win32.find_roblox_window()
         if not hwnd or not self.ocr or self._detecting:
             if not quiet:
-                self._set_status("Abrí Roblox (y esperá a que Bubble esté listo) para detectar el chat.")
+                self._set_status("Para buscar el chat, abrí Roblox y esperá a que Bubble diga «Listo».")
             return
         self._detecting = True
         if not quiet:
@@ -917,8 +992,8 @@ class BubbleWindow:
         client, guess = future.result()
         if guess is None:
             if not quiet:
-                self._set_status("No encontré el chat: esperá a que haya un par de mensajes y probá de nuevo, "
-                                 "o marcalo «a mano…».")
+                self._set_status("No encontré el chat. Esperá a que haya un par de mensajes y probá otra vez, "
+                                 "o marcalo a mano.")
             return
         self._on_calibrated(guess.region.offset(client.left, client.top), client, detected=True)
         self._append(f"Encontré el chat de este juego ({guess.lines} mensajes a la vista).\n", "info")
@@ -1029,10 +1104,12 @@ class BubbleWindow:
 
     # ================= escribir en Roblox =================
     def _targets(self) -> tuple[list[str], dict[str, str]]:
-        """Idiomas para Tab: el principal, "todos" (si el chat mezcla idiomas), el resto del chat y los comunes."""
+        """Idiomas para Tab: el principal, "todos" (si el chat mezcla idiomas), los del chat, los más comunes en
+        Roblox y después todos los demás, por nombre (antes eran solo 8: los mismos de siempre)."""
         mine = self.translator.my_locale[0]
         in_chat = self.translator.chat_languages()
-        ordered = [self.translator.outgoing_target(), *in_chat, "en", "pt", "es", "fr", "hi", "ru", "tr", "id"]
+        rest = sorted((code for code in LANGUAGES if code not in COMMON_TARGETS), key=lambda c: DISPLAY_NAMES[c])
+        ordered = [self.translator.outgoing_target(), *in_chat, *COMMON_TARGETS, *rest]
         targets = [c for c in dict.fromkeys(ordered) if c != mine] or ["en"]
         labels = {}
         if len(in_chat) >= 2:
@@ -1082,7 +1159,67 @@ class BubbleWindow:
         self.roblox_hwnd = win32.find_roblox_window()
         area = win32.client_rect(self.roblox_hwnd) if self.roblox_hwnd else None
         targets, labels = self._targets()
-        self.compose.open(targets, area, self.config.user.tone, labels)
+        self.compose.open(targets, area, self.config.user.tone, labels, gender=self.config.voice.gender,
+                          personality=self.config.pro.personality)
+
+    # ================= el idioma de la ventana (ver i18n.py) =================
+    def _build_ui_language(self) -> None:
+        """Tu idioma no vino con Bubble: la traducción de la ventana se arma una vez con tu Claude."""
+        from .. import i18n
+
+        wanted = i18n.choose(self.config.user.ui_language)
+        if i18n.has_catalog(wanted) or getattr(self, "_building_language", False) or self.cloud_translation:
+            return
+        self._building_language = True
+        name = DISPLAY_NAMES.get(wanted, wanted)
+        self._append(f"Estoy traduciendo Bubble al {name.lower()}. Tarda un par de minutos.\n", "info")
+
+        def done(ok: bool) -> None:
+            def show() -> None:
+                self._building_language = False
+                if ok:
+                    self._set_status(f"Bubble ya está en {name.lower()}. Reabrilo para verlo.")
+                    self._append(f"Listo: Bubble ya está en {name.lower()}. Se ve la próxima vez que lo abras.\n",
+                                 "info")
+
+            self.events.put(("call", show))
+
+        i18n.build_in_background(wanted, done)
+
+    def set_ui_language(self, setting: str) -> None:
+        """Elegiste otro idioma para la ventana: se guarda y Bubble se vuelve a abrir en ese idioma."""
+        from .. import i18n
+
+        self.config.user.ui_language = setting
+        save_setting("user", "ui_language", setting)
+        wanted = i18n.choose(setting)
+        if wanted == i18n.language():
+            return
+        if not i18n.has_catalog(wanted):
+            self._set_status("Voy a traducir Bubble a ese idioma: tarda un par de minutos.")
+            self._build_ui_language()
+            return
+        self.restart()
+
+    def restart(self) -> None:
+        """Cierra Bubble y lo vuelve a abrir en unos segundos (para que se vea en el idioma nuevo)."""
+        import subprocess
+        import sys
+
+        executable = Path(sys.executable)
+        pythonw = executable.with_name("pythonw.exe")
+        python = str(pythonw if pythonw.exists() else executable)
+        wait = "import subprocess, sys, time; time.sleep(2.5); subprocess.Popen(sys.argv[1:])"
+        subprocess.Popen([python, "-c", wait, python, "-m", "bubble"], cwd=str(Path.cwd()),
+                         creationflags=0x00000008 | 0x00000200, close_fds=True)
+        self._on_close()
+
+    def _gender_from_bar(self, gender: str) -> None:
+        """Cambiaste la voz desde la barra del juego: la misma que en la página Voz (sin la frase de prueba)."""
+        self.voice_panel.set_gender(gender)
+
+    def _personality_from_bar(self, personality: str) -> None:
+        self.pro_panel.set_personality(personality)
 
     def _compose_preview(self, text: str, target: str, tone: int) -> None:
         """Traducción para ver mientras escribís (y que al apretar Enter ya esté lista)."""
@@ -1202,7 +1339,7 @@ class BubbleWindow:
         if hwnd is None:
             self.root.clipboard_clear()
             self.root.clipboard_append(" / ".join(messages))
-            self._set_status("Roblox no está abierto: la traducción quedó en el portapapeles.")
+            self._set_status("Roblox no está abierto, así que dejé la traducción en el portapapeles.")
             return
 
         def work() -> None:
@@ -1358,6 +1495,7 @@ class BubbleWindow:
         self._set_status("")
         self._refresh_header()
         self.voice_panel.start()
+        self._build_ui_language()
         if self._redetect_chat:
             self._redetect_chat = False
             if win32.find_roblox_window():
@@ -1423,7 +1561,7 @@ class BubbleWindow:
 
         if not enabled and not reason and self.cloud_translation:
             # Sin Claude, Pro es lo que traduce: Basic se desbloquea cuando conectes Claude.
-            self._set_status("Basic necesita Claude: conectalo (✦ Pro › «Conectar Claude») para poder usarlo.")
+            self._set_status("Para usar Basic necesitás Claude. Conectalo en la página Pro.")
             self.pro_panel.refresh()
             return
         enabled = bool(enabled and load_key())
@@ -1438,7 +1576,7 @@ class BubbleWindow:
                 app_view.apply_pro_look(self, animate=True)
         self.pro_panel.refresh()
         if reason:
-            self._set_status(f"Bubble Pro se apagó: {reason}. Sigo con el reconocimiento de tu PC.")
+            self._set_status(f"Bubble Pro se apagó ({reason}). Sigo con tu PC.")
             self._append(f"Bubble Pro se apagó: {reason}.\n", "error")
         elif enabled:
             self._set_status("✦ Bubble Pro activado: las voces se entienden en la nube.")
@@ -1516,7 +1654,7 @@ class BubbleWindow:
             return
         path, rows, messages = future.result()
         if path is None:
-            self._append("Todavía no encontré el chat: abrí Roblox y tocá «Detectar chat».\n", "error")
+            self._append("Todavía no encontré el chat. Abrí Roblox y tocá «Detectar chat».\n", "error")
             return
         self._append(f"Captura guardada en {path}\n", "info")
         preview = self.inline_chat.preview() if self.inline_mode else None
@@ -1532,7 +1670,8 @@ class BubbleWindow:
         for message in messages:
             self._append(f"   {message.speaker}: {message.text}\n", "in")
         if rows and not messages:
-            self._append("No se reconoció el formato 'Nombre: mensaje'. Ajustá la región para que abarque el chat.\n", "error")
+            self._append("No veo mensajes del estilo «Nombre: mensaje». Marcá la zona para que tome todo el "
+                         "chat.\n", "error")
         for line in getattr(self, "_bubble_report", []):
             self._append(f"{line}\n", "info")
 
@@ -1553,7 +1692,7 @@ class BubbleWindow:
 
     def _append(self, text: str, tag: str) -> None:
         self.log.configure(state="normal")
-        self.log.insert("end", text, tag)
+        self.log.insert("end", t(text), tag)
         self.log.see("end")
         self.log.configure(state="disabled")
 

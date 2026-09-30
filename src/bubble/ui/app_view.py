@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from .. import pro
 from ..config import save_setting
+from ..i18n import t
 from ..translate.base import clamp_tone
 from . import inline, subtitles, theme, widgets
 
@@ -191,9 +192,8 @@ def _show_page(app: BubbleWindow) -> None:
 
 # ---------------------------------------------------------------- Inicio
 MIC_TIP_TITLE = "Lo más importante: un buen micrófono"
-MIC_TIP = ("Bubble entiende tu voz tan bien como la escucha. Un micrófono de auriculares (gamer) o uno USB, cerca de "
-             "la boca, hace toda la diferencia: el de la notebook o el de la webcam agarran ruido y eco, y la "
-             "traducción sale peor.")
+MIC_TIP = (("Te entiendo tan bien como te escucho. Con un micrófono de auriculares o uno USB cerca de la boca, "
+            "la traducción sale mucho mejor que con el de la notebook o la webcam."))
 
 
 def _home(app: BubbleWindow, page) -> None:
@@ -228,7 +228,7 @@ def _home(app: BubbleWindow, page) -> None:
     app.hotkey_label = ttk.Label(row, text="", font="SunValleyBodyStrongFont")
     app.hotkey_label.pack(side="left", padx=8)
     ttk.Button(row, text="Cambiar", command=app._change_hotkey).pack(side="right")
-    widgets.muted(box, "Escribís como hablás. Enter lo manda al chat traducido; Ctrl+Enter lo dice en voz.")
+    widgets.muted(box, "Escribís como hablás. Enter lo manda al chat ya traducido y Ctrl+Enter lo dice en voz.")
 
     info = ttk.Frame(page)
     info.pack(fill="x", pady=(2, 0))
@@ -245,6 +245,21 @@ def _settings(app: BubbleWindow, page) -> None:
     from .main_window import AUTO_CHOICE, LANG_CHOICES, TONE_CHOICES, TONE_HINTS, _choice
 
     look = app.config.appearance
+    from .. import i18n
+    from ..translate.languages import NATIVE_NAMES
+
+    box = widgets.card(page, "Idioma de Bubble", "La ventana, el tutorial y los avisos del juego.")
+    automatic = t("Automático (el de tu Windows)")
+    names = sorted(NATIVE_NAMES.items(), key=lambda item: item[1].casefold())
+    choices = [automatic, *(native for _code, native in names)]
+    by_choice = {native: code for code, native in names}
+    app.ui_lang = ttk.Combobox(box, values=choices, state="readonly")
+    current = app.config.user.ui_language
+    app.ui_lang.set(automatic if current in ("", "auto") else NATIVE_NAMES.get(current, automatic))
+    app.ui_lang.bind("<<ComboboxSelected>>",
+                     lambda _e: app.set_ui_language(by_choice.get(app.ui_lang.get(), "auto")))
+    app.ui_lang.pack(fill="x")
+
     box = widgets.card(page, "Apariencia")
     app.theme_var = tk.StringVar(value=look.theme)
     row = widgets.label_row(box, "Tema", pady=(0, 2))
@@ -296,8 +311,8 @@ def _settings(app: BubbleWindow, page) -> None:
     app.tone.pack(side="right")
     app.tone_hint = widgets.muted(box, TONE_HINTS[clamp_tone(app.config.user.tone)])
 
-    box = widgets.card(page, "Chat de Roblox", "Bubble encuentra el chat solo. Si en algún juego no lo encuentra, "
-                                              "marcalo a mano.")
+    box = widgets.card(page, "Chat de Roblox", "El chat lo encuentro solo. Si en algún juego no lo encuentro, "
+                                               "marcalo a mano.")
     row = ttk.Frame(box)
     row.pack(fill="x")
     ttk.Button(row, text="Buscar el chat", command=app._detect_chat).pack(side="left")
@@ -311,17 +326,21 @@ def _settings(app: BubbleWindow, page) -> None:
     _option_menu(row, app.perf_var, PERFORMANCE, lambda: _change_performance(app))
     app.perf_label = widgets.muted(box, "Detectando tu PC…")
 
-    box = widgets.card(page, "Instalación", "Bubble instala solo lo que le falta al abrirse y te avisa cuando hay "
-                                            "una versión nueva. Desinstalar borra todo lo que trajo (elegís qué).")
+    box = widgets.card(page, "Instalación", "Cuando abrís Bubble, instalo solo lo que falte y te aviso si hay "
+                                            "una versión nueva. Si desinstalás, elegís qué borrar.")
     row = ttk.Frame(box)
     row.pack(fill="x")
     ttk.Button(row, text="Revisar instalación", command=app.open_setup).pack(side="left")
     ttk.Button(row, text="Buscar actualizaciones", command=lambda: app.check_update(force=True)).pack(
         side="left", padx=(8, 0))
     ttk.Button(row, text="Desinstalar Bubble…", command=app.open_uninstall).pack(side="right")
+    app.auto_update_var = tk.BooleanVar(value=app.config.user.auto_update)
+    widgets.switch_row(box, "download", "Actualizar solo",
+                       "Las versiones nuevas se bajan e instalan solas, cuando no estás jugando.",
+                       app.auto_update_var, lambda: _change_auto_update(app), pady=(12, 0))
 
-    box = widgets.card(page, "Ayuda", "¿Algo no anda o se te ocurre una mejora? Escribilo en Soporte (con capturas, "
-                                      "si querés): le llega directo al creador.")
+    box = widgets.card(page, "Ayuda", "¿Algo no anda o tenés una idea? Contalo en Soporte, con capturas si "
+                                      "querés. Le llega directo al creador.")
     row = ttk.Frame(box)
     row.pack(fill="x")
     ttk.Button(row, text="Ver el tutorial", command=app.open_tutorial).pack(side="left")
@@ -657,16 +676,23 @@ def _change_screenshots(app: BubbleWindow) -> None:
     app._start_screenshots()
 
 
+def _change_auto_update(app: BubbleWindow) -> None:
+    app.config.user.auto_update = bool(app.auto_update_var.get())
+    save_setting("user", "auto_update", app.config.user.auto_update)
+    if app.config.user.auto_update:
+        app.check_update()  # ya mismo, por si hay una
+
+
 def _change_performance(app: BubbleWindow) -> None:
     app.config.roblox.performance = app.perf_var.get()
     save_setting("roblox", "performance", app.config.roblox.performance)
-    app._set_status("Listo: el modo de rendimiento nuevo se usa la próxima vez que abras Bubble.")
+    app._set_status("Listo. El modo nuevo se usa la próxima vez que abras Bubble.")
 
 
 # ---------------------------------------------------------------- Actividad
 def _activity(app: BubbleWindow, page) -> None:
     ttk.Label(page, text="Lo que fui traduciendo", font="SunValleyBodyStrongFont").pack(anchor="w")
-    widgets.muted(page, "Lo último abajo. Azul: lo que te dicen; verde: lo que mandás.", pady=(2, 8))
+    widgets.muted(page, "Lo último queda abajo. En azul lo que te dicen, en verde lo que mandás.", pady=(2, 8))
     frame, app.log = theme.scrolled_text(page, wrap="word", state="disabled", font=("Segoe UI", 10), height=14)
     frame.pack(fill="both", expand=True)
     _log_tags(app)

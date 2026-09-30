@@ -285,17 +285,17 @@ class Plan:
     advice: list[Advice] = field(default_factory=list)
 
 
-WITHOUT_CLAUDE = ("Mientras tanto, Bubble Pro traduce con los créditos gratis de Deepgram (200 US$ al crear la "
-                  "cuenta, sin tarjeta).")
+WITHOUT_CLAUDE = (("Mientras tanto, Bubble Pro puede traducir con los créditos gratis de Deepgram. Te regalan "
+                   "200 US$ al crear la cuenta y no piden tarjeta."))
 CLAUDE_ADVICE = {
-    "sin_claude": ("problema", "Falta Claude Code, que es lo que traduce. Si tenés Claude Pro o Max, instalalo desde "
-                               "«Revisar instalación» (Ajustes). " + WITHOUT_CLAUDE),
-    "sin_sesion": ("problema", "Claude Code no tiene la sesión iniciada: entrá con tu cuenta de Claude (Pro o Max). "
+    "sin_claude": ("problema", ("Falta Claude Code, que es el que traduce. Si tenés Claude Pro o Max, instalalo "
+                                "desde Ajustes, en «Revisar instalación». ") + WITHOUT_CLAUDE),
+    "sin_sesion": ("problema", "Claude Code no tiene sesión iniciada. Entrá con tu cuenta de Claude (Pro o Max). "
                                + WITHOUT_CLAUDE),
-    "gratis": ("problema", "Tu cuenta de Claude es la gratuita, y esa no incluye Claude Code (lo que traduce). "
+    "gratis": ("problema", "Tu cuenta de Claude es la gratis, y esa no trae Claude Code, que es el que traduce. "
                            + WITHOUT_CLAUDE),
-    "por_uso": ("aviso", "Claude Code está conectado a una cuenta de la API, que cobra cada traducción aparte. Con una "
-                         "suscripción (Claude Pro alcanza) no pagás por traducción."),
+    "por_uso": ("aviso", ("Claude Code está conectado a una cuenta de API, que cobra cada traducción. Con una "
+                          "suscripción (alcanza con Claude Pro) no pagás aparte.")),
 }
 
 
@@ -312,39 +312,42 @@ def recommend(info: System) -> Plan:
     plan = Plan()
     add = plan.advice.append
     if info.build and info.build < 19041:
-        add(Advice("problema", "Tu Windows es anterior a la versión 2004: actualizalo (Windows Update). Bubble necesita "
-                               "Windows 10 versión 2004 o más nuevo."))
+        add(Advice("problema", "Tu Windows es muy viejo para Bubble. Actualizalo desde Windows Update: hace "
+                               "falta Windows 10 2004 o más nuevo."))
     elif info.build and info.build < 20348:
-        add(Advice("aviso", "En tu versión de Windows, los subtítulos escuchan todo el sonido de la PC (no solo Roblox): "
-                            "si ponés música, puede aparecer. Con Windows 11 se escucha solo a Roblox."))
+        add(Advice("aviso", "En tu Windows, los subtítulos escuchan todo lo que suena en la PC, no solo "
+                            "Roblox. Si ponés música, puede aparecer. En Windows 11 se escucha solo el juego."))
     if not info.python_64bit:
-        add(Advice("problema", "Tu Python es de 32 bits: la parte de voz no anda. Instalá Python de 64 bits."))
+        add(Advice("problema", "Tu Python es de 32 bits y así la voz no anda. Instalá el de 64 bits."))
     plan.claude_sessions = sessions_for(info.ram_gb)
     if info.ram_gb and info.ram_gb < 6:
         plan.whisper_ram_limit = True
-        add(Advice("aviso", f"Tu PC tiene {info.ram_gb:.0f} GB de memoria: Bubble usa una sola sesión de Claude y el "
-                            "reconocimiento de voz más liviano, para no quitarle memoria a Roblox."))
+        add(Advice("aviso", f"Tu PC tiene {info.ram_gb:.0f} GB de memoria, así que uso lo más liviano para no sacarle memoria "
+                            "a Roblox."))
     if info.threads and info.threads < 4:
-        add(Advice("aviso", "Tu procesador tiene pocos núcleos: para la voz conviene Bubble Pro (se entiende en la nube)."))
+        add(Advice("aviso", "Tu procesador es algo justo para la voz. Con Bubble Pro se entiende en la nube y "
+                            "no le pesa a tu PC."))
     problem = claude_problem(info.claude)
     if problem in CLAUDE_ADVICE:
         level, text = CLAUDE_ADVICE[problem]
         add(Advice(level, text, "claude"))
     if info.claude.api_key:
-        add(Advice("aviso", "Hay una ANTHROPIC_API_KEY en tu PC: Claude Code podría cobrar por uso en vez de usar tu "
-                            "suscripción."))
+        add(Advice("aviso", "Hay una ANTHROPIC_API_KEY en tu PC. Claude Code podría cobrarte por uso en vez de "
+                            "usar tu suscripción."))
     if not info.roblox:
         add(Advice("aviso", "No encontré Roblox instalado (roblox.com o Microsoft Store)."))
     if not info.ocr_languages:
-        add(Advice("problema", "Windows no tiene ningún idioma para leer texto: agregá uno en Configuración › Hora e "
-                               "idioma › Idioma (con «Reconocimiento óptico de caracteres»)."))
+        add(Advice("problema", "Windows no tiene ningún idioma instalado para leer texto. Agregá uno en "
+                               "Configuración, en Hora e idioma, con «Reconocimiento óptico de caracteres»."))
     if info.voices_blocked:
-        add(Advice("aviso", "Windows (el «Control inteligente de aplicaciones») no deja usar las voces de Bubble: uso "
-                            "las que trae Windows, que suenan un poco menos naturales. Con Bubble Pro, las de la nube."))
+        add(Advice("aviso", "Windows no me deja usar mis voces (lo bloquea el «Control inteligente de "
+                            "aplicaciones»), así que uso las de Windows. Suenan un poco menos naturales. Con "
+                            "Bubble Pro se usan las de la nube."))
     if not info.microphones:
-        add(Advice("aviso", "No encontré ningún micrófono: tu voz traducida no va a funcionar hasta que conectes uno."))
+        add(Advice("aviso", "No encuentro ningún micrófono. Para traducir tu voz, conectá uno."))
     if info.work_area[1] and info.work_area[1] / max(info.scale, 1.0) < 700:
-        add(Advice("aviso", "Tu pantalla es chica: la ventana de Bubble se achica y se desplaza (usá la ruedita)."))
+        add(Advice("aviso", "Tu pantalla es chica, así que la ventana de Bubble se achica. Usá la ruedita para "
+                            "moverte."))
     net = info.internet
     if net is not None:
         if net.error and net.claude_ms is None:
@@ -353,8 +356,7 @@ def recommend(info: System) -> Plan:
             slow = (net.claude_ms or 0) > 350 or (net.download_mbps is not None and net.download_mbps < 2)
             plan.slow_internet = slow
             if slow:
-                add(Advice("aviso", "Tu internet es lento o está lejos de los servidores: las traducciones van a tardar "
-                                    "un poco más."))
+                add(Advice("aviso", "Tu internet anda lento, así que las traducciones van a tardar un poco más."))
     if not any(item.level != "ok" for item in plan.advice):
         add(Advice("ok", "Todo listo: tu PC puede usar todo Bubble."))
     return plan

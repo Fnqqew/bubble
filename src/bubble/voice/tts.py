@@ -34,9 +34,11 @@ MAX_LOADED = 3  # voces sintéticas cargadas a la vez (la tuya, la femenina y la
 # Idiomas cuya voz de Piper necesita paquetes que no se instalan (pesados o sin versión para este Python): sin
 # ellos, la voz de Windows (si hay). Las voces chinas nuevas también (g2pW, transformers): se usa la clásica.
 NEEDS = {"ja": ("pyopenjtalk",), "th": ("tltk", "unicode_rbnf")}
-# Sin voz propia en ningún lado: la de un idioma que se lee casi igual (el tagalo se escribe como se dice, con las
-# mismas vocales y sílabas que el indonesio).
-BORROWED = {"tl": "id"}
+# Sin voz propia: la de un idioma que se lee casi igual (el tagalo se escribe como se dice, con las mismas vocales y
+# sílabas que el indonesio; el malayo es casi indonesio; croata y serbio (este, en letras latinas) se leen como el
+# esloveno; el macedonio como el búlgaro, el bielorruso como el ruso, el azerí como el turco y el afrikáans como el
+# neerlandés). La voz «serbia» de Piper en realidad es sorabo.
+BORROWED = {"tl": "id", "ms": "id", "hr": "sl", "sr": "sl", "mk": "bg", "be": "ru", "az": "tr", "af": "nl"}
 # Variante preferida por idioma (la más neutra / más hablada entre jugadores).
 PREFERRED_REGION = {"en": "en_US", "es": "es_MX", "pt": "pt_BR", "fr": "fr_FR", "de": "de_DE", "zh": "zh_CN",
                     "ar": "ar_JO", "hi": "hi_IN", "nl": "nl_NL"}
@@ -61,7 +63,40 @@ CURATED: dict[str, tuple[str | None, str | None]] = {
     "id": ("id_ID-news_tts-medium", None),
     "vi": ("vi_VN-vais1000-medium", None),
     "th": ("th_TH-tsync2-medium", None),
+    # Los géneros de las que no lo dicen en el nombre se midieron por el tono (30/9/2026).
+    "uk": ("uk_UA-ukrainian_tts-medium#2", "uk_UA-ukrainian_tts-medium#1"),  # Tetiana, Mykyta
+    "sv": ("sv_SE-alma-medium", "sv_SE-nst-medium"),
+    "no": ("no_NO-nvcc-medium#0", "no_NO-nvcc-medium#2"),  # K… mujer, M… hombre
+    "da": (None, "da_DK-talesyntese-medium"),
+    "fi": (None, "fi_FI-harri-medium"),
+    "cs": ("cs_CZ-kasandra-medium", "cs_CZ-jirka-medium"),
+    "sk": ("sk_SK-lili-medium", None),
+    "hu": ("hu_HU-anna-medium", "hu_HU-imre-medium"),
+    "ro": (None, "ro_RO-mihai-medium"),
+    "el": ("el_GR-joy-medium", None),
+    "bg": (None, "bg_BG-dimitar-medium"),
+    "sl": (None, "sl_SI-artur-medium"),
+    "lt": ("lt_LT-reginute1-medium", None),
+    "lv": (None, "lv_LV-aivars-medium"),
+    "et": ("et_EE-news-medium#2", "et_EE-news-medium#0"),  # Mari, Albert
+    "he": (None, "he_IL-saspeech-medium"),
+    "fa": (None, "fa_IR-amir-medium"),
+    "ur": ("ur_PK-aegis_female-medium", "ur_PK-fasih-medium"),
+    "bn": ("bn_BD-google-medium#12", "bn_BD-google-medium#0"),
+    "mr": ("mr_IN-google-medium#0", None),
+    "te": ("te_IN-maya-medium", "te_IN-venkatesh-medium"),
+    "ka": ("ka_GE-natia-medium", None),
+    "hy": (None, "hy_AM-gor-medium"),
+    "kk": ("kk_KZ-issai-high#3", "kk_KZ-issai-high#1"),  # Raya, Iseke
+    "ca": ("ca_ES-upc_ona-medium", "ca_ES-upc_pau-x_low"),
+    "eu": ("eu_ES-maider-medium", "eu_ES-antton-medium"),
+    "cy": ("cy_GB-bu_tts-medium#1", "cy_GB-bu_tts-medium#2"),  # benyw (mujer), gwryw (hombre)
+    "is": ("is_IS-salka-medium", "is_IS-bui-medium"),
+    "sq": (None, "sq_AL-edon-medium"),
+    "sw": (None, "sw_CD-lanfrica-medium"),
 }
+# Sin ninguna voz de Piper (tamil, guyaratí, panyabí): las de Windows, si agregaste ese idioma.
+NO_PIPER = {"ta", "gu", "pa"}
 WINDOWS = "windows:"  # prefijo de una voz de Windows (en vez de una de Piper)
 DERIVED = "~"  # "voz~masculina": la voz del otro género hecha a partir de esa (ver prosody.change_gender)
 
@@ -140,7 +175,7 @@ class Voices:
 
     def _piper_voice(self, family: str, gender: str) -> tuple[str | None, bool]:
         """(la voz de Piper, si es del género pedido) para ese idioma, o (None, False)."""
-        if not _has_modules(family):
+        if family in NO_PIPER or not _has_modules(family):
             return None, False
         female, male = CURATED.get(family, (None, None))
         wanted, other = (male, female) if gender.startswith("m") else (female, male)

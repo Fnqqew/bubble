@@ -13,6 +13,8 @@ from PIL import Image, ImageDraw
 
 from ..voice.captions import MINE, NOTICE, Line
 from .inline import SUPERSAMPLE, Slot, _font, layout_text
+from ..i18n import t
+from .rtl import visual
 
 WIDTH = 760
 FILL = (14, 16, 20, 225)
@@ -52,10 +54,10 @@ def speaker_color(number: int) -> tuple[int, int, int]:
 
 def speaker_name(number: int) -> str:
     if number == MINE:
-        return "Vos"
+        return t("Vos")
     if number == NOTICE:
         return "Bubble"
-    return f"Voz {number}" if number > 0 else "Voz"
+    return t(f"Voz {number}") if number > 0 else t("Voz")
 
 
 def _body(line: Line) -> tuple[str, tuple]:
@@ -102,6 +104,20 @@ def card(width: int, height: int, radius: int, fill: tuple) -> Image.Image:
     return image
 
 
+MAX_LINES = 6  # renglones por frase: antes eran 2 y lo que no entraba se cortaba con "…" (charlas largas)
+MAX_HEIGHT = 0.42  # parte del alto del juego que pueden ocupar los subtítulos
+
+
+def fit_lines(text: str, width: int, line_h: int, size: int) -> tuple[int, list[str]]:
+    """El texto en los renglones que hagan falta (hasta MAX_LINES), con la letra casi del mismo tamaño: primero se
+    agregan renglones y recién al final se achica la letra."""
+    for count in range(2, MAX_LINES + 1):
+        font_size, wrapped = layout_text(text, [Slot(0, 0, width, line_h)] * count, size)
+        if font_size >= int(size * 0.9) and not (wrapped and wrapped[-1].endswith("…")):
+            return font_size, wrapped
+    return layout_text(text, [Slot(0, 0, width, line_h)] * MAX_LINES, size)
+
+
 def render_subtitles(lines: list[Line], scale: float | None = None, show_original: bool | None = None,
                      fresh: dict[int, float] | None = None) -> Image.Image:
     """Tarjeta con las frases (la más nueva abajo). `fresh`: frases que están apareciendo (ver `freshness`)."""
@@ -112,7 +128,7 @@ def render_subtitles(lines: list[Line], scale: float | None = None, show_origina
     blocks = []
     for line in lines:
         text, color = _body(line)
-        size, wrapped = layout_text(text, [Slot(0, 0, width - int(60 * k), line_h)] * 2, body)
+        size, wrapped = fit_lines(text, width - int(60 * k), line_h, body)
         blocks.append((line, text, color, size, [w for w in wrapped if w] or [text[:40]]))
     height = int(14 * k) + sum(head + line_h * len(wrapped) + int(10 * k) for *_rest, wrapped in blocks)
     image = card(width, height, int(16 * k), FILL)
@@ -138,10 +154,16 @@ def render_subtitles(lines: list[Line], scale: float | None = None, show_origina
         details = f"· {line.language.upper()}" if line.language and line.language != "→" else ""
         if line.translation.strip() and original_too:
             details += f"   {line.original}"
-        draw.text((x, y + int(10 * k)), details[:120], font=_font(int(13 * k), details), fill=MUTED, anchor="lm")
+        details_font = _font(int(13 * k), details)
+        room = width - x - int(22 * k)
+        if details_font.getlength(details) > room:  # el original, entero si entra; si no, hasta donde entra, con "…"
+            while details and details_font.getlength(details + "…") > room:
+                details = details[:-1]
+            details = details.rstrip() + "…"
+        draw.text((x, y + int(10 * k)), visual(details), font=details_font, fill=MUTED, anchor="lm")
         y += head
         for text in wrapped:
-            draw.text((width / 2, y + line_h / 2), text, font=_font(size, text), fill=color, anchor="mm")
+            draw.text((width / 2, y + line_h / 2), visual(text), font=_font(size, text), fill=color, anchor="mm")
             y += line_h
         y += int(10 * k)
         if appearing < 1.0:
@@ -175,6 +197,11 @@ class SubtitleView:
                  for line in lines))
         if key != self._key:
             self._image = render_subtitles(lines, fresh=fresh)
+            # Frases largas: la tarjeta no tapa más que MAX_HEIGHT del juego (se van primero las más viejas).
+            shown = list(lines)
+            while len(shown) > 1 and self._image.height > area.height * MAX_HEIGHT:
+                shown = shown[1:]
+                self._image = render_subtitles(shown, fresh=fresh)
             self._key = key
             drawn = True
         else:

@@ -318,20 +318,22 @@ class Polish:
         return float(np.clip(wrong * PULL, -MAX_CORRECTION, MAX_CORRECTION))
 
     def apply(self, audio: np.ndarray, rate: int, voice: str = "", style: str = "", correct: float | None = None,
-              gain_db: float | None = None) -> np.ndarray:
-        """La frase entera, lista para sonar. `correct`/`gain_db`: si ya se decidieron (ver Streaming)."""
+              gain_db: float | None = None, tone: bool = True) -> np.ndarray:
+        """La frase entera, lista para sonar. `correct`/`gain_db`: si ya se decidieron (ver Streaming). `tone`: con
+        False no se toca el tono (la voz ya lo puso según tu expresión: ver cloud/speak.py, Flux)."""
         audio = np.asarray(audio, dtype=np.float32)
         if len(audio) < rate // 20:
             return audio
         how = expression(style)
-        f0, voiced = pitch_track(audio, rate)
-        pitch = float(np.median(f0[voiced])) if voiced.sum() >= 8 else None
-        if correct is None:
-            correct = self.correction(voice, pitch) if voice else 0.0
-        shift = correct + how.semitones
-        factor = self._factor(f0, voiced, rate, shift, how, len(audio))
-        if factor is not None:
-            audio = psola(audio, rate, factor, f0, voiced)
+        if tone:
+            f0, voiced = pitch_track(audio, rate)
+            pitch = float(np.median(f0[voiced])) if voiced.sum() >= 8 else None
+            if correct is None:
+                correct = self.correction(voice, pitch) if voice else 0.0
+            shift = correct + how.semitones
+            factor = self._factor(f0, voiced, rate, shift, how, len(audio))
+            if factor is not None:
+                audio = psola(audio, rate, factor, f0, voiced)
         if gain_db is None:
             level = level_db(audio, rate)
             gain_db = 0.0 if level is None else float(np.clip(TARGET_DB - level, -MAX_GAIN_DB, MAX_GAIN_DB))
@@ -387,8 +389,9 @@ class Streaming:
     PITCH_STEP = 2.0  # y el tono (semitonos)
     TYPICAL_DB = -21.0  # volumen de costumbre de la voz de la nube (de ahí se parte)
 
-    def __init__(self, polish: Polish, rate: int, voice: str, style: str) -> None:
+    def __init__(self, polish: Polish, rate: int, voice: str, style: str, tone: bool = True) -> None:
         self.polish, self.rate, self.voice, self.style = polish, rate, voice, style
+        self.tone = tone
         self._pending = np.zeros(0, dtype=np.float32)
         self._raw: list[np.ndarray] = []
         self._correct: float | None = None
@@ -409,7 +412,7 @@ class Streaming:
         if len(self._pending):
             ready, self._pending = self._pending, np.zeros(0, dtype=np.float32)
             out.append(self._process(ready, last=True))
-        if self._raw and self.voice:
+        if self._raw and self.voice and self.tone:
             pitch = median_pitch(np.concatenate(self._raw), self.rate)
             if pitch is not None:
                 self.polish.learn(self.voice, pitch)  # la frase entera, a la referencia de su voz
@@ -433,7 +436,7 @@ class Streaming:
     def _process(self, audio: np.ndarray, last: bool) -> np.ndarray:
         self._raw.append(audio)
         seconds = len(audio) / self.rate
-        pitch = median_pitch(audio, self.rate) if self.voice else None
+        pitch = median_pitch(audio, self.rate) if self.voice and self.tone else None
         if pitch is not None:
             wanted = self.polish.wanted(self.voice, pitch)
             if self._correct is None:
@@ -447,4 +450,4 @@ class Streaming:
             self._gain += float(np.clip(wanted - self._gain, -step, step))
         style = self.style if last else "+".join(mark for mark in self.style.split("+") if mark != "question")
         return self.polish.apply(audio, self.rate, self.voice, style, correct=self._correct or 0.0,
-                                 gain_db=self._gain)
+                                 gain_db=self._gain, tone=self.tone)

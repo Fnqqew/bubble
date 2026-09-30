@@ -27,7 +27,17 @@ SENTENCES = {
     "fr": "Salut, quelqu'un vient avec moi à la tour ? Attends-moi, j'arrive.",
     "de": "Hey, kommt jemand mit mir zum Turm? Warte auf mich, ich komme gleich.",
     "it": "Ehi, qualcuno viene con me alla torre? Aspettami, sto arrivando.",
-}
+    "nl": "Hé, gaat er iemand met me mee naar de toren? Wacht op me, ik kom eraan.",
+    "ru": "Эй, кто-нибудь пойдёт со мной к башне? Подождите меня, я уже иду.",
+    "uk": "Гей, хтось піде зі мною до вежі? Зачекайте мене, я вже йду.",
+    "pl": "Hej, ktoś idzie ze mną do wieży? Poczekajcie na mnie, już idę.",
+    "tr": "Hey, benimle kuleye gelen var mı? Beni bekleyin, geliyorum.",
+    "id": "Hei, ada yang mau ikut aku ke menara? Tunggu aku, aku segera datang.",
+    "vi": "Này, có ai đi cùng mình tới tòa tháp không? Đợi mình nhé, mình đến ngay.",
+    "ko": "야, 누구 나랑 탑에 같이 갈 사람? 기다려, 금방 갈게.",
+    "hi": "अरे, कोई मेरे साथ टावर चलेगा? मेरा इंतज़ार करो, मैं आ रहा हूँ।",
+    "ar": "مرحبًا، هل يأتي أحد معي إلى البرج؟ انتظروني، أنا قادم.",
+}  # (japonés, chino y tailandés no separan palabras con espacios: ahí se lee la de inglés)
 RATINGS = ("mal", "normal", "bien")
 
 
@@ -108,8 +118,8 @@ def analyze_mic(audio: np.ndarray, heard: str, expected: str, speech_probs: np.n
     audio = np.asarray(audio, dtype=np.float32).ravel()
     frames = audio[: len(audio) // BLOCK * BLOCK].reshape(-1, BLOCK)
     if not len(frames):
-        return MicReport("mal", -120.0, -120.0, 0.0, 0.0, heard, ["No llegó audio del micrófono: fijate que esté "
-                                                                   "conectado y elegido en la página Voz."])
+        return MicReport("mal", -120.0, -120.0, 0.0, 0.0, heard, [("No me llega nada del micrófono. Fijate que "
+                                                                   "esté conectado y elegido en la página Voz.")])
     rms = np.sqrt(np.mean(frames ** 2, axis=1)) + 1e-9
     if speech_probs is not None and len(speech_probs) >= len(rms):
         speech = np.asarray(speech_probs[:len(rms)]) >= 0.5
@@ -126,36 +136,36 @@ def analyze_mic(audio: np.ndarray, heard: str, expected: str, speech_probs: np.n
     tips: list[str] = []
     if voice_db < -42:
         level = "mal"
-        tips.append("Tu voz llega muy baja: subí el volumen del micrófono (Configuración de Windows → Sonido → tu "
-                    "micrófono → Volumen) o acercátelo.")
+        tips.append("Te escucho muy bajo. Subí el volumen del micrófono en la configuración de sonido de "
+                    "Windows, o acercátelo.")
     elif voice_db < -32:
         level = "normal"
-        tips.append("Tu voz llega un poco baja: subí algo el volumen del micrófono o acercátelo.")
+        tips.append("Te escucho un poco bajo. Subí un poco el volumen o acercate el micrófono.")
     else:
         level = "bien"
     snr = voice_db - noise_db
     if snr < 12:
         noise = "mal"
-        tips.append("Hay mucho ruido de fondo comparado con tu voz: alejá el micrófono de ventiladores y parlantes, o "
-                    "usá auriculares con micrófono.")
+        tips.append("Hay mucho ruido de fondo. Alejá el micrófono de ventiladores y parlantes, o usá "
+                    "auriculares con micrófono.")
     elif snr < 20:
         noise = "normal"
-        tips.append("Hay algo de ruido de fondo: con auriculares con micrófono se entiende mejor.")
+        tips.append("Hay algo de ruido de fondo. Con auriculares con micrófono te entiendo mejor.")
     else:
         noise = "bien"
     if clipped > 0.001:
         clip = "normal"
-        tips.append("Tu micrófono satura (llega demasiado fuerte): bajale un poco el volumen o alejalo.")
+        tips.append("Tu micrófono llega demasiado fuerte y se distorsiona. Bajale un poco el volumen o alejalo.")
     else:
         clip = "bien"
     if accuracy < 0.6:
         understood = "mal"
         if level == noise == "bien":
-            tips.append("Se escucha bien pero se entendieron pocas palabras: hablá un poco más despacio y claro. En "
-                        "«Tu voz traducida» podés corregir lo que entendió: Bubble aprende tus palabras.")
+            tips.append("Te escucho bien, pero entendí pocas palabras. Probá hablar un poco más despacio. En "
+                        "«Tu voz traducida» podés corregirme y aprendo tus palabras.")
     elif accuracy < 0.85:
         understood = "normal"
-        tips.append("Se entendió casi todo. Cuanto más lo usás (y corregís en Pruebas), mejor entiende tus palabras.")
+        tips.append("Te entendí casi todo. Cuanto más lo uses, mejor te voy a entender.")
     else:
         understood = "bien"
     return MicReport(_worst(level, noise, clip, understood), voice_db, noise_db, clipped, accuracy, heard, tips)
@@ -220,18 +230,18 @@ def rate_pc(report: PcReport) -> PcReport:
         report.rating = "lenta"
     tips = report.tips
     if report.threads < 6:
-        tips.append("Tu procesador tiene pocos núcleos: Bubble usa el reconocimiento de voz liviano y lee el chat más "
-                    "espaciado para no quitarle fluidez a Roblox. En Ajustes → Rendimiento podés elegir «Liviano».")
+        tips.append("Tu procesador es algo justo, así que uso lo más liviano para que Roblox no se trabe. En "
+                    "Ajustes, en Rendimiento, podés elegir «Liviano».")
     if report.understand_s > 1.5:
-        tips.append("Entender tu voz tarda bastante en esta PC: cerrá programas pesados mientras jugás, o en "
-                    "config.toml poné [voice] model = \"base\" (entiende un poco menos, pero más rápido).")
+        tips.append("En esta PC me cuesta entender tu voz rápido. Cerrá los programas pesados mientras jugás, "
+                    "o probá Bubble Pro.")
     if report.memory_gb and report.memory_gb < 8:
-        tips.append("Tenés poca memoria (menos de 8 GB): con Roblox, Bubble y el navegador abiertos puede andar "
-                    "lento. Cerrá lo que no uses.")
+        tips.append("Tenés poca memoria (menos de 8 GB). Con Roblox, Bubble y el navegador abiertos puede ir "
+                    "lento, así que cerrá lo que no uses.")
     if not report.gpus:
-        tips.append("No encontré placa de video: la pantalla se captura con el procesador (un poco más de uso).")
+        tips.append("No encontré placa de video, así que leo la pantalla con el procesador. Usa un poco más.")
     if report.translate_s > 2.5:
-        tips.append("Claude tardó más de lo normal: puede ser la conexión a internet o que el servicio esté cargado.")
+        tips.append("Claude tardó más de lo normal. Puede ser tu internet o que esté cargado.")
     if not tips:
         tips.append("Tu PC está sobrada para Bubble.")
     return report

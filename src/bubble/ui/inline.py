@@ -22,6 +22,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from ..translate.base import ChatLine
+from .rtl import visual
 
 FONT_FILES = ["seguisb.ttf", "segoeuib.ttf", "arialbd.ttf"]  # parecidas a la letra del chat de Roblox
 MIN_SCALE = 0.6  # la letra se achica hasta 60% antes de cortar con "…"
@@ -210,9 +211,10 @@ def render_pill(width: int, height: int, text: str, size: int, *, fill: tuple, t
         font = _font(size, text)
         x, anchor = (TEXT_INSET, "lm") if align == "left" else (width / 2, "mm")
         y = height / 2
+        shown = visual(text)  # (hebreo, árabe…: en el orden en que se leen)
         if shadow:
-            draw.text((x + 1, y + 1), text, font=font, fill=SHADOW, anchor=anchor)
-        draw.text((x, y), text, font=font, fill=text_color, anchor=anchor)
+            draw.text((x + 1, y + 1), shown, font=font, fill=SHADOW, anchor=anchor)
+        draw.text((x, y), shown, font=font, fill=text_color, anchor=anchor)
     return image
 
 
@@ -269,7 +271,8 @@ def render_bubble(size_px: tuple[int, int], text_lines: list[str], font_size: in
     font = _font(font_size, " ".join(text_lines))
     line_height = height / max(1, len(text_lines))
     for index, line in enumerate(text_lines):
-        draw.text((width / 2, line_height * (index + 0.5)), line, font=font, fill=(*foreground[:3], 255), anchor="mm")
+        draw.text((width / 2, line_height * (index + 0.5)), visual(line), font=font, fill=(*foreground[:3], 255),
+                  anchor="mm")
     return base
 
 

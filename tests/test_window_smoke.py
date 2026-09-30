@@ -179,7 +179,7 @@ def test_without_claude_pro_translates_and_basic_stays_locked(window, monkeypatc
     panel.enabled_var.set(False)
     panel._toggle()  # tocás el interruptor para pasar a Basic
     assert pro.active() and panel.enabled_var.get()  # vuelve a Pro solo
-    assert "Basic necesita Claude" in str(window.status.cget("text"))
+    assert "Basic necesitás Claude" in str(window.status.cget("text"))
     shown = []
     monkeypatch.setattr(window.toast, "show", lambda text, gold, area=None: shown.append(text))
     window._toggle_plan_in_game()  # Ctrl+P en el juego
@@ -203,7 +203,7 @@ def test_without_claude_or_a_key_it_shows_how_to_continue(window, monkeypatch):
     window._ev_claude_access(("sin_sesion", False))
     window._ev_started(mw.NoClaudeError("Falta Claude para traducir"))
     assert opened == [""] and window.link == "error"
-    assert "Falta Claude" in str(window.greeting.cget("text"))
+    assert "falta Claude" in str(window.greeting.cget("text"))
 
 
 def test_measuring_your_pc_without_any_voice_says_so(window, monkeypatch):

@@ -108,6 +108,10 @@ def launch(config) -> None:
     from .. import win32
 
     win32.enable_dpi_awareness()
+    from .. import i18n
+
+    i18n.use(i18n.choose(config.user.ui_language))  # la ventana, en tu idioma (antes de armarla)
+    i18n.install()
     root = tk.Tk()
     root.withdraw()
     splash = Splash(root)

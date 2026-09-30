@@ -21,9 +21,9 @@ if TYPE_CHECKING:
 
 INTRO = {
     "sin_claude": "Bubble traduce con Claude, y en esta PC no está Claude Code.",
-    "sin_sesion": "Bubble traduce con Claude, y Claude Code no tiene la sesión iniciada.",
-    "gratis": "Bubble traduce con Claude Code, y tu cuenta de Claude es la gratuita, que no lo incluye.",
-    "sin_credito": "Bubble Pro estaba traduciendo sin Claude y la cuenta de Deepgram se quedó sin crédito.",
+    "sin_sesion": "Para traducir uso Claude, y Claude Code todavía no tiene sesión iniciada.",
+    "gratis": "Para traducir uso Claude Code, y tu cuenta de Claude es la gratis, que no lo trae.",
+    "sin_credito": "Bubble Pro estaba traduciendo sin Claude y a tu cuenta de Deepgram se le terminó el crédito.",
     "clave": "Bubble Pro estaba traduciendo sin Claude y Deepgram dejó de aceptar tu clave.",
 }
 
@@ -45,15 +45,16 @@ class NoClaudeWindow:
                           foreground=pro.gold())
         label.gold = True
         label.pack(anchor="w")
-        widgets.muted(box, "Traduce en la nube, sin Claude, con el crédito de regalo de una cuenta nueva de Deepgram "
-                           f"({pro.FREE_CREDIT_USD} US$, sin tarjeta). Además entiende y dice las voces en la nube. "
-                           "Mientras no conectes Claude, Pro queda activado (Basic necesita Claude).", wrap=500,
+        widgets.muted(box, "Traduce en la nube sin Claude, con el crédito que te regala Deepgram al abrir una "
+                           f"cuenta ({pro.FREE_CREDIT_USD} US$, sin tarjeta). También entiende y dice las voces en la nube. Hasta "
+                           "que conectes Claude, Pro queda prendido.", wrap=500,
                       pady=(2, 8))
         row = ttk.Frame(box)
         row.pack(fill="x")
         ttk.Button(row, text="1. Crear cuenta en Deepgram", command=lambda: webbrowser.open(pro.SIGNUP_URL)).pack(
             side="left")
-        widgets.muted(box, "2. En Deepgram: «API Keys» → «Create a New API Key» → copiala.  3. Pegala acá:", wrap=500,
+        widgets.muted(box, "2. En Deepgram, entrá a «API Keys», tocá «Create a New API Key» y copiala.  3. "
+                           "Pegala acá:", wrap=500,
                       pady=(8, 4))
         row = ttk.Frame(box)
         row.pack(fill="x")
@@ -68,8 +69,8 @@ class NoClaudeWindow:
 
         # ---- 2. Conectar Claude
         box = widgets.card(body, "Conectá Claude",
-                           "Con Claude Pro o Max, Bubble traduce con tu suscripción y no gasta créditos (y podés "
-                           "volver a Basic). Si no tenés, Claude Pro alcanza, aunque sea por un mes.")
+                           "Con Claude Pro o Max traduzco con tu suscripción y no se gastan créditos. Si no "
+                           "tenés, alcanza con Claude Pro, aunque sea un mes.")
         row = ttk.Frame(box)
         row.pack(fill="x")
         installed = reason != "sin_claude"
@@ -126,8 +127,8 @@ class NoClaudeWindow:
         from .. import install
 
         install._install_claude(lambda *_args: None)
-        self.login_state.configure(text="Se abrió el instalador de Claude Code. Cuando termine, tocá «Iniciar sesión "
-                                        "en Claude».")
+        self.login_state.configure(text="Se abrió el instalador de Claude Code. Cuando termine, tocá «Iniciar "
+                                        "sesión en Claude».")
         self.login.configure(text="Iniciar sesión en Claude", command=self._login)
 
     def _login(self) -> None:
@@ -138,7 +139,7 @@ class NoClaudeWindow:
         except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
             self.login_state.configure(text=f"No se pudo abrir Claude Code ({exc}).")
             return
-        self.login_state.configure(text="Se abrió Claude Code: entrá con tu cuenta en el navegador y después tocá "
+        self.login_state.configure(text="Se abrió Claude en el navegador. Entrá con tu cuenta y después tocá "
                                         "«Listo, revisar».")
         self.login.configure(text="Listo, revisar", command=self._recheck, style="Accent.TButton")
 

@@ -44,80 +44,70 @@ def build_steps(hotkey: str, calibrate: Callable[[], None], capture_test: Callab
     return [
         Step(
             "¡Hola! Soy Bubble",
-            "Traduzco Roblox mientras jugás: el chat, lo que dicen sobre la cabeza de los jugadores y hasta la voz. "
-            "Uso tu suscripción de Claude: cuando arriba diga «Listo», estamos.",
-            highlight=("Lo más importante: un buen micrófono",
-                       "Te entiendo tan bien como te escucho. Un micrófono de auriculares (gamer) o uno USB, cerca de "
-                       "la boca, hace toda la diferencia: el de la notebook o el de la webcam agarran ruido y eco, y "
-                       "tu voz traducida sale peor. Probalo cuando quieras en Inicio o en Pruebas → Tu micrófono."),
+            "Te traduzco Roblox mientras jugás: el chat, lo que dicen arriba de la cabeza y la voz. "
+            "Uso tu cuenta de Claude. Cuando arriba diga «Listo», arrancamos.",
+            highlight=("Antes que nada: el micrófono",
+                       "Te entiendo tan bien como te escucho. Con un micrófono de auriculares o uno USB cerca de la "
+                       "boca, todo sale mucho mejor que con el de la notebook. Podés probarlo en Inicio."),
         ),
         Step(
-            "Contame cómo hablás",
-            "En Inicio, «Hablo» ya viene con el idioma de tu Windows, con tu variante (argentino, mexicano…). "
-            "Todo lo que te llegue te lo cuento así, con tu jerga.",
+            "Tu idioma",
+            "En Inicio, en «Hablo», ya está el idioma de tu Windows. Si sos de Argentina, México o España, "
+            "elegí tu país: te traduzco todo como hablás vos.",
         ),
         Step(
             "Apagá la traducción de Roblox",
-            "Roblox trae su propia traducción automática del chat. Apagala: si no, leo mensajes ya traducidos por "
-            "Roblox y se pierde lo que dijeron de verdad.\n\n"
-            "1. En el juego apretá Esc.\n"
-            "2. Entrá a «Configuración» (Settings).\n"
-            "3. Desactivá «Traducción automática del chat».",
+            "Roblox traduce el chat por su cuenta, y si lo deja prendido yo leo mensajes que ya vienen cambiados.\n\n"
+            "1. En el juego, apretá Esc.\n"
+            "2. Andá a «Configuración».\n"
+            "3. Apagá «Traducción automática del chat».",
         ),
         Step(
-            "Abrí un juego",
-            "Entrá a cualquier juego y dejalo a la vista (leo el chat de la pantalla). Apenas haya un par de "
-            "mensajes, lo encuentro solo.\n\n"
-            "Si en algún juego no lo encuentro, en Ajustes tenés «Buscar el chat» o «Marcarlo a mano».",
+            "Entrá a un juego",
+            "Abrí cualquier juego y dejalo a la vista. Cuando aparezcan un par de mensajes, encuentro el chat solo.\n\n"
+            "Si en algún juego no lo encuentro, en Ajustes podés buscarlo o marcarlo a mano.",
             "Buscar el chat ahora",
             calibrate,
         ),
         Step(
             "Leé en tu idioma",
-            "Cada mensaje en otro idioma aparece traducido encima del original, y el nombre de quien lo escribió "
-            "queda a la vista. Lo que ya está en tu idioma no lo toco.\n\n"
-            "Las burbujas sobre la cabeza de los jugadores también se traducen, y siguen a la cámara.",
+            "Los mensajes en otro idioma aparecen traducidos arriba del original, con el nombre de quien los "
+            "escribió. Lo que ya está en tu idioma lo dejo como está.\n\n"
+            "Las burbujas que salen sobre la cabeza de los jugadores también se traducen.",
         ),
         Step(
             f"Escribí con {hotkey}",
-            f"En el juego apretá {hotkey}: se abre una barra. Escribí como hablás y mirá cómo va a quedar.\n\n"
-            "• Enter lo manda traducido al chat.\n"
+            f"En el juego apretá {hotkey} y se abre una barra. Escribí como hablás y vas viendo cómo queda.\n\n"
+            "• Enter lo manda al chat, ya traducido.\n"
             "• Ctrl+Enter lo dice en voz.\n"
-            "• Tab cambia el idioma, ↑ ↓ el tono y Esc cierra.\n\n"
-            "Si tu tecla lleva Shift (como «°»), apretala sola: el Shift mueve la cámara en Roblox.",
+            "• Tab cambia el idioma, ↑ ↓ el tono y Ctrl+G la voz (mujer u hombre).\n\n"
+            "Si tu tecla usa Shift (como «°»), apretala sola: en Roblox el Shift mueve la cámara.",
         ),
         Step(
             "La voz",
-            "En la página «Voz»:\n\n"
-            "• Subtítulos: ves quién habla (Voz 1, Voz 2…) y qué dice, en tu idioma.\n"
-            "• Tu voz para los demás: hablás en tu idioma y te escuchan en el suyo, con un botón o en modo directo. "
-            "«Te escuchan en» es el mismo idioma que elegís en la barra para escribir (Tab).\n\n"
-            "En «Pruebas» probás tu micrófono y tu voz traducida sin jugar.\n\n"
-            "Para que te escuchen, Bubble habla por un micrófono virtual (como Soundpad). Mirá el paso siguiente.",
+            "En la página «Voz» tenés dos cosas:\n\n"
+            "• Subtítulos: ves qué dice cada uno, en tu idioma.\n"
+            "• Tu voz para los demás: hablás en tu idioma y te escuchan en el suyo, con un botón o sin tocar nada.\n\n"
+            "Para que los demás te escuchen necesito un micrófono virtual. Te cuento en el paso que sigue.",
         ),
         Step(
             "El micrófono virtual",
-            "Windows no deja que un programa hable por tu micrófono: hace falta un micrófono virtual gratis, "
-            "VB-Audio Virtual Cable (el driver que se descarga). Funciona como Soundpad: Bubble le pasa tu voz real y "
-            "le suma la traducida.\n\n"
-            "1. Voz → Micrófono → «Instalar (gratis)». Aceptá el permiso y tocá «Install Driver». Si lo pide, "
-            "reiniciá la PC.\n"
-            "2. Abrí Bubble: si el instalador te cambió el micrófono o los parlantes de Windows, los vuelvo a poner "
-            "como estaban solo.\n"
-            "3. Listo: mientras Bubble está abierto, el micrófono virtual es tu micrófono de Windows y Bubble le pasa "
-            "tu voz; al cerrar Bubble vuelve el tuyo.\n\n"
-            "Abrí Bubble antes que Roblox: Roblox elige su micrófono al abrirse y así toma el de Bubble solo. Si "
-            "Roblox ya estaba abierto, te aviso: elegí «CABLE Output» en Roblox (Esc → Configuración → Dispositivo de "
-            "entrada) o volvé a abrirlo. En Roblox tenés que estar desmuteado.\n\n"
-            "¿Algo quedó raro? «Arreglar Windows» deja todo como estaba.",
+            "Windows no deja que un programa hable por tu micrófono, así que uso uno virtual y gratis "
+            "(VB-Audio Virtual Cable). Es como Soundpad: le paso tu voz de verdad y le sumo la traducida.\n\n"
+            "1. En Voz, tocá «Instalar (gratis)». Aceptá el permiso y tocá «Install Driver».\n"
+            "2. Si Windows te pide reiniciar, reiniciá.\n"
+            "3. Listo. Mientras Bubble está abierto, los demás te escuchan por ahí. Cuando lo cerrás, vuelve tu "
+            "micrófono de siempre.\n\n"
+            "Abrí Bubble antes que Roblox, así Roblox lo agarra solo. Y acordate de tener el micrófono prendido en "
+            "Roblox.",
             "Arreglar Windows" if fix_windows else "",
             fix_windows,
         ),
         Step(
-            "Hacelo tuyo",
-            "En Ajustes elegís el tema (oscuro o claro), el color y el tamaño de las traducciones, dónde van los "
-            "subtítulos y qué tan informal querés sonar al escribir.\n\n"
-            "Podés volver a ver esta guía cuando quieras, desde Ajustes → «Ver el tutorial». ¡A jugar!",
+            "Hacelo a tu gusto",
+            "En Ajustes cambiás los colores, el tamaño de las traducciones, dónde van los subtítulos y qué tan "
+            "informal querés sonar.\n\n"
+            "Este tutorial lo volvés a ver cuando quieras desde Ajustes. ¡A jugar!",
         ),
     ]
 

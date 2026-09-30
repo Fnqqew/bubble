@@ -22,12 +22,12 @@ CLIP_PER_MIN = 0.0052  # una frase entera (multilingüe)
 DIARIZE_PER_MIN = 0.0020
 KEYTERM_PER_MIN = 0.0013
 TTS_PER_1K_CHARS = 0.030  # voces de la nube (Aura-2)
+FLUX_PER_1K_CHARS = 0.045  # las voces en inglés (Flux TTS: más expresivas)
 TRANSLATE_PER_MIN = 0.075  # traducir sin Claude: el agente de Deepgram, por minuto de conexión (cloud/agent.py)
 SIGNUP_URL = "https://console.deepgram.com/signup"
-NO_CLAUDE_WARNING = ("⚠ Sin Claude, traducir gasta créditos: ~0,075 US$ por cada minuto con mensajes para traducir "
-                     "(la conexión se corta sola cuando el chat está quieto). Una partida tranquila gasta centavos por "
-                     "hora; un servidor muy activo, hasta ~4,50 US$ por hora. Con Claude conectado, la traducción deja "
-                     "de gastar.")
+NO_CLAUDE_WARNING = (("Sin Claude, traducir gasta créditos de Deepgram: unos 0,075 US$ por minuto de chat "
+                      "activo. Una partida tranquila son centavos por hora; un servidor muy movido, hasta 4,50 "
+                      "US$. Si conectás Claude, deja de gastar."))
 FREE_CREDIT_USD = 200
 
 _active = False
@@ -82,10 +82,10 @@ def count_seconds(seconds: float, diarized: bool = False, multi: bool = True, ke
         _add(seconds=seconds, cost=listen_cost(seconds, multi, diarized, keyterms, clip))
 
 
-def count_characters(chars: int) -> None:
+def count_characters(chars: int, flux: bool = False) -> None:
     """Suma lo que dijeron las voces de la nube este mes."""
     if chars > 0:
-        _add(chars=chars, cost=chars / 1000 * TTS_PER_1K_CHARS)
+        _add(chars=chars, cost=chars / 1000 * (FLUX_PER_1K_CHARS if flux else TTS_PER_1K_CHARS))
 
 
 def count_translation(seconds: float) -> None:

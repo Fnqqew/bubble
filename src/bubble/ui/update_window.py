@@ -22,9 +22,8 @@ class UpdateWindow:
         self.window, body = widgets.dialog(root, "Actualización de Bubble")
         colors = widgets.palette()
         ttk.Label(body, text="Hay una versión nueva", font="SunValleySubtitleFont").pack(anchor="w")
-        widgets.muted(body, f"Bubble {release.version} ya está disponible (tenés la {__version__}). Se instala en "
-                            "menos de un minuto y no perdés nada: tu configuración, tu voz y lo descargado quedan "
-                            "como están.", pady=(2, 12))
+        widgets.muted(body, f"Salió Bubble {release.version} (vos tenés la {__version__}). Se instala en menos de un minuto y no perdés "
+                            "nada de lo que configuraste.", pady=(2, 12))
         notes = update.plain_notes(release.notes)
         if notes:
             ttk.Label(body, text="Qué trae", font="SunValleyBodyStrongFont").pack(anchor="w", pady=(0, 4))
@@ -96,7 +95,7 @@ class UpdateWindow:
             button.state(["!disabled"])
 
     def _ready(self, folder) -> None:
-        self.status.configure(text="✓ Listo. Bubble se cierra y vuelve a abrir solo en unos segundos…",
+        self.status.configure(text="Listo. Bubble se cierra y vuelve a abrir solo en unos segundos…",
                               foreground=widgets.palette()["good"])
 
         def go() -> None:

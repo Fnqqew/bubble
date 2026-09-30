@@ -26,21 +26,21 @@ if TYPE_CHECKING:
 
 # Basic y Pro, lado a lado: (qué, Basic, Pro)
 COMPARISON = (
-    ("Entender voces", "Whisper en tu PC", "Nova-3 en la nube: entiende a los que hablan rápido o se pisan"),
+    ("Entender voces", "Whisper en tu PC", "En la nube: entiende aunque hablen rápido o se pisen"),
     ("Idiomas", "Uno por frase", "Más de 60, y mezclados en la misma frase (\"hagamos pvp\")"),
     ("Voces que hablan por vos", "Las de tu PC", "Naturales y con personalidad (hay acento argentino)"),
     ("Tu voz traducida", "Suena cuando está lista", "Empieza a sonar en ~0,35 s"),
     ("Tu procesador", "Trabaja para la voz", "Queda libre para Roblox"),
-    ("Costo", "Gratis", "Por uso: ~0,35 US$ por hora de voz (200 US$ gratis al empezar)"),
+    ("Costo", "Gratis", "Pagás lo que usás: unos 0,35 US$ por hora de voz, y arrancás con 200 US$ gratis"),
 )
-INTRO = ("La mejor experiencia: entiende a todos (aunque hablen rápido o mezclen idiomas) y habla por vos con voces "
-         "naturales. La traducción sigue con tu suscripción de Claude.")
-INTRO_WITHOUT_CLAUDE = ("La mejor experiencia: entiende a todos y habla por vos con voces naturales. Y como todavía no "
-                        "tenés Claude, también traduce, con los créditos de Deepgram.")
-SAVINGS = ("Solo se manda cuando alguien habla: los silencios no se pagan.",
-           "Las voces lejanas (fuera del radio de escucha) y los ruidos no se mandan.",
+INTRO = (("Entiende a todos, aunque hablen rápido o mezclen idiomas, y habla por vos con voces que suenan de "
+          "verdad. La traducción sigue siendo con tu cuenta de Claude."))
+INTRO_WITHOUT_CLAUDE = (("Entiende a todos y habla por vos con voces que suenan de verdad. Y como todavía no "
+                         "tenés Claude, también traduce, con los créditos de Deepgram."))
+SAVINGS = ("Solo se manda cuando alguien habla. Los silencios no se pagan.",
+           "Las voces lejanas y los ruidos no se mandan.",
            "Fuera del juego no se escucha nada.",
-           "Una frase que ya se dijo (\"gg\", \"gracias\") no se vuelve a pagar.",
+           "Lo que ya se dijo una vez («gg», «gracias») no se vuelve a pagar.",
            "Quién habla lo reconoce tu PC, gratis.")
 SAMPLE = {"es": "¡Buenísimo! Esperame en la torre, ya voy.", "en": "Nice! Wait for me at the tower, I'm coming.",
           "pt": "Boa! Me espera na torre, já tô indo.", "fr": "Trop bien ! Attends-moi à la tour, j'arrive.",
@@ -87,7 +87,7 @@ class ProPanel:
         self.switch.pack(side="left")
         self.plan_label = ttk.Label(row, text="", font="SunValleyCaptionFont", foreground=colors["muted"])
         self.plan_label.pack(side="right")
-        widgets.muted(hero, "En el juego: Ctrl+P en la barra para escribir cambia entre Basic y Pro al instante.")
+        widgets.muted(hero, "En el juego, Ctrl+P en la barra para escribir te pasa de Basic a Pro al toque.")
         # Sin Claude: Pro es lo que traduce (con créditos), así que Basic queda bloqueado hasta que conectes Claude.
         self.no_claude = ttk.Frame(hero)
         row = ttk.Frame(self.no_claude)
@@ -121,8 +121,9 @@ class ProPanel:
             _gold(ttk.Label(grid, text=cloud, font="SunValleyCaptionFont", foreground=gold, wraplength=170,
                             justify="left")).grid(row=index, column=2, sticky="nw", padx=(10, 0), pady=(8, 0))
 
-        box = self._pro_only(page, "Las voces de Pro", "Hablan por vos (tu voz traducida y Ctrl+Enter). En los idiomas "
-                                                     "que la nube no tiene (portugués…), la voz de tu PC.")
+        box = self._pro_only(page, "Las voces de Pro", "Hablan por vos cuando traducís tu voz o usás "
+                                                       "Ctrl+Enter. En los idiomas que la nube no tiene, como "
+                                                       "el portugués, habla la voz de tu PC.")
         row = widgets.label_row(box, "Personalidad")
         widgets.segmented(row, self.personality_var, PERSONALITIES, self._change_personality).pack(side="right")
         row = ttk.Frame(box)
@@ -133,11 +134,11 @@ class ProPanel:
         self.try_button.pack(side="right")
         self.try_state = widgets.muted(box, "")
 
-        box = widgets.card(page, "Tu clave de Deepgram", "Pro usa tu propia cuenta de Deepgram (el servicio de la "
-                                                          "nube): pagás solo lo que usás.")
-        widgets.muted(box, "1. Creá tu cuenta (gratis, trae 200 US$ de regalo). 2. En Deepgram: «API Keys» → «Create "
-                           "a New API Key» → copiala. 3. Pegala acá. Se guarda cifrada: solo tu usuario de Windows la "
-                           "puede leer.")
+        box = widgets.card(page, "Tu clave de Deepgram", "Pro usa tu propia cuenta de Deepgram, así que pagás "
+                                                         "solo lo que usás.")
+        widgets.muted(box, "1. Creá tu cuenta (es gratis y te regalan 200 US$). 2. En Deepgram, entrá a «API "
+                           "Keys», tocá «Create a New API Key» y copiala. 3. Pegala acá. Queda guardada "
+                           "cifrada y solo tu usuario de Windows la puede leer.")
         row = ttk.Frame(box)
         row.pack(fill="x", pady=(8, 0))
         ttk.Button(row, text="Crear cuenta en Deepgram", command=lambda: webbrowser.open(pro.SIGNUP_URL)).pack(
@@ -158,10 +159,10 @@ class ProPanel:
             widgets.muted(box, f"• {line}")
         ttk.Checkbutton(box, text="Quién habla según la nube (+0,12 US$ por hora)", variable=self.diarize_var,
                         command=self._toggle_diarize, style="Switch.TCheckbutton").pack(anchor="w", pady=(10, 0))
-        widgets.muted(box, "Más preciso cuando varios hablan a la vez. Sin esto lo hace tu PC, gratis.")
+        widgets.muted(box, "Distingue mejor quién habla cuando hablan varios. Si lo apagás, lo hace tu PC gratis.")
 
-        box = self._pro_only(page, "Comparar con mi voz", "Decí una frase: ves lo que entiende tu PC y lo que entiende la "
-                                                       "nube, y cuánto tarda cada uno.")
+        box = self._pro_only(page, "Comparar con mi voz", "Decí una frase y comparás qué entiende tu PC, qué "
+                                                          "entiende la nube y cuánto tarda cada uno.")
         row = ttk.Frame(box)
         row.pack(fill="x")
         self.compare_button = ttk.Button(row, text="Hablar", command=self._compare, style="Accent.TButton")
@@ -285,11 +286,16 @@ class ProPanel:
             self.app.voice_panel.pro_changed()
 
     def _change_personality(self) -> None:
-        self.config.personality = self.personality_var.get()
-        save_setting("pro", "personality", self.config.personality)
+        self.set_personality(self.personality_var.get())
+        self._try_voice()
+
+    def set_personality(self, personality: str) -> None:
+        """Alegre, canchera o tranquila (desde esta página o desde la barra del juego)."""
+        self.config.personality = personality
+        self.personality_var.set(personality)
+        save_setting("pro", "personality", personality)
         if pro.active():
             self.app.voice_panel.pro_changed()
-        self._try_voice()
 
     # ------------------------------------------------------------ probar la voz de Pro
     def _try_voice(self) -> None:

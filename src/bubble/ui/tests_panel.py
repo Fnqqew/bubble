@@ -61,8 +61,8 @@ class TestsPanel:
         colors = widgets.palette()
         my_language = self.app.config.user.language
 
-        box = widgets.card(page, "Tu micrófono", "Leé la frase en voz alta, como cuando jugás. Te digo si tu micrófono "
-                                                 "va a andar bien para traducir tu voz.")
+        box = widgets.card(page, "Tu micrófono", "Leé la frase en voz alta, como cuando jugás, y te digo si tu "
+                                                 "micrófono anda bien.")
         ttk.Label(box, text=f"«{sentence_for(my_language)}»", font="SunValleyBodyStrongFont", wraplength=440,
                   justify="left").pack(anchor="w")
         row = ttk.Frame(box)
@@ -72,8 +72,9 @@ class TestsPanel:
         self.mic_rating.pack(side="left", padx=12)
         self.mic_details = widgets.muted(box, "")
 
-        box = widgets.card(page, "Tu voz traducida", "Tocá «Hablar», decí algo como en el juego y hacé una pausa. Ves "
-                                                     "qué entendió, cómo lo tradujo y cuánto tardó cada paso.")
+        box = widgets.card(page, "Tu voz traducida", "Tocá «Hablar», decí algo como en el juego y hacé una "
+                                                     "pausa. Vas a ver qué entendí, cómo lo traduje y cuánto "
+                                                     "tardé.")
         row = ttk.Frame(box)
         row.pack(fill="x")
         self._button(row, "Hablar", self._test_my_voice, accent=True).pack(side="left")
@@ -87,10 +88,10 @@ class TestsPanel:
         row.pack(fill="x", pady=(6, 0))
         self._button(row, "▶ Escuchar", self._play_last).pack(side="left")
         self._button(row, "✓ Guardar (aprende esto)", self._approve_mine).pack(side="left", padx=8)
-        widgets.muted(box, "Si entendió o tradujo algo mal, corregilo arriba y guardalo: aprende tus palabras y cómo "
-                           "querés sonar. Las frases que ya dijiste salen al instante la próxima vez.")
+        widgets.muted(box, "Si entendí o traduje algo mal, corregilo arriba y guardalo. Así aprendo tus "
+                           "palabras y cómo querés sonar, y lo que ya dijiste sale al toque la próxima vez.")
 
-        box = widgets.card(page, "Chat a voz", "Como Ctrl+Enter en la barra del juego: escribís y lo dice en voz.")
+        box = widgets.card(page, "Chat a voz", "Como Ctrl+Enter en el juego: escribís y lo digo en voz.")
         self.chat_text = tk.StringVar(value="dale, esperame en la torre que ya voy")
         entry = ttk.Entry(box, textvariable=self.chat_text)
         entry.pack(fill="x")
@@ -103,8 +104,8 @@ class TestsPanel:
         self._field(box, "Dice", self.chat_said)
         self.chat_info = widgets.muted(box, "")
 
-        box = widgets.card(page, "Lo que te dicen", "Una voz sintética dice esta frase como si fuera otro jugador: "
-                                                    "ves qué entendió y el subtítulo en tu idioma.")
+        box = widgets.card(page, "Lo que te dicen", "Una voz dice esta frase como si fuera otro jugador, y ves "
+                                                    "qué entendí y el subtítulo en tu idioma.")
         self.them_text = tk.StringVar(value=THEM_SAMPLE)
         ttk.Entry(box, textvariable=self.them_text).pack(fill="x")
         row = ttk.Frame(box)
@@ -116,11 +117,11 @@ class TestsPanel:
 
         self.equipment = EquipmentCard(self.app, page)
 
-        box = self.pc_box = widgets.card(page, "Cuánto tarda en tu PC", "Mide de verdad cuánto tarda cada paso de "
-                                                                        "tu voz traducida con Basic (en tu PC).")
+        box = self.pc_box = widgets.card(page, "Cuánto tarda en tu PC", "Mide cuánto tarda cada paso de tu voz "
+                                                                        "traducida con Basic, en tu PC.")
         # Con Pro, esto (Basic) queda difuminado: la voz va por la nube (se prueba en ✦ Pro › Comparar con mi voz).
-        self.pc_note = ttk.Label(box.master, text="🔒  Mide Basic (tu PC) · con Pro, la voz va por la nube: probala en "
-                                                  "✦ Pro › «Comparar con mi voz»", font="SunValleyCaptionFont",
+        self.pc_note = ttk.Label(box.master, text="🔒  Esto mide Basic. Con Pro la voz va por la nube: probala "
+                                                  "en la página Pro, en «Comparar con mi voz»", font="SunValleyCaptionFont",
                                  foreground=colors["muted"])
         row = ttk.Frame(box)
         row.pack(fill="x")
@@ -169,7 +170,7 @@ class TestsPanel:
         if self._busy:
             return
         if needs_claude and not (self.app.ready and self.app.translator is not None):
-            self.app._set_status("Esperá a que Bubble se conecte con Claude (arriba a la derecha).")
+            self.app._set_status("Esperá a que me conecte con Claude (lo ves arriba a la derecha).")
             return
         if needs_claude:
             self.voice._open_voice_lane()  # el carril rápido de la voz (si ya estaba abierto, no hace nada)
@@ -407,7 +408,7 @@ class TestsPanel:
                 measure()
             except Exception as exc:  # noqa: BLE001 - se muestra en la tarjeta (antes quedaba «Midiendo…»)
                 log.exception("Falló la medición de la PC")
-                failed(f"Algo falló al medir ({exc}). Probá de nuevo; si sigue, contalo en Soporte.")
+                failed(f"Algo falló al medir ({exc}). Probá otra vez y, si sigue, contalo en Soporte.")
 
         def measure() -> None:
             final = self.voice.my_asr()
@@ -417,8 +418,8 @@ class TestsPanel:
             sample = voices.synthesize("che, ¿alguien viene conmigo a la torre? esperame que ya voy", "es") or \
                 voices.synthesize("hey, is anyone coming with me to the tower? wait for me", "en")
             if sample is None:
-                failed("No hay ninguna voz sintética en esta PC para armar la frase de prueba. Agregá una voz en "
-                       "Configuración de Windows › Hora e idioma › Voz (en español o en inglés) y probá de nuevo.")
+                failed("No hay ninguna voz instalada para decir la frase de prueba. Agregá una en Windows, en "
+                       "Hora e idioma › Voz (en español o en inglés), y probá otra vez.")
                 return
             count = int(len(sample.audio) * 16000 / sample.sample_rate)
             audio = np.interp(np.linspace(0, len(sample.audio) - 1, count), np.arange(len(sample.audio)),

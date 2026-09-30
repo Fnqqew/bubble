@@ -244,7 +244,7 @@ def test_a_git_copy_updates_with_git_pull(tmp_path):
     assert release.version == "3.4.0" and "te avisa" in release.notes  # las novedades: el mensaje de esa versión
 
     (install / "Iniciar.bat").write_text("cambio mío", encoding="utf-8")
-    with pytest.raises(update.UpdateError, match="cambios propios"):
+    with pytest.raises(update.UpdateError, match="cambios sin guardar"):
         update.prepare(release, lambda *a: None, folder=install)  # nunca pisa lo que cambiaste
     git(install, "checkout", "--", "Iniciar.bat")
     assert update_helper.git_pull(install) is False

@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw
 
 from .. import pro
 from ..geometry import Rect
+from ..i18n import t
 from .inline import SUPERSAMPLE, _font
 
 HOLD_MS = 1600
@@ -65,7 +66,7 @@ class Toast:
             if job:
                 self.root.after_cancel(job)
         self._job = self._fading = None
-        image = render_toast(text, gold)
+        image = render_toast(t(text), gold)
         if area is None:
             width, height = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
             area = Rect(0, 0, width, height)

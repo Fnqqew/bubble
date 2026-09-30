@@ -88,17 +88,17 @@ class VoicePanel:
     # ------------------------------------------------------------ página «Voz»
     def build_page(self, page) -> None:
         box = widgets.card(page, "Lo que te dicen")
-        widgets.switch_row(box, "listen", "Subtítulos de voz", "Quién habla (Voz 1, Voz 2…) y qué dice, en tu idioma. "
-                           "Lo que ya está en tu idioma no se subtitula.", self.subtitles_var, self._toggle_subtitles)
+        widgets.switch_row(box, "listen", "Subtítulos de voz", "Ves quién habla y qué dice, en tu idioma. Lo "
+                                                               "que ya está en tu idioma no lo subtitulo.", self.subtitles_var, self._toggle_subtitles)
         from ..voice.hearing import RADIUS_NAMES
 
         self.earshot_box = ttk.Frame(box)  # (se difumina con los subtítulos apagados: ver _update_locks)
         self.earshot_box.pack(fill="x")
         row = widgets.label_row(self.earshot_box, "Radio de escucha", pady=(12, 2))
         widgets.segmented(row, self.earshot_var, RADIUS_NAMES, self._change_earshot).pack(side="right")
-        widgets.muted(self.earshot_box, "Los que están lejos se oyen más bajo: con «Cerca» se traducen solo los de al "
-                                        "lado. Los ruidos (música, explosiones, risas, balbuceos) no se traducen "
-                                        "nunca.")
+        widgets.muted(self.earshot_box, "Los que están lejos se escuchan más bajo. Con «Cerca» traduzco solo a "
+                                        "los que tenés al lado. La música, las explosiones y las risas no se "
+                                        "traducen.")
 
         box = widgets.card(page, "Tu voz para los demás")
         widgets.switch_row(box, "mic", "Traducir mi voz", "Hablás en tu idioma y te escuchan en el suyo.",
@@ -121,9 +121,9 @@ class VoicePanel:
         self.ptt_label = ttk.Label(row, text=win32.describe_binding(self.config.push_to_talk),
                                    font="SunValleyBodyStrongFont")
         self.ptt_label.pack(side="right", padx=10)
-        widgets.muted(box, "Tocá el botón y hablá: cuando terminás, se traduce y se dice (o mantenelo apretado "
-                           "mientras hablás). En modo directo no hace falta botón: escucha solo mientras estás en "
-                           "Roblox. Y en la barra para escribir, Ctrl+Enter dice en voz lo que escribiste.")
+        widgets.muted(box, "Tocá el botón y hablá. Cuando terminás, lo traduzco y lo digo (también podés "
+                           "mantenerlo apretado mientras hablás). En modo directo no hace falta tocar nada: te "
+                           "escucho mientras estás en Roblox.")
         self.cable_warning = ttk.Label(box, text="", foreground=widgets.palette()["warn"], wraplength=440,
                                        justify="left")
         self.cable_warning.pack(anchor="w", pady=(8, 0))
@@ -142,9 +142,9 @@ class VoicePanel:
                         style="Switch.TCheckbutton").pack(side="left")
         ttk.Button(row, text="Probar voz", command=self._try_voice).pack(side="right")
 
-        box = widgets.card(page, "Micrófono", "Como Soundpad: Bubble habla por un micrófono virtual que suma tu voz "
-                                              "real y la traducida. Abrí Bubble antes que Roblox y Roblox lo toma "
-                                              "solo.")
+        box = widgets.card(page, "Micrófono", "Como Soundpad: hablo por un micrófono virtual que junta tu voz "
+                                              "y la traducida. Si abrís Bubble antes que Roblox, Roblox lo "
+                                              "toma solo.")
         row = widgets.label_row(box, "Tu micrófono")
         self.mic_box = ttk.Combobox(row, state="readonly", width=30, values=["Buscando…"])
         self.mic_box.set(self.config.mic or "El predeterminado de Windows")
@@ -220,29 +220,27 @@ class VoicePanel:
         if cable != self._cable_ok:
             self._cable_ok = cable
             self._update_locks()
-        self.cable_warning.configure(text="" if cable else "⚠ Falta el micrófono virtual: sin él, los demás no "
-                                                              "escuchan tu voz traducida. Instalalo abajo (1 minuto).")
+        self.cable_warning.configure(text="" if cable else ("Falta el micrófono virtual, y sin él los demás no "
+                                                            "escuchan tu voz traducida. Instalalo acá abajo, "
+                                                            "tarda un minuto."))
         if wrong:
-            self.windows_warning.configure(text=f"⚠ Al instalarse, el micrófono virtual quedó como {' y '.join(wrong)} "
-                                                f"de Windows: Discord y los demás programas no te escuchan.")
+            self.windows_warning.configure(text=f"Al instalarse, el micrófono virtual quedó como {' y '.join(wrong)} de "
+                                                "Windows, y Discord y los demás no te escuchan.")
             self.windows_row.pack(fill="x", pady=(8, 0))
         else:
             self.windows_row.pack_forget()
         if cable:
             self.cable_label.configure(text="Instalado ✓", foreground=colors["good"])
             self.cable_button.pack_forget()
-            self.cable_help.configure(text="Listo, no hay que configurar nada: mientras Bubble está abierto, el "
-                                           "micrófono virtual es tu micrófono de Windows y Bubble le pasa tu voz real "
-                                           "(te escuchan igual, más la traducida). Al cerrar Bubble vuelve el tuyo. "
-                                           "Abrí Bubble antes que Roblox: Roblox elige su micrófono al abrirse. Si ya "
-                                           "estaba abierto, te aviso y lo elegís una vez (Esc → Configuración → "
-                                           "Dispositivo de entrada → CABLE Output). En Roblox tenés que estar "
-                                           "desmuteado.")
+            self.cable_help.configure(text="Listo, no hay que configurar nada. Mientras Bubble está abierto, "
+                                           "los demás te escuchan por el micrófono virtual, con tu voz y la "
+                                           "traducida. Cuando lo cerrás, vuelve el tuyo. Abrí Bubble antes que "
+                                           "Roblox y acordate de tener el micrófono prendido en el juego.")
         else:
             self.cable_label.configure(text="No instalado", foreground=colors["warn"])
             self.cable_button.pack(side="right", padx=(0, 10))
-            self.cable_help.configure(text="Sin micrófono virtual, tu voz traducida suena solo en tus auriculares "
-                                           "(sirve para probar). Instalarlo toma un minuto.")
+            self.cable_help.configure(text="Sin el micrófono virtual, tu voz traducida suena solo en tus "
+                                           "auriculares. Instalarlo tarda un minuto.")
 
     # ------------------------------------------------------------ arranque (cuando la app ya tiene Claude listo)
     def early_start(self) -> None:
@@ -263,8 +261,8 @@ class VoicePanel:
         if load_state().get("voice_loading"):
             # La última vez Bubble se cerró mientras cargaba la voz: esta vez no se carga sola, así la ventana abre.
             update_state(voice_loading=False)
-            self._set_status("La última vez Bubble se cerró mientras preparaba la voz, así que quedó en pausa. "
-                             "Para intentar de nuevo, apagá y prendé el interruptor.")
+            self._set_status("La última vez Bubble se cerró mientras preparaba la voz, así que la dejé en "
+                             "pausa. Para probar de nuevo, apagá y prendé el interruptor.")
             return
         self._prepare(self._apply)
 
@@ -313,7 +311,8 @@ class VoicePanel:
                     # recién si hace falta (arranca al instante y no ocupa memoria).
                     models = (LazyWhisper(final, 4), LazyWhisper(quick, 2) if quick else None, SpeakerTracker())
                 else:
-                    self._set_status("Preparando la voz… La primera vez se descarga (hasta ~500 MB) y queda en tu PC.")
+                    self._set_status("Preparando la voz… La primera vez se descarga (puede ser medio giga) y "
+                                     "queda en tu PC.")
                     update_state(voice_loading=True)  # si el proceso se cae acá, el próximo arranque no la carga sola
                     models = (FastWhisper(final, 4), FastWhisper(quick, 2) if quick else None, SpeakerTracker())
                     update_state(voice_loading=False)
@@ -481,8 +480,8 @@ class VoicePanel:
                 self.speaker.on_turn = lambda turn: self.profile.note_times(turn.times)
             self.speaker.start()
             if not self.out.output.is_cable:
-                self._set_status("Tu voz traducida suena en tus auriculares. Para que la escuchen los demás, instalá "
-                                 "el micrófono virtual (abajo, en «Micrófono»).")
+                self._set_status("Tu voz traducida suena en tus auriculares. Para que la escuchen los demás, "
+                                 "instalá el micrófono virtual acá abajo.")
             else:
                 self._set_status("")
         elif self.speaker:
@@ -523,11 +522,17 @@ class VoicePanel:
             self._toggled(True)
 
     def _change_voice(self) -> None:
-        self.config.gender = self.gender_var.get()
-        save_setting("voice", "gender", self.config.gender)
-        if self.voices:
-            self.voices.gender = self.config.gender
+        self.set_gender(self.gender_var.get())
         self._try_voice()  # se escucha cómo suena (y queda cargada)
+
+    def set_gender(self, gender: str) -> None:
+        """Voz de mujer u hombre (desde esta página o desde la barra del juego)."""
+        self.config.gender = gender
+        self.gender_var.set(gender)
+        save_setting("voice", "gender", gender)
+        if self.voices:
+            self.voices.gender = gender
+        self.warm_up()
 
     def _change_speed(self) -> None:
         from .app_view import later
@@ -668,7 +673,7 @@ class VoicePanel:
                 self._set_status("Listo: Windows vuelve a usar " + " y ".join(fixed) + "." if fixed
                                  else "Windows ya usaba tus dispositivos de siempre.")
             except Exception as exc:  # noqa: BLE001
-                self._set_status(f"No pude cambiarlo: {exc}. Hacelo en Configuración → Sonido de Windows.")
+                self._set_status(f"No lo pude cambiar ({exc}). Hacelo en la configuración de sonido de Windows.")
             self._scan_devices()
 
         threading.Thread(target=work, name="bubble-arreglar-windows", daemon=True).start()
@@ -802,7 +807,7 @@ class VoicePanel:
             self._set_status(f"Bubble Pro: {error}. Sigo con el reconocimiento de tu PC.")
             self.app.events.put(("call", lambda: self.app.set_pro(False, reason=str(error))))
         else:
-            self._set_status(f"Bubble Pro: la nube no respondió ({error}). Mientras tanto uso tu PC.")
+            self._set_status(f"La nube no respondió ({error}). Mientras tanto sigo con tu PC.")
 
     def pro_changed(self) -> None:
         """(hilo de la ventana) Se prendió o se apagó Bubble Pro, o cambió un ajuste suyo: la escucha y tu voz se
@@ -866,11 +871,11 @@ class VoicePanel:
             if warned == pid:
                 continue
             warned = pid
-            self._set_status(f"Roblox está usando «{name}» (se abrió antes que Bubble), así que no escuchan tu voz "
-                             "traducida. En Roblox: Esc → Configuración → Dispositivo de entrada → «CABLE Output». O "
-                             "cerrá y volvé a abrir Roblox.")
-            self.app.events.put(("voice_notice", "Roblox no está usando el micrófono de Bubble: Esc → Configuración "
-                                                 "→ Dispositivo de entrada → CABLE Output"))
+            self._set_status(f"Roblox está usando «{name}», así que no escuchan tu voz traducida. En Roblox apretá "
+                             "Esc, andá a Configuración y en «Dispositivo de entrada» elegí «CABLE Output». O "
+                             "cerrá Roblox y abrilo de nuevo.")
+            self.app.events.put(("voice_notice", ("Roblox no usa el micrófono de Bubble. En Configuración, "
+                                                  "elegí «CABLE Output» como entrada")))
 
     def notice(self, text: str) -> None:
         """(hilo de la ventana) Un aviso en el juego, donde van los subtítulos."""
@@ -904,8 +909,8 @@ class VoicePanel:
                 from ..roblox_mic import roblox_muted
 
                 if roblox_muted():
-                    self._set_status("Estás muteado en Roblox: activá el micrófono (arriba a la izquierda) para que "
-                                     "te escuchen.")
+                    self._set_status("Estás muteado en Roblox. Prendé el micrófono (arriba a la izquierda) "
+                                     "para que te escuchen.")
             except Exception:  # noqa: BLE001 - es solo un aviso
                 pass
 
@@ -917,8 +922,8 @@ class VoicePanel:
             try:
                 out = self._ensure_out()
                 if not out.output.is_cable:
-                    self._set_status("Se escuchó solo en tus auriculares: para que llegue a Roblox, instalá el "
-                                     "micrófono virtual (página «Voz»).")
+                    self._set_status("Sonó solo en tus auriculares. Para que llegue a Roblox, instalá el "
+                                     "micrófono virtual en la página Voz.")
                 for language, text in pairs:
                     self.app.events.put(("voice_subtitle", (original, text, language)))
                     if not out.say(text, language):

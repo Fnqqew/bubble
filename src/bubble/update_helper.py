@@ -107,7 +107,8 @@ def run(plan: dict, say=print) -> dict:
     except OSError:
         pass
     say("✓ ¡Listo! Abriendo Bubble…" if result["ok"] else f"No se pudo actualizar: {result['error']}")
-    subprocess.Popen(plan["relaunch"], cwd=str(project), close_fds=True, creationflags=0x00000008)  # DETACHED
+    if plan.get("reopen", True):  # (actualizando al cerrar Bubble, no se vuelve a abrir)
+        subprocess.Popen(plan["relaunch"], cwd=str(project), close_fds=True, creationflags=0x00000008)  # DETACHED
     return result
 
 

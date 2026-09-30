@@ -105,8 +105,8 @@ def parts(project: Path = PROJECT_DIR) -> list[Part]:
         Part("modelos", "Modelos y voces descargados", f"{human(size_of(models))} en tu disco.",
              [p for p in models if p.exists()]),
         Part("accesos", "Acceso directo", "El de tu escritorio.", [link] if link and link.exists() else []),
-        Part("cable", "Micrófono virtual (VB-Cable)", "El controlador que instaló Bubble: se saca de Windows como si "
-             "nunca hubiera estado (Windows pide permiso de administrador).", [], selected=cable, available=cable),
+        Part("cable", "Micrófono virtual (VB-Cable)", "El micrófono que instaló Bubble. Se saca de Windows del "
+                                                      "todo (te va a pedir permiso).", [], selected=cable, available=cable),
         Part("programa", "La carpeta de Bubble",
              str(project) if removable else "Es una carpeta de desarrollo (git): no se borra." if development
              else "Bubble no está en una carpeta propia: no se borra.",
@@ -188,12 +188,11 @@ def _uninstall_cable() -> str:
 
     setup = _cable_setup()
     if setup is None:
-        return ("Micrófono virtual: desinstalalo desde Configuración de Windows › Aplicaciones "
-                "(VB-Audio Virtual Cable).")
+        return ("El micrófono virtual lo sacás desde Windows, en Aplicaciones (se llama VB-Audio Virtual Cable).")
     result = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(setup), "-u -h", str(setup.parent), 0)
     if result <= 32:
-        return "Micrófono virtual: no se sacó (se canceló el permiso de administrador)."
-    return "Micrófono virtual: sacado de Windows (si Windows lo pide, reiniciá la PC)."
+        return "El micrófono virtual quedó instalado porque se canceló el permiso."
+    return "Micrófono virtual sacado. Si Windows lo pide, reiniciá la PC."
 
 
 def _delete_after_exit(paths: list[Path]) -> None:

@@ -27,9 +27,9 @@ inglés, portugués, alemán, francés e hindi; frases del chat de voz; mensajes
 | **Haiku** (pensando antes de responder) | 0,006 US$ | respuestas larguísimas | ~24 s | ❌ se va por las ramas |
 | **Haiku sin pensar** (la voz y las burbujas) | menos que Sonnet | ~6.000 del caché + ~20 de respuesta | ~0,8 s | ✅ para la voz: 2,5 veces más rápido que Opus |
 
-Desde la versión 2.4, **la voz y las burbujas van por Haiku, sin pensar antes de responder** (medido el 28/9/2026:
-tu voz se traduce en ~0,75 s en vez de ~1,9 s con Opus, y los subtítulos en ~1 s en vez de ~1,6 s, casi con la misma
-calidad). El chat escrito sigue con Opus, que traduce mejor la jerga. Así además se gasta menos.
+**La voz y las burbujas van por Haiku**, sin pensar antes de responder: tu voz se traduce en menos de un segundo
+(con Opus tardaba casi dos) y la calidad es casi la misma. El chat escrito sigue con Opus, que entiende mejor la
+jerga.
 
 Casi todo lo que se manda son las instrucciones de Bubble, que quedan en el **caché** de Claude: se leen de nuevo en
 cada pedido a una fracción del costo. La respuesta es corta (la traducción).
@@ -48,6 +48,9 @@ Depende de cuántos mensajes en otro idioma lleguen. Con Opus:
 | Muy activo | uno cada 6 s (~600 por hora) | ~2 US$ por hora |
 
 El chat de voz suma un pedido por cada frase que no está en tu idioma; lo que escribís vos, uno por mensaje.
+
+**Bubble en tu idioma.** Si tu idioma no viene listo, la primera vez Bubble traduce su propia ventana con tu Claude
+(unos 850 textos, en tandas, con Sonnet). Pasa una sola vez y queda guardado.
 
 ## ¿Cuánto aguanta cada plan?
 

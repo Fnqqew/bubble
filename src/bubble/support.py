@@ -129,7 +129,7 @@ def send(report: Report, endpoint: str = ENDPOINT, timeout: float = 30.0) -> str
         if response.status >= 400:
             raise OSError(f"el servicio respondió {response.status}")
     if "activat" in page or "confirm" in page:
-        return "Enviado. Es el primer mensaje: primero hay que confirmar el formulario desde el mail."
+        return "Enviado. Como es el primer mensaje, hay que confirmar el formulario desde el mail."
     return "¡Enviado! Gracias: te van a leer."
 
 

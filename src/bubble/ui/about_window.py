@@ -25,9 +25,10 @@ CREDITS = (
     ("Sun Valley (sv-ttk)", "el diseño de la ventana, al estilo de Windows 11"),
     ("Y además", "OCR de Windows, lingua, NumPy, SciPy, Pillow, mss, dxcam, soundcard y FormSubmit"),
 )
-PRIVACY = ("Todo corre en tu PC. Lo que se traduce va a Claude con tu cuenta; con Bubble Pro, la voz va a Deepgram con "
-           "tu clave. Una vez por día se mide tu internet (con un archivo de prueba de Cloudflare). Bubble no tiene "
-           "servidores propios ni junta datos: al creador solo le llega lo que vos mandes desde Soporte.")
+PRIVACY = (("Bubble corre en tu PC. Lo que hay que traducir va a Claude con tu cuenta, y con Bubble Pro la voz "
+            "va a Deepgram con tu clave. Una vez por día mido tu internet con un archivo de prueba de "
+            "Cloudflare. No tengo servidores propios ni junto datos: al creador solo le llega lo que vos mandes "
+            "desde Soporte."))
 
 
 class AboutWindow:
@@ -48,8 +49,7 @@ class AboutWindow:
         plan = "✦ Pro" if pro.active() else "Basic"
         ttk.Label(texts, text=f"Versión {__version__} · {plan}", font="SunValleyCaptionFont",
                   foreground=colors["accent"]).pack(anchor="w")
-        widgets.muted(texts, "Traductor en tiempo real para Roblox: el chat, las burbujas y las voces, en los dos "
-                             "sentidos.", wrap=340, pady=(4, 0))
+        widgets.muted(texts, "Traductor para Roblox, en vivo: el chat, las burbujas y las voces, de ida y de vuelta.", wrap=340, pady=(4, 0))
 
         box = widgets.card(body, "Creado por", pady=(16, 0))
         ttk.Label(box, text=f"{AUTHOR} · @Fnqqew", font="SunValleyBodyStrongFont").pack(anchor="w")

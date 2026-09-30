@@ -18,7 +18,8 @@ from .live import Caption
 KEEP = 3  # frases a la vista
 MINE = -1  # "voz" de las frases que dijiste vos
 NOTICE = -2  # avisos de Bubble en el juego (ej. "Roblox está usando otro micrófono")
-SHOW_S = 7.0  # cuánto queda cada frase después de la última novedad
+SHOW_S = 7.0  # cuánto queda cada frase después de la última novedad (una larga, más: ver CaptionBoard.show_for)
+READ_CHARS_PER_S = 14  # lo que se alcanza a leer por segundo
 
 
 @dataclass
@@ -143,6 +144,9 @@ class CaptionBoard:
         self._changed()
 
     def notice(self, text: str, seconds: float = 14.0) -> None:
+        from ..i18n import t
+
+        text = t(text)
         """Un aviso de Bubble en el juego, como un subtítulo."""
         with self._lock:
             self._own_ids -= 1
@@ -155,10 +159,15 @@ class CaptionBoard:
     def _changed(self) -> None:
         self.on_change()
 
+    def show_for(self, line: Line) -> float:
+        """Cuánto queda a la vista: lo de siempre, o lo que tarda en leerse si es larga (antes, una traducción larga
+        se iba antes de terminar de leerla)."""
+        return max(self.show_s, len(line.translation or line.original) / READ_CHARS_PER_S + 2.0)
+
     def visible(self, now: float | None = None) -> list[Line]:
         now = time.monotonic() if now is None else now
         with self._lock:
-            self.lines = [line for line in self.lines if now - line.updated < self.show_s]
+            self.lines = [line for line in self.lines if now - line.updated < self.show_for(line)]
             return [Line(**vars(line)) for line in self.lines]
 
 

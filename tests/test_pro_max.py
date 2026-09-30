@@ -98,8 +98,10 @@ def test_each_language_gets_a_voice_with_personality():
 
     assert voice_name("es-AR") == "aura-2-antonia-es"  # la argentina
     assert voice_name("es-AR", "masculina") == "aura-2-aquila-es"
-    assert voice_name("en", "femenina", "alegre") == "aura-2-thalia-en"
-    assert voice_name("en-GB", "masculina") == "aura-2-draco-en"
+    assert voice_name("en", "femenina", "alegre") == "flux-heather-en"  # en inglés, las voces Flux
+    assert voice_name("en-GB", "masculina") == "flux-kit-en"
+    assert voice_name("en", "femenina", "alegre", flux=False) == "aura-2-thalia-en"
+    assert voice_name("en-GB", "masculina", flux=False) == "aura-2-draco-en"
     assert voice_name("ja", "masculina") == "aura-2-ebisu-ja"
     assert voice_name("es-MX", "femenina", "tranquila") == "aura-2-estrella-es"  # todas las de Deepgram, por zona
     assert voice_name("es-ES", "masculina", "tranquila") == "aura-2-nestor-es"
@@ -156,7 +158,7 @@ def test_cloud_voices_are_cached_and_fall_back_to_your_pc(monkeypatch):
     again = voices.synthesize("gg", "en")
     assert first.sample_rate == 24000 and len(first.audio) == 2400
     assert len(fake.calls) == 1 and np.allclose(first.audio, again.audio)  # "gg" otra vez no se paga
-    assert "speed=" in fake.calls[0] and "aura-2-andromeda-en" in fake.calls[0]
+    assert "speed=" in fake.calls[0] and "flux-brooke-en" in fake.calls[0] and fake.calls[0].startswith("/v2/speak")
     assert voices.synthesize("obrigado", "pt") == "local"  # sin voz en la nube: la de tu PC
     assert voices.synthesize("ok", "en") is None and len(fake.calls) == 1  # prepararla no gasta
     fake.fail = True
@@ -468,3 +470,27 @@ def test_cloud_voice_does_not_stutter_when_the_network_hiccups():
     assert played == pytest.approx(3.0, abs=0.01)
     assert Output.device.gaps == 0  # antes: se quedaba sin audio en cada demora (entrecortado)
     assert Output.device.blocksizes == [int(rate * audio_io.STREAM_BUFFER_S)]
+
+
+def test_your_expression_reaches_the_english_voice_and_aura_takes_over_if_flux_fails(monkeypatch):
+    """Flux (inglés) tiene expresividad: gritando, animada; bajito, calma. Si Deepgram no la acepta, vuelve Aura."""
+    from bubble.cloud import speak
+    from bubble.cloud.errors import CloudError
+
+    fake = FakePool()
+    monkeypatch.setattr(speak, "pool", lambda timeout=0: fake)
+    voices = speak.CloudVoices("clave", Local())
+    voices.synthesize("we won", "en", style="shout")
+    voices.synthesize("we won", "en", style="soft")
+    assert "expressivity=2" in fake.calls[0] and "expressivity=-2" in fake.calls[1]
+
+    class Rejecting(FakePool):
+        def _check(self, path):
+            self.calls.append(path)
+            if path.startswith("/v2/"):
+                raise CloudError("Deepgram respondió 400")
+
+    rejecting = Rejecting()
+    monkeypatch.setattr(speak, "pool", lambda timeout=0: rejecting)
+    speech = speak.CloudVoices("clave", Local()).synthesize("wait for me", "en")
+    assert speech is not None and "aura-2-andromeda-en" in rejecting.calls[-1]

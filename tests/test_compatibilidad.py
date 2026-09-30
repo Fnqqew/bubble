@@ -48,7 +48,7 @@ def test_low_memory_uses_one_session_and_the_light_voice_model():
 @pytest.mark.parametrize("claude, fragment", [
     (system.Claude(), "Falta Claude Code"),
     (system.Claude(installed=True, logged_in=False), "sesión iniciada"),
-    (system.Claude(installed=True, logged_in=True, plan="free"), "gratuita"),
+    (system.Claude(installed=True, logged_in=True, plan="free"), "la gratis"),
 ])
 def test_claude_problems_are_explained(claude, fragment):
     assert any(fragment in text for text in levels(pc(claude=claude))["problema"])
@@ -80,7 +80,7 @@ def test_an_api_key_is_a_warning_because_it_would_charge_per_use():
 
 def test_windows_python_ocr_and_hardware_problems():
     assert any("2004" in text for text in levels(pc(build=18363))["problema"])
-    assert any("todo el sonido" in text for text in levels(pc(build=19045))["aviso"])  # Windows 10: sin audio por app
+    assert any("todo lo que suena" in text for text in levels(pc(build=19045))["aviso"])  # Windows 10: sin audio por app
     assert any("32 bits" in text for text in levels(pc(python_64bit=False))["problema"])
     assert any("Reconocimiento óptico" in text for text in levels(pc(ocr_languages=[]))["problema"])
     found = levels(pc(microphones=[], roblox="", threads=2, work_area=(1280, 680), scale=1.0))["aviso"]

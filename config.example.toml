@@ -14,6 +14,10 @@ outgoing_language = "auto"
 #   4 = Gamer: abreviaturas y jerga comunes de los jugadores de ese idioma
 #   5 = Jerga nativa: como escribe un pibe gamer de ese país
 tone = 3
+# En qué idioma se ve Bubble. "auto" = el de Windows. Ejemplos: "es", "en", "pt", "ja".
+ui_language = "auto"
+# Bajar e instalar solo las versiones nuevas, cuando no estás jugando.
+auto_update = false
 
 [translation]
 # Líneas recientes del chat que se mandan como contexto (mejora la precisión).

@@ -165,6 +165,7 @@ TONE_REMINDERS = {
 # Para decir en voz: variantes que se escriben distinto de como se dicen en el chat.
 SPOKEN_VARIANTS = {
     "hi": "casual spoken Hindi, written in Devanagari script (a Hindi voice will read it)",
+    "sr": "casual spoken Serbian, written in Latin script (the voice reads only Latin letters)",
 }
 
 

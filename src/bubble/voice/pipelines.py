@@ -301,7 +301,7 @@ class VoiceSpeaker:
     terminado, se traduce ya, sin esperar más silencio ni volver a leer el audio; si quedó a medias ("y…", "porque…"),
     se espera un poco más a que sigas."""
 
-    MAX_SECONDS = 20.0
+    MAX_SECONDS = 60.0  # (antes 20 s: si hablabas mucho, lo último no se traducía)
     TAP_S = 0.35  # soltarlo antes de esto es "tocarlo"
     PEEK_AFTER_S = 0.2  # a los 200 ms de silencio se lee lo dicho hasta ahí
     END_SILENCE_S = 0.8  # silencio que termina la frase si no se pudo leer

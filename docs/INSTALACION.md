@@ -21,9 +21,8 @@ No hace falta saber programar ni tener nada instalado de antemano: si te falta a
 - Si querés que te escuchen traducido: **auriculares con micrófono**.
 
 > [!IMPORTANT]
-> **🎙 Lo más importante: un buen micrófono.** Bubble entiende tu voz tan bien como la escucha. Un micrófono de
-> auriculares (gamer) o uno USB, cerca de la boca, hace toda la diferencia: el de la notebook o el de la webcam
-> agarran ruido y eco, y tu voz traducida sale peor. Probalo en Bubble: **Inicio → Probar mi micrófono**.
+> **Lo más importante es el micrófono.** Bubble te entiende tan bien como te escucha. Con uno de auriculares o uno
+> USB cerca de la boca, todo sale mucho mejor que con el de la notebook. Probalo en **Inicio → Probar mi micrófono**.
 
 <br>
 
@@ -96,6 +95,8 @@ Esta parte necesita que estés vos, porque es tu cuenta:
 
 Elegí tu idioma y abrí Roblox. Bubble encuentra el chat solo y traduce mientras jugás.
 
+Bubble se muestra en el idioma de tu Windows. Si preferís otro, cambialo en **Ajustes → Idioma de Bubble**.
+
 - **Abrí Bubble antes que Roblox.** Así Roblox ya usa el micrófono virtual cuando arranca. Si Roblox ya estaba
   abierto, Bubble te avisa qué tocar.
 - **Apagá la traducción automática de Roblox** (Esc → Configuración → *Traducción automática del chat*). Si no,
@@ -106,19 +107,8 @@ Elegí tu idioma y abrí Roblox. Bubble encuentra el chat solo y traduce mientra
 
 ## Bubble se adapta a tu PC
 
-Cada vez que abre, Bubble mira tu equipo y se acomoda solo, sin que toques nada:
-
-- **Memoria.** Con poca memoria abre menos sesiones de Claude y usa el reconocimiento de voz más liviano, para no
-  quitarle fluidez a Roblox.
-- **Procesador y placa de video.** Captura la pantalla con la placa de video si puede, y lee el chat más o menos
-  seguido según tu procesador.
-- **Pantalla.** La ventana toma el tamaño justo para tu pantalla y tu escala de Windows (100 %, 125 %, 150 %…).
-- **Micrófonos.** Encuentra el tuyo y el virtual, y te avisa si falta alguno.
-- **Tu cuenta de Claude.** Revisa que esté la sesión iniciada y que el plan sea Pro o Max.
-- **Internet.** Una vez por día mide qué tan rápido llegás a Claude y a la nube de Bubble Pro. Si tu conexión es
-  lenta, la voz arranca con un poquito más de colchón para no cortarse.
-
-Todo eso lo ves en **Pruebas → Tu equipo**, con avisos claros si algo impide que Bubble ande del todo.
+Cada vez que abre, Bubble mira tu memoria, tu procesador, tu pantalla, tus micrófonos y tu internet, y se acomoda
+solo para que Roblox no se trabe. Si algo le impide andar bien, te lo dice en **Pruebas → Tu equipo**.
 
 <br>
 
@@ -143,11 +133,12 @@ La guía completa, con cada parte de Bubble explicada, está en [GUIA.md](GUIA.m
 
 ## Cuando salga una versión nueva
 
-No tenés que volver a hacer nada de esto. Bubble te avisa solo cuando hay una versión nueva, te cuenta qué trae y te
-pregunta si actualizar **ahora** o **más tarde**. Si decís que sí, se cierra, se pone al día y vuelve a abrir en menos
-de un minuto. Tu configuración, tu voz y lo descargado quedan como están.
+No tenés que volver a hacer nada de esto. Cuando hay una versión nueva, Bubble te avisa y te pregunta si actualizar
+ahora o más tarde. Tarda menos de un minuto y no perdés nada de lo que configuraste. Nunca te pregunta en medio de
+una partida.
 
-Nunca te pregunta en medio de una partida, y si querés buscar vos: **Ajustes → Buscar actualizaciones**.
+Si no querés que te pregunte, prendé **Ajustes → Actualizar solo**: la versión nueva se baja sola y se instala cuando
+no estás jugando.
 
 <br>
 

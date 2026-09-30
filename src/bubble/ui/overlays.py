@@ -10,7 +10,7 @@ import zlib
 from dataclasses import dataclass
 from typing import Callable
 
-from .. import win32
+from .. import pro, win32
 from ..geometry import Rect
 from ..translate.base import TONE_NAMES, clamp_tone
 from ..translate.languages import DISPLAY_NAMES
@@ -167,6 +167,11 @@ class ComposeBar:
         self.on_toggle_plan: Callable[[], None] | None = None
         # Cambiaste el tono con ↑/↓: queda ese para la próxima (antes volvía al de Ajustes al reabrir la barra).
         self.on_tone: Callable[[int], None] | None = None
+        # La voz con la que se dice (Ctrl+Enter, tu voz): mujer u hombre, y con Pro su personalidad.
+        self.on_gender: Callable[[str], None] | None = None
+        self.on_personality: Callable[[str], None] | None = None
+        self.gender = "femenina"
+        self.personality = "canchera"
         self.targets: list[str] = []
         self.labels: dict[str, str] = {}
         self.index = 0
@@ -209,21 +214,36 @@ class ComposeBar:
 
         self.preview = tk.Label(body, font=("Segoe UI", 12), fg=self.PREVIEW, bg=self.BG, anchor="w", justify="left",
                                 wraplength=self.WIDTH - 40)
-        tk.Frame(body, bg=self.LINE, height=1).pack(fill="x", pady=(12, 0))
+        self.divider = tk.Frame(body, bg=self.LINE, height=1)
+        self.divider.pack(fill="x", pady=(12, 0))
+        # Los idiomas, al apretar Tab: el actual y los de al lado (un clic elige cualquiera).
+        self.strip = tk.Frame(body, bg=self.BG)
         footer = tk.Frame(body, bg=self.BG)
         footer.pack(fill="x", pady=(8, 0))
         # En qué plan estás: "✦ PRO" dorado o "BASIC". Ctrl+P (o un clic acá) cambia sin salir del juego.
         self.plan = tk.Label(footer, font=("Segoe UI Semibold", 9), bg=self.BG, cursor="hand2")
         self.plan.pack(side="right")
         self.plan.bind("<Button-1>", lambda _e: self._toggle_plan())
+        # Con Pro: cómo suena la voz (un clic pasa a la siguiente).
+        self.mood = tk.Label(footer, font=("Segoe UI Semibold", 9), bg=self.BG, cursor="hand2")
+        self.mood.bind("<Button-1>", lambda _e: self._next_personality())
+        # Voz de mujer u hombre (un clic o Ctrl+G).
+        self.voice_label = tk.Label(footer, font=("Segoe UI Semibold", 9), bg=self.BG, fg="#c9ced6", cursor="hand2")
+        self.voice_label.pack(side="right", padx=(0, 12))
+        self.voice_label.bind("<Button-1>", lambda _e: self._toggle_gender())
         self.hint = tk.Label(footer, font=("Segoe UI", 9), fg=self.HINT, bg=self.BG, anchor="w")
         self.hint.pack(side="left", fill="x", expand=True)
+        self.tone_view.configure(cursor="hand2")
+        self.tone_view.bind("<Button-1>", self._click_tone)
 
         self.entry.bind("<Return>", self._submit)
         self.entry.bind("<KP_Enter>", self._submit)
         self.entry.bind("<Control-Return>", lambda _e: self._submit(voice=True))  # decirlo en voz
         self.entry.bind("<Escape>", self._cancel)
         self.entry.bind("<Tab>", self._next_target)
+        self.entry.bind("<Shift-Tab>", lambda _e: self._next_target(step=-1))
+        self.entry.bind("<Control-g>", lambda _e: self._toggle_gender())
+        self.entry.bind("<Control-G>", lambda _e: self._toggle_gender())
         self.entry.bind("<Up>", lambda _e: self._change_tone(+1))
         self.entry.bind("<Down>", lambda _e: self._change_tone(-1))
         self.entry.bind("<Control-p>", lambda _e: self._toggle_plan())
@@ -239,11 +259,14 @@ class ComposeBar:
     def current(self) -> tuple[str, str, int]:
         return self.entry.get().strip(), self.targets[self.index] if self.targets else "", self.tone
 
-    def open(self, targets: list[str], area: Rect | None, tone: int = 3, labels: dict[str, str] | None = None) -> None:
+    def open(self, targets: list[str], area: Rect | None, tone: int = 3, labels: dict[str, str] | None = None,
+             gender: str = "femenina", personality: str = "canchera") -> None:
         self.targets = targets
         self.labels = labels or {}
         self.index = 0
         self.tone = clamp_tone(tone)
+        self.gender = gender if gender in GENDER_LABELS else "femenina"
+        self.personality = personality if personality in MOODS else "canchera"
         self.busy = False
         self._requested = None
         self._cycling = False
@@ -317,8 +340,6 @@ class ComposeBar:
         motion.vanish(self.win, self.win.withdraw, alive=lambda: not self.showing)
 
     def _preview_color(self) -> str:
-        from .. import pro
-
         return self.PRO_PREVIEW if pro.active() else self.PREVIEW
 
     def _toggle_plan(self) -> str:
@@ -363,22 +384,57 @@ class ComposeBar:
     def _render_target(self) -> None:
         code = self.targets[self.index] if self.targets else ""
         text = "TODOS" if code == MULTI_TARGET else code.split("-")[0].upper()
-        from .. import pro
-
         chip_bg, chip_fg = ((70, 57, 27), pro.GOLD_RGB) if pro.active() else (self.CHIP_BG, self.CHIP_FG)
         self._images["chip"] = _chip_image(text, chip_bg, chip_fg, _rgb(self.FIELD))
-        self.plan.configure(text="✦ PRO" if pro.active() else "BASIC  ·  Ctrl+P",
+        self.plan.configure(text="✦ PRO" if pro.active() else "BASIC",
                             fg="#%02x%02x%02x" % pro.GOLD_RGB if pro.active() else self.HINT)
         self.chip.configure(image=self._images["chip"])
         self._images["tone"] = _tone_image(self.tone, _rgb(self.FIELD), pro.GOLD_RGB if pro.active() else None)
         self.tone_view.configure(image=self._images["tone"])
         name = self.labels.get(code) or DISPLAY_NAMES.get(code, code)
-        self.hint.configure(text=f"Enter  chat en {name.split(' (')[0].lower()}   ·   Ctrl+Enter  en voz   ·   "
-                                 f"Tab  idioma   ·   ↑↓  tono: {TONE_NAMES[self.tone].lower()}   ·   Esc")
+        self.hint.configure(text=f"Enter chat  ·  Ctrl+Enter en voz  ·  ↑↓ tono: {TONE_NAMES[self.tone].lower()}")
+        self.voice_label.configure(text=GENDER_LABELS[self.gender])
+        if pro.active():
+            self.mood.configure(text=MOODS[self.personality], fg="#%02x%02x%02x" % pro.GOLD_RGB)
+            self.mood.pack(side="right", padx=(0, 12), before=self.voice_label)
+        else:
+            self.mood.pack_forget()
+        # La ayuda usa lo que dejan los botones de la derecha; si no entra, baja a otra línea (nunca se encima).
+        self.win.update_idletasks()
+        taken = sum(child.winfo_reqwidth() + 12 for child in self.hint.master.pack_slaves() if child is not self.hint)
+        self.hint.configure(wraplength=max(120, self.WIDTH - 36 - taken - 8), justify="left")
+        self._render_strip()
+
+    def _render_strip(self) -> None:
+        """Los idiomas alrededor del elegido (se ve apenas apretás Tab): ES · EN · [PT] · FR · DE…  3/59."""
+        for child in self.strip.winfo_children():
+            child.destroy()
+        if not self._cycling or len(self.targets) < 2:
+            self.strip.pack_forget()
+            return
+        total = len(self.targets)
+        before, after = (2, 5) if total > 8 else (self.index, total - self.index - 1)
+        for offset in range(-before, after + 1):
+            index = (self.index + offset) % total
+            code = self.targets[index]
+            text = "TODOS" if code == MULTI_TARGET else code.split("-")[0].upper()
+            chosen = offset == 0
+            label = tk.Label(self.strip, text=text, font=("Segoe UI Semibold" if chosen else "Segoe UI", 10),
+                             bg="#23324a" if chosen else self.BG, fg="#9fc6ff" if chosen else "#8a9099",
+                             padx=7, pady=1, cursor="hand2")
+            label.pack(side="left", padx=(0, 2))
+            label.bind("<Button-1>", lambda _e, i=index: self._pick_target(i))
+        code = self.targets[self.index]
+        name = (self.labels.get(code) or DISPLAY_NAMES.get(code, code)).split(" (")[0]
+        tk.Label(self.strip, text=f"{name}   {self.index + 1}/{total}   ·   Shift+Tab vuelve",
+                 font=("Segoe UI", 9), bg=self.BG, fg=self.HINT).pack(side="left", padx=(8, 0))
+        self.strip.pack(fill="x", pady=(8, 0), after=self.divider)
 
     def _on_edit(self, event=None) -> None:
         self._update_placeholder()
-        if self.busy or (event is not None and event.keysym in ("Return", "KP_Enter", "Escape", "Tab", "Up", "Down")):
+        if self.busy or (event is not None and event.keysym in ("Return", "KP_Enter", "Escape", "Tab", "ISO_Left_Tab",
+                                                                 "Up", "Down", "Shift_L", "Shift_R", "Control_L",
+                                                                 "Control_R")):
             return
         self._schedule_preview()
 
@@ -405,15 +461,43 @@ class ComposeBar:
             if following != MULTI_TARGET:  # ("todos los del chat" son varias traducciones: solo si llegás)
                 self.on_preview(text, following, tone)
 
-    def _next_target(self, _event=None) -> str:
+    def _next_target(self, _event=None, step: int = 1) -> str:
         if self.targets and not self.busy:
-            self.index = (self.index + 1) % len(self.targets)
-            self._cycling = True
-            self._render_target()
-            self._schedule_preview(self.SWITCH_DELAY_MS)
-            if self.on_target:
-                self.on_target(self.targets[self.index])
+            self._pick_target((self.index + step) % len(self.targets))
         return "break"
+
+    def _pick_target(self, index: int) -> None:
+        if self.busy or not self.targets:
+            return
+        self.index = index % len(self.targets)
+        self._cycling = True
+        self._render_target()
+        self._fit()
+        self._schedule_preview(self.SWITCH_DELAY_MS)
+        if self.on_target:
+            self.on_target(self.targets[self.index])
+        self.entry.focus_set()
+
+    def _toggle_gender(self) -> str:
+        """Voz de mujer o de hombre (para Ctrl+Enter y tu voz)."""
+        if not self.busy:
+            self.gender = "masculina" if self.gender == "femenina" else "femenina"
+            self._render_target()
+            if self.on_gender:
+                self.on_gender(self.gender)
+        return "break"
+
+    def _next_personality(self) -> None:
+        names = list(MOODS)
+        self.personality = names[(names.index(self.personality) + 1) % len(names)]
+        self._render_target()
+        if self.on_personality:
+            self.on_personality(self.personality)
+
+    def _click_tone(self, event) -> None:
+        """Un clic en los puntitos elige ese tono."""
+        width = max(1, self.tone_view.winfo_width())
+        self._change_tone(min(5, max(1, int(event.x / width * 5) + 1)) - self.tone)
 
     def _change_tone(self, delta: int) -> str:
         tone = clamp_tone(self.tone + delta)
@@ -452,6 +536,8 @@ class ComposeBar:
 
 
 MULTI_TARGET = "*"  # "todos los idiomas del chat" (ver main_window.MULTI)
+GENDER_LABELS = {"femenina": "♀ Mujer", "masculina": "♂ Hombre"}
+MOODS = {"alegre": "Alegre", "canchera": "Canchera", "tranquila": "Tranquila"}  # (las personalidades de Pro)
 
 
 def _rgb(color: str) -> tuple[int, int, int]:
@@ -532,8 +618,10 @@ class HotkeyCaptureDialog:
         ).pack(padx=28, pady=(22, 8))
         tk.Label(
             self.win,
-            text="Sirve cualquier tecla (también con Ctrl, Alt o Shift), la rueda del mouse\n"
-                 "o sus botones laterales. El clic izquierdo y el derecho no se pueden usar.\n\nEsc para cancelar.",
+            text="Sirve cualquier tecla, también con Ctrl, Alt o Shift, la rueda del mouse\n"
+                 "o sus botones de costado. Los clics izquierdo y derecho no.\n"
+                 "\n"
+                 "Esc cancela.",
             font=("Segoe UI", 10), fg="#6b7280", bg="#ffffff", justify="center",
         ).pack(padx=28, pady=(0, 20))
         self.win.update_idletasks()
@@ -583,7 +671,10 @@ class CalibrationOverlay:
         self.canvas.pack(fill="both", expand=True)
         self.canvas.create_text(
             area.width // 2, area.height // 2, fill="white", font=("Segoe UI", 20, "bold"),
-            text="Arrastrá un rectángulo sobre el chat de Roblox\n(incluí varias líneas de mensajes)\n\nEsc para cancelar",
+            text="Marcá el chat de Roblox arrastrando el mouse\n"
+                 "(que entren varios mensajes)\n"
+                 "\n"
+                 "Esc cancela",
             justify="center",
         )
         self.rect_id = None

@@ -27,8 +27,7 @@ class SupportWindow:
         self.sent = False
         self.window, body = widgets.dialog(root, "Soporte")
         ttk.Label(body, text="Soporte", font="SunValleySubtitleFont").pack(anchor="w")
-        widgets.muted(body, "¿Algo no anda o se te ocurre una mejora? Contalo acá: le llega directo al creador de "
-                            "Bubble.", pady=(2, 12))
+        widgets.muted(body, "¿Algo no anda o tenés una idea? Contalo acá y le llega directo al creador de Bubble.", pady=(2, 12))
 
         self.kind = tk.StringVar(value="problema")
         row = widgets.label_row(body, "¿Qué nos contás?", pady=(0, 6))
@@ -56,7 +55,7 @@ class SupportWindow:
 
         self.with_system = tk.BooleanVar(value=True)
         self.with_log = tk.BooleanVar(value=True)
-        ttk.Checkbutton(body, text="Adjuntar datos de mi PC (Windows, procesador, memoria; nada personal)",
+        ttk.Checkbutton(body, text="Mandar datos de mi PC (Windows, procesador, memoria, nada personal)",
                         variable=self.with_system).pack(anchor="w", pady=(12, 0))
         ttk.Checkbutton(body, text="Adjuntar el registro de errores de Bubble", variable=self.with_log).pack(
             anchor="w", pady=(4, 0))
@@ -70,7 +69,7 @@ class SupportWindow:
         self.send_button = ttk.Button(actions, text="Enviar", style="Accent.TButton", command=self._send)
         self.send_button.pack(side="right")
         ttk.Button(actions, text="Cancelar", command=self.close).pack(side="right", padx=(0, 8))
-        widgets.muted(body, "Se envía con FormSubmit (un servicio de formularios) a Juan Martín, el creador.",
+        widgets.muted(body, "Le llega a Juan Martín, el creador, por FormSubmit (un servicio de formularios).",
                       pady=(10, 0))
         self.window.bind("<Escape>", lambda _event: self.close())
         widgets.present(self.window, root)
@@ -156,7 +155,7 @@ class SupportWindow:
                 if str(path).lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")):
                     self._add(Path(path))
         else:
-            self.status.configure(text="No hay ninguna imagen copiada (sacá una con Win + Shift + S y probá de nuevo).")
+            self.status.configure(text="No hay ninguna imagen copiada. Sacá una con Win + Shift + S y probá otra vez.")
 
     def _shot(self) -> None:
         image = self.grab_roblox() if self.grab_roblox else None
@@ -196,7 +195,7 @@ class SupportWindow:
         colors = widgets.palette()
         title, description = self._value(self.title), self._description()
         if len(title) < 4:
-            self.status.configure(text="Poné un título que diga el problema (ej.: «la voz se corta»).",
+            self.status.configure(text="Poné un título que cuente el problema, por ejemplo «la voz se corta».",
                                   foreground=colors["warn"])
             self.title.focus_set()
             return
@@ -230,8 +229,8 @@ class SupportWindow:
                 self.window.after(2600, self.close)
                 return
             folder = support.fallback(report)
-            self.status.configure(text=f"No se pudo enviar desde acá ({message}). Se abrió tu mail con el mensaje y "
-                                       f"la carpeta «{folder.name}» con las imágenes: adjuntalas y mandalo.",
+            self.status.configure(text=f"No se pudo mandar desde acá ({message}). Te abrí el mail con el mensaje y la "
+                                       f"carpeta «{folder.name}» con las imágenes. Adjuntalas y mandalo.",
                                   foreground=colors["warn"])
             self.send_button.state(["!disabled"])
 

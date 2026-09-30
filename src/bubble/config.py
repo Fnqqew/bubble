@@ -33,6 +33,10 @@ class UserConfig:
     outgoing_language: str = "auto"
     # Tono de lo que enviás: 1 = neutro/formal, 2 = amable, 3 = casual, 4 = gamer, 5 = jerga nativa.
     tone: int = 3
+    # Las versiones nuevas se bajan e instalan solas (cuando no estás jugando), sin preguntar.
+    auto_update: bool = False
+    # El idioma de la ventana de Bubble: "auto" = el de Windows (ver i18n.py).
+    ui_language: str = "auto"
 
 
 @dataclass

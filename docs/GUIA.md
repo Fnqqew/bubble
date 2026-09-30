@@ -1,17 +1,19 @@
 # Guía de Bubble
 
-Todo lo que no entra en la portada: instalación paso a paso, cómo se usa cada parte, la configuración y cómo está
-hecho por dentro.
+Acá está todo lo que no entra en la portada: cómo se instala, cómo se usa cada parte, qué se puede configurar y
+cómo funciona por dentro. No hace falta leerla de corrido; buscá lo que necesites.
 
-- [Instalación](#instalación)
+- [Instalación y actualizaciones](#instalación-y-actualizaciones)
 - [Primer uso](#primer-uso)
 - [La ventana](#la-ventana)
+- [Bubble en tu idioma](#bubble-en-tu-idioma)
 - [Leer el chat y las burbujas](#leer-el-chat-y-las-burbujas)
 - [Escribir en otro idioma](#escribir-en-otro-idioma)
 - [Voz](#voz)
 - [Pruebas](#pruebas)
 - [Bubble Pro](#bubble-pro)
 - [Jerga, dialectos y tono](#jerga-dialectos-y-tono)
+- [Idiomas](#idiomas)
 - [Configuración](#configuración)
 - [Cómo está hecho](#cómo-está-hecho)
 - [Probarlo sin Roblox](#probarlo-sin-roblox)
@@ -20,519 +22,351 @@ hecho por dentro.
 
 ---
 
-## Instalación
+## Instalación y actualizaciones
 
-> ¿Es tu primera vez? Mirá la [instalación en 5 pasos, con imágenes](INSTALACION.md).
+> ¿Primera vez? Mejor mirá la [instalación en 5 pasos, con imágenes](INSTALACION.md).
 
-**Doble clic en `Iniciar.bat`.** La primera vez prepara todo solo:
+**Doble clic en `Iniciar.bat`.** La primera vez se encarga de todo:
 
-1. **Python** (3.12 o más nuevo, de 64 bits): prueba el que tengas y, si no sirve, te ofrece instalarlo (con winget)
-   o te lleva a python.org.
-2. **El entorno de Bubble** (`.venv`) y sus paquetes, con la parte de voz.
-3. Al abrirse, la ventana **Preparar Bubble** instala lo que falte, con una barra de progreso: el reconocimiento de
-   voz (hasta ~500 MB), el de voces (~30 MB) y las voces en inglés (~120 MB). Podés seguir usando la PC.
-4. Lo que necesita tu permiso tiene su botón: los **componentes de Windows** (Visual C++, si faltan), **Claude
-   Code** (su instalador oficial), **tu cuenta de Claude** (abre Claude Code para iniciar sesión) y el **micrófono
-   virtual** (Windows pide permiso de administrador).
+1. Busca **Python** (3.12 o más nuevo, de 64 bits). Si no tenés uno que sirva, te ofrece instalarlo.
+2. Arma su propio entorno (`.venv`) con lo que necesita.
+3. Abre **Preparar Bubble**, que baja el resto con una barra de progreso: el reconocimiento de voz (hasta ~500 MB),
+   el de voces (~30 MB) y las voces en inglés (~120 MB). Mientras tanto podés seguir usando la PC.
+4. Lo que necesita tu permiso te espera con su botón: los componentes de Windows que falten, Claude Code, tu cuenta
+   de Claude y el micrófono virtual.
 
-Anda con Roblox de roblox.com (también con Bloxstrap) y con el de la Microsoft Store.
+Después queda un acceso directo **Bubble** en el escritorio. Cada vez que abre, revisa en segundo plano que no falte
+nada; si falta algo, vuelve a abrir **Preparar Bubble**. También lo podés pedir desde **Ajustes → Revisar
+instalación**.
 
-Cada vez que abrís Bubble se revisa en un segundo, en segundo plano, que no falte nada; si falta algo, vuelve a abrir
-**Preparar Bubble**. También está en **Ajustes → Revisar instalación**. Después, el acceso directo **Bubble** del
-escritorio (se crea solo) lo abre directo.
+Anda con el Roblox de la web (también con Bloxstrap) y con el de la Microsoft Store.
 
-A mano (desarrollo): `python -m venv .venv` y `.venv\Scripts\python.exe -m pip install -e ".[voz,dev]"`.
+Si lo vas a tocar por dentro: `python -m venv .venv` y `.venv\Scripts\python.exe -m pip install -e ".[voz,dev]"`.
 
-**Actualizaciones.** Al abrir, Bubble se fija en GitHub si hay una versión nueva (como mucho dos veces por día). Si
-hay, te muestra qué trae y te pregunta: **Actualizar ahora** o **Más tarde**.
+**Actualizaciones.** Al abrir, Bubble se fija en GitHub si salió algo nuevo (dos veces por día como mucho). Si hay,
+te cuenta qué trae y te pregunta si actualizar ahora o más tarde.
 
-- **Actualizar ahora:** baja la versión nueva, se cierra, reemplaza sus archivos y vuelve a abrir solo, con una
-  ventanita que muestra cómo va. Tu configuración, tu clave de Pro, lo que aprendió de tu voz y los modelos no se
-  tocan (viven en otra carpeta). Si la versión nueva necesita paquetes nuevos, los instala. Y si algo sale mal, deja
-  la versión que tenías y te lo cuenta en **Actividad**.
-- **Más tarde:** no vuelve a preguntar por esa versión hasta el día siguiente. Mientras tanto queda el link
-  **↑ Actualizar a la X** abajo de todo en la ventana.
-- **Nunca en medio de una partida:** si estás jugando, espera a que Roblox no esté al frente para preguntarte (la
-  ventana le sacaría el foco al juego).
-- Cuando quieras: **Ajustes → Buscar actualizaciones**.
-- Si tu copia es de desarrollo (con git), se actualiza con `git pull`, y solo si no tenés cambios propios sin guardar.
+- **Ahora:** baja la versión nueva, se cierra, cambia sus archivos y vuelve a abrir. Tarda menos de un minuto. Tu
+  configuración, tu clave de Pro, lo que aprendió de tu voz y los modelos no se tocan. Si algo sale mal, te deja la
+  versión que tenías.
+- **Más tarde:** no te vuelve a preguntar hasta el día siguiente. Mientras, abajo de la ventana queda el link
+  **↑ Actualizar a la X**.
+- **Nunca en medio de una partida.** Si estás jugando, espera a que salgas del juego.
+- **Actualizar solo** (en Ajustes): si lo prendés, no te pregunta nada. Cada dos horas se fija si hay algo nuevo,
+  lo baja sin molestarte y lo instala cuando no estás jugando ni usando Bubble. Si cerrás Bubble con una versión ya
+  bajada, se instala al cerrar.
+- Para buscar vos: **Ajustes → Buscar actualizaciones**.
+- Si tu copia es de desarrollo (con git), se actualiza con `git pull`, y solo si no tenés cambios sin guardar.
 
-**Desinstalar:** **Ajustes → Desinstalar Bubble…** (o `Desinstalar.bat`, sin abrir Bubble). Elegís qué se borra:
-
-- tu configuración, tu clave de Pro, lo aprendido de tu voz, tus grabaciones y los registros;
-- los modelos y las voces descargados (te dice cuánto ocupan);
-- el acceso directo del escritorio;
-- el micrófono virtual (VB-Cable): se saca de Windows con su desinstalador oficial, sin ventanas, como si nunca
-  hubiera estado (Windows pide permiso de administrador una vez);
-- la carpeta de Bubble (si es una carpeta de desarrollo, con git, no se borra nunca).
-
-Antes de borrar, Windows vuelve a usar tu micrófono y tu parlante de verdad. Pide confirmar dos veces, y lo que Bubble
-tiene abierto mientras corre se borra apenas se cierra.
+**Desinstalar:** **Ajustes → Desinstalar Bubble…** o `Desinstalar.bat`. Elegís qué borrar: tu configuración y lo
+aprendido, los modelos y las voces (te dice cuánto ocupan), el acceso directo, el micrófono virtual y la carpeta de
+Bubble (si es de desarrollo, esa no se borra nunca). Antes de borrar nada, Windows vuelve a usar tu micrófono y tu
+parlante de siempre.
 
 ## Primer uso
 
-La primera vez aparece un tutorial corto. Se puede saltar, y se reabre desde **Ajustes → Ver el tutorial**.
+La primera vez te acompaña un tutorial corto. Lo podés saltar y volver a verlo desde **Ajustes → Ver el tutorial**.
 
-1. Abrí Bubble. Arriba dice **Listo** cuando ya está conectado con tu suscripción de Claude (unos segundos).
+1. Abrí Bubble. Cuando arriba dice **Listo**, ya está conectado con tu Claude.
 2. Abrí Roblox, en ventana o en pantalla completa.
-3. **Apagá la traducción automática de Roblox.** Si no, Bubble lee mensajes ya traducidos por Roblox y se pierde la
-   jerga original. Adentro del juego: **Esc** → **Configuración** → desactivá **Traducción automática del chat**.
-4. **El chat se encuentra solo.** Con un par de mensajes a la vista, Bubble ubica el chat del juego. Si en algún
-   juego no lo encuentra: **Ajustes → Buscar el chat**, o **Marcarlo a mano** (arrastrás un rectángulo sobre los
-   mensajes).
-5. **Ajustes → Probar lectura** muestra en **Actividad** lo que leyó y qué mensajes reconoció, y guarda imágenes en
-   `%LOCALAPPDATA%\Bubble\debug` (entre ellas una vista con las traducciones encima).
+3. **Apagá la traducción automática de Roblox** (Esc → Configuración → Traducción automática del chat). Si no,
+   Bubble lee lo que ya tradujo Roblox y se pierde la jerga original.
+4. Con un par de mensajes a la vista, Bubble encuentra el chat solo. Si en algún juego no lo encuentra, **Ajustes →
+   Buscar el chat** o **Marcarlo a mano** (arrastrás un rectángulo sobre los mensajes).
+
+Si querés ver qué está leyendo, **Ajustes → Probar lectura** lo muestra en **Actividad** y guarda imágenes en
+`%LOCALAPPDATA%\Bubble\debug`.
 
 ## La ventana
 
-Cinco páginas, arriba:
+Tiene cinco páginas:
 
-- **Inicio:** en qué idioma hablás y cuatro interruptores: el chat, las burbujas, lo que te dicen por voz y tu voz
-  para los demás. Y la tecla para escribir.
-- **Voz:** en qué idioma te escuchan, cómo se traduce tu voz (con botón o directo), cómo suena (femenina o
-  masculina, velocidad) y el micrófono.
-- **Pruebas:** tu micrófono (bien, normal o mal), tu voz traducida, chat a voz, lo que te dicen y tu PC, sin jugar.
-  Y lo que Bubble aprendió de tu forma de hablar (ver [Pruebas](#pruebas)).
-- **Ajustes:** todo lo personalizable:
-  - el tema de la ventana (oscuro o claro);
-  - cómo se ven las traducciones en el juego: el fondo (grafito, medianoche, violeta, bosque o negro), el detalle de
-    color, la opacidad y el tamaño de la letra, con una vista previa;
-  - los subtítulos de voz: tamaño, arriba o abajo, y si se ve lo que dijeron en su idioma;
-  - al escribir: en qué idioma mandar y con qué tono;
-  - el chat de Roblox (buscarlo, marcarlo a mano, probar la lectura) y el rendimiento.
-- **Actividad:** todo lo que se fue traduciendo, y un lugar para probar sin Roblox.
+| Página | Qué hay |
+|---|---|
+| **Inicio** | Tu idioma, cuatro interruptores (el chat, las burbujas, lo que te dicen por voz y tu voz para los demás) y la tecla para escribir. |
+| **Voz** | En qué idioma te escuchan, cómo se traduce tu voz (con botón o directo), voz de mujer o de hombre, velocidad y micrófono. |
+| **Pruebas** | Para probar todo sin jugar: tu micrófono, tu voz traducida, lo que te dicen y tu PC. |
+| **Ajustes** | El idioma de Bubble, el tema, cómo se ven las traducciones y los subtítulos, al escribir, el chat de Roblox, el rendimiento y las actualizaciones. |
+| **Actividad** | Todo lo que se fue traduciendo, y un lugar para probar sin Roblox. |
 
-Al abrir aparece un cartelito con el logo (dice en qué anda) y, cuando la ventana está entera y dibujada, la ventana.
-Mientras se ve el cartel se carga lo más pesado: la conexión con Claude (2 s), la lectura del chat (0,7 s) y las piezas
-de la voz. Antes el cartel se iba enseguida y todo eso se cargaba con la ventana abierta: mientras Python carga algo,
-la ventana no puede dibujarse, y se trababa hasta 2 s varias veces en los primeros segundos. También:
+Al abrir aparece un cartelito con el logo mientras carga lo pesado (la conexión con Claude, la lectura del chat y la
+voz). La ventana aparece recién cuando está lista, así no se traba en los primeros segundos.
 
-- Los símbolos de la ventana (🔒, ⚠, ✦…) no están en la letra de Windows: la primera vez que se dibuja cada uno,
-  Windows busca cuál letra lo tiene (el candado tardaba medio segundo). Se buscan durante el cartel.
-- La ventana de Roblox se busca como mucho dos veces por segundo (antes, en cada cuadro de los subtítulos: con otro
-  hilo ocupado, recorrer las ~250 ventanas abiertas llegó a tardar 1 s).
-- Los modelos chicos de la voz (¿hay alguien hablando? ¿quién?) se crean una sola vez y se comparten.
+## Bubble en tu idioma
+
+Bubble se muestra en el idioma de tu Windows. Si alguien de Brasil lo abre, lo ve en portugués; si es de Japón, en
+japonés. Esto no tiene nada que ver con tu idioma para traducir: podés tener Bubble en inglés y que te traduzca al
+español, si querés.
+
+- Vienen listos los 20 idiomas más jugados: español, inglés, portugués, francés, alemán, italiano, ruso, turco,
+  polaco, indonesio, tagalo, vietnamita, tailandés, árabe, japonés, coreano, chino, hindi, neerlandés y ucraniano.
+- Si tu idioma no está entre esos, Bubble lo muestra en inglés la primera vez y, apenas se conecta con tu Claude, se
+  traduce solo en segundo plano. La próxima vez que lo abras ya lo ves en tu idioma. Esa traducción queda guardada en
+  `%APPDATA%\Bubble\idiomas`.
+- Para cambiarlo: **Ajustes → Idioma de Bubble**. Automático es el de Windows. Al cambiarlo, Bubble se reinicia.
 
 ## Leer el chat y las burbujas
 
-**El chat:**
+**El chat.** Cada mensaje en otro idioma se traduce encima de sí mismo, dejando a la vista el nombre del jugador. Lo
+que ya está en tu idioma queda como está.
 
-- Cada mensaje en otro idioma se traduce **encima de sí mismo**. El nombre del jugador queda visible, y los
-  mensajes en tu idioma quedan como están.
-- La traducción aparece de una vez, terminada (~2 s después del mensaje). Si en un mensaje de dos renglones la
-  traducción es corta, se reparte entre los dos: nunca queda un renglón tapado y vacío.
-- Si el OCR lee un mensaje roto (letras mezcladas), espera a leerlo bien antes de traducirlo.
-- Solo se traducen los **mensajes nuevos**: si subís en el chat, lo viejo no se toca.
-- Cuando llega un mensaje y el chat sube, las traducciones suben con él al instante.
+- La traducción aparece de una vez, terminada, unos 2 segundos después del mensaje.
+- Si el mensaje ocupa dos renglones y la traducción es corta, se reparte entre los dos, así no queda un renglón tapado
+  y vacío.
+- Solo se traducen los mensajes nuevos: si subís en el chat, lo viejo no se toca. Cuando el chat se mueve, las
+  traducciones se mueven con él.
 - Los avisos del juego (`[SYSTEM]`, "has joined the game", "(+25)") y el spam no se traducen.
-- Si cerrás el chat o salís de Roblox, las traducciones se ocultan.
+- Si cerrás el chat o salís de Roblox, las traducciones se esconden.
 
-**Las burbujas** sobre la cabeza de los jugadores:
+**Las burbujas** que salen sobre la cabeza de los jugadores:
 
-- Se detectan varias veces por segundo y la traducción las sigue con la cámara.
-- La traducción aparece ~1 s después de que aparece la burbuja (leerla tarda ~0,05 s; el resto es Claude). Va por
-  el carril rápido (Haiku), sin esperar detrás del chat; y si el mismo mensaje también está en el chat, se traduce una
-  sola vez para los dos. Antes tardaba ~2,2 s o más (esperaba 0,6 s por si llegaba por el chat y hacía fila).
-- Las burbujas apiladas del mismo jugador se separan.
-- Si una burbuja pasa por detrás del chat, su traducción queda tapada igual que el original.
-- Si la traducción es más larga que el original, la burbuja crece en vez de cortar el texto.
-- Se apagan con el interruptor **Burbujas**, en Inicio.
+- La traducción sigue a la burbuja cuando movés la cámara y aparece más o menos un segundo después.
+- Si el mismo mensaje está en el chat y en la burbuja, se traduce una sola vez.
+- Las burbujas apiladas del mismo jugador se separan, y si la traducción es más larga que el original, la burbuja
+  crece en vez de cortar el texto.
+- Si una burbuja pasa por detrás del chat, su traducción también queda tapada, como el original.
 
-**En tus capturas y grabaciones.** Las traducciones, los subtítulos y los avisos salen en tus capturas y en tus
-grabaciones de pantalla: **Win + Shift + S**, **Impr Pant**, la **Herramienta Recortes** (también graba video), **OBS**
-con *Captura de pantalla* y **Discord** cuando compartís pantalla. Así podés mostrar cómo anda Bubble o guardar un
-momento del juego.
+**Idiomas que se leen de derecha a izquierda** (árabe, hebreo, persa, urdu): se dibujan en el orden correcto y, en
+árabe, con las letras unidas como corresponde.
 
-Para eso, Bubble lee el chat directo de la ventana de Roblox (no de la pantalla), así nunca se lee a sí mismo. Lo
-prueba solo cuando empezás a jugar: si en tu PC Windows no puede darle la imagen de Roblox, vuelve a leer la pantalla
-y las traducciones salen solo en las capturas con Impr Pant y Win + Shift + S (como antes). **Ajustes → Traducciones
-en el juego** te dice cuál de los dos está usando, y ahí mismo se apaga.
+**En tus capturas y grabaciones.** Las traducciones, los subtítulos y los avisos salen cuando sacás una captura
+(**Win + Shift + S**, **Impr Pant**, la Herramienta Recortes), cuando grabás con **OBS** y cuando compartís pantalla en
+**Discord**. Para que eso ande, Bubble lee el chat directo de la ventana de Roblox, sin leerse a sí mismo. Si en tu PC
+Windows no se lo permite, vuelve a leer la pantalla y las traducciones salen solo con Impr Pant y Win + Shift + S.
+**Ajustes → Traducciones en el juego** te dice cuál de las dos está usando.
 
-Lo que graba solo el juego —el **grabador de Roblox** (Esc → Grabar) y la **Xbox Game Bar**— guarda la imagen de
-Roblox y nada más: ahí no sale nada de lo que esté encima (tampoco de otros programas).
+El grabador de Roblox y la Xbox Game Bar graban solo el juego: ahí no sale nada de lo que esté encima.
 
 ## Escribir en otro idioma
 
-En el juego apretá el atajo (**°** por defecto) y se abre una barra para escribir:
+En el juego apretá el atajo (**°** por defecto) y se abre una barra para escribir. Escribí como hablás: abajo, en
+celeste, vas viendo cómo va a quedar.
 
-- **Escribí como hablás vos.** Mientras escribís ves cómo va a quedar la traducción, en celeste, debajo. Las
-  traducciones del chat, de las burbujas y los subtítulos siguen a la vista mientras escribís.
-- **Enter:** lo traduce y lo manda al chat de Roblox. Bubble solo hace tres cosas: abre el chat con su tecla,
-  escribe el mensaje y aprieta Enter. No toca ninguna otra tecla. (Con teclados en español esa tecla también
-  escribe «}» en la barra del chat: Bubble lo borra antes de escribir.)
-- **Ctrl+Enter:** lo dice en voz en vez de mandarlo al chat (ver [Voz](#voz)).
-- **Tab** cambia el idioma (el chip de la izquierda: EN, PT…), **↑ ↓** el tono (los puntitos de la derecha: más
-  llenos, más informal) y **Esc** cierra. Si la reabrís enseguida, lo que escribiste sigue ahí. Con Tab la traducción
-  del idioma nuevo se pide enseguida (antes esperaba lo mismo que al escribir, 650 ms) y, si vas recorriendo idiomas,
-  la del siguiente ya se pide antes de que llegues. Cambiar de idioma tampoco traba nada mientras se prepara la voz
-  de ese idioma.
-- Si el atajo lleva Shift (como «°»), podés apretar **la misma tecla sola**. En Roblox el Shift activa el Shift
-  Lock y mueve la cámara.
-- El atajo solo funciona con Roblox al frente; en otros programas la tecla escribe normalmente.
+| Tecla | Qué hace |
+|---|---|
+| **Enter** | Lo traduce y lo manda al chat de Roblox. |
+| **Ctrl+Enter** | Lo dice en voz en vez de mandarlo al chat. |
+| **Tab** / **Shift+Tab** | Pasa al idioma siguiente o vuelve al anterior. Arriba ves los idiomas de al lado y en cuál estás (por ejemplo, 3/59). |
+| **↑** / **↓** | Cambia el tono. También podés hacer clic en los puntitos. |
+| **Ctrl+G** | Voz de mujer o de hombre. También con un clic en «♀ Mujer» / «♂ Hombre». |
+| **Ctrl+P** | Pasa de Basic a Pro y al revés. |
+| **Esc** | Cierra. Si la volvés a abrir enseguida, lo que escribiste sigue ahí. |
+
+Con Pro también aparece la personalidad de la voz (Alegre, Canchera o Tranquila): un clic y pasa a la siguiente.
+
+Algunas cosas que conviene saber:
+
+- Con Tab están **todos** los idiomas: primero los del chat y los más comunes, después el resto por orden alfabético.
+- Bubble solo hace tres cosas en Roblox: abre el chat con su tecla, escribe el mensaje y aprieta Enter. Nada más.
+- Si el atajo lleva Shift (como «°»), podés apretar la tecla sola: en Roblox el Shift mueve la cámara.
+- El atajo solo anda con Roblox al frente. En otros programas la tecla escribe normal.
 - Para cambiarlo: **Cambiar**, en Inicio, y apretá la tecla o el botón del mouse que quieras.
 
-**Un solo idioma para todo.** El idioma del chip es el mismo para el chat, para Ctrl+Enter y para tu voz: si
-cambiás a inglés con Tab, tu voz también sale en inglés. Y se mantiene: la próxima vez que abrís la barra (o hablás)
-sigue en ese. En automático, la primera vez se elige el que más se usa en el chat; después, el último que usaste.
-También se elige en **Ajustes → Al escribir** o en **Voz → Te escuchan en**. Si el servidor mezcla idiomas, la
-opción **Todos los del chat** manda el mensaje en varios a la vez (tu voz usa el principal).
+**Un solo idioma para todo.** El idioma de la barra es el mismo para el chat, para Ctrl+Enter y para tu voz: si
+pasás a inglés con Tab, tu voz también sale en inglés, y la próxima vez sigue en inglés. En automático, la primera vez
+elige el que más se usa en el chat. Si el servidor mezcla idiomas, **Todos los del chat** manda el mensaje en varios a
+la vez.
 
 ## Voz
 
-Todo el audio se procesa en tu PC: Whisper entiende la voz, un modelo chico reconoce quién habla y Piper habla. Los
-tres son locales. Claude solo traduce el texto. Las voces de Piper se cargan y hablan en un proceso aparte: cargar
-una voz tarda ~2 s y, en el mismo proceso, congelaba la ventana y la barra para escribir todo ese rato (por ejemplo,
-al cambiar de idioma con Tab). Hace falta instalar la parte de voz (`".[voz]"`, ver
-[Instalación](#instalación)).
+En Basic, todo el audio se procesa en tu PC: **Whisper** entiende lo que se dice, un modelo chico reconoce quién
+habla y **Piper** pone la voz. Claude solo ve el texto. La primera vez se bajan los modelos (hasta ~500 MB según tu
+PC) y cada voz que uses (~60 MB); quedan en `%LOCALAPPDATA%\Bubble\models`.
 
-La primera vez se descargan el reconocimiento de voz (hasta ~500 MB, según tu PC), el de voces (~30 MB) y cada voz
-que se use (~60 MB). Quedan en `%LOCALAPPDATA%\Bubble\models`.
+### Lo que te dicen
 
-**Subtítulos de lo que te dicen.** Interruptor **Lo que te dicen por voz**, en Inicio.
+Prendé **Lo que te dicen por voz**, en Inicio, y lo que dicen los demás aparece subtitulado abajo.
 
-- **Radio de escucha** (página Voz): en el chat de voz de Roblox, los que están lejos suenan más bajo. Bubble aprende
-  cómo suenan las voces que tenés cerca y deja afuera las que suenan bastante más bajo: **Cerca**, **Normal**, **Lejos**
-  o **Todas**. Si nadie habla cerca por un rato (te alejaste, bajaste el volumen), el radio se va abriendo solo.
-- **Filtro de ruido:** lo que no es alguien hablando (música, explosiones, risas, balbuceos, algo que no se entiende
-  en ningún idioma) no se traduce. Está medido con grabaciones reales para no tirar voces de verdad aunque haya
-  ruido o se pisen.
-- Si hace más de 3 s que no estás en el juego, no se escucha (los subtítulos igual no se verían): no gasta
-  procesador, y con Pro no se paga.
+- Mientras la persona habla ves lo que va diciendo en gris. Apenas hace una pausa, llega la traducción en blanco,
+  unos 2 segundos después.
+- Cada persona tiene su color y su número (**Voz 1**, **Voz 2**…), y Bubble la reconoce cuando vuelve a hablar.
+- Se nota **cómo lo dijeron**: si preguntaron, si gritaron, si exclamaron. Bubble lo mide en el audio y la traducción
+  sale con sus signos y su emoción.
+- **Las frases largas no se cortan.** Si tu amigo habla un rato largo, el subtítulo suma renglones antes de achicar la
+  letra, y se queda en pantalla el tiempo que hace falta para leerlo.
+- Lo que ya está en tu idioma no se subtitula.
 
-- Mientras la persona habla ya ves lo que va diciendo, en gris (aparece ~0,5 s después de que empieza).
-- Apenas hace una pausa se pide la traducción, que llega palabra por palabra y reemplaza al gris, en blanco.
-  Tarda ~2 s desde que termina de hablar; casi todo es lo que tarda Claude.
-- Cada persona tiene su color y su número (**Voz 1**, **Voz 2**…) y Bubble la reconoce cuando vuelve a hablar. No
-  sabe su nombre de Roblox: la numera en el orden en que aparece.
-- Lo que ya está en tu idioma no se subtitula ni se traduce. Whisper a veces confunde el español rioplatense con
-  portugués o italiano: además de lo que dice Whisper se miran las palabras, y si igual llegara a Claude y volviera
-  igual, no se muestra.
-- Se nota **cómo lo dijeron**: si la voz subió al final (pregunta), si gritaron o exclamaron (comparado con cómo habla
-  esa voz normalmente). Whisper no marca nada de eso; Bubble lo mide en el audio y se lo avisa a Claude, así la
-  traducción tiene los ¿? y ¡! y la emoción que corresponden.
+**Radio de escucha** (página Voz): en Roblox, los que están lejos se escuchan más bajo. Bubble aprende cómo suenan
+los que tenés cerca y deja afuera a los lejanos: **Cerca**, **Normal**, **Lejos** o **Todas**. Si nadie habla cerca
+por un rato, el radio se va abriendo solo.
 
-Se escucha **solo el sonido de Roblox** (Windows 11): Discord, un video o la música no se subtitulan, aunque suenen
-fuerte. Si Roblox se reabre o pasás a otro juego (cambia de proceso), Bubble lo sigue solo. En Windows más viejos se
-escucha todo lo que suena en la PC.
+**Filtro de ruido:** música, explosiones, risas y balbuceos no se traducen.
 
-**Tu voz, traducida.** Interruptor **Tu voz para los demás**, en Inicio. En la página **Voz** elegís cómo:
+En Windows 11 se escucha **solo el sonido de Roblox**: Discord, un video o tu música no se subtitulan. Si no estás en
+el juego, no se escucha nada (no gasta procesador y, con Pro, no se paga).
 
-- **Con un botón** (por defecto el **botón lateral del mouse, adelante**):
-  - **tocalo y hablá:** cuando terminás de hablar, se traduce y se dice solo (o tocalo otra vez para terminar);
-  - o **mantenelo apretado** mientras hablás y soltalo.
-- **Directo, sin botón:** hablás normal. Cada frase que decís sale traducida en voz ~2 s después de que terminás.
-  Escucha solo mientras estás en Roblox (el juego al frente, o la barra para escribir abierta): fuera del juego (en
-  Discord, en el navegador) no traduce nada.
-- **Escribiendo:** en la barra para escribir, **Ctrl+Enter** en vez de Enter.
+### Tu voz, traducida
 
-En frases largas, la primera oración traducida empieza a sonar mientras Claude traduce el resto. Claude también
-conoce los nombres de los jugadores del chat: si el reconocimiento escuchó mal un nombre, lo corrige.
+Prendé **Tu voz para los demás**, en Inicio. En la página **Voz** elegís cómo:
 
-**Te escuchan en** (en la página **Voz**) es el idioma de tu voz: el mismo que el de la barra para escribir.
+- **Con un botón** (por defecto, el botón lateral del mouse de adelante): lo tocás y hablás, o lo mantenés apretado
+  mientras hablás.
+- **Directo:** hablás normal y cada frase sale traducida unos 2 segundos después. Solo escucha mientras estás en
+  Roblox.
+- **Escribiendo:** Ctrl+Enter en la barra para escribir.
 
-**Tus pausas.** Apenas hacés una pausa, Bubble lee lo que dijiste. Si suena terminado, lo traduce ya (sin esperar
-más silencio ni volver a leerlo); si quedó a medias ("fui a buscar la espada y…", "porque…"), espera a que sigas.
-Así no te corta a mitad de frase y, cuando terminás, sale enseguida.
+Podés hablar un buen rato seguido: una frase traducida puede durar hasta un minuto. En frases largas, la primera
+oración empieza a sonar mientras se traduce el resto.
 
-**Preguntas, gritos y emociones.** En español "¿vamos a la torre?" y "vamos a la torre" tienen las mismas palabras:
-lo que cambia es la entonación. Bubble mide en tu voz si subió al final (pregunta), si gritaste o exclamaste
-(comparado con cómo hablás normalmente, que va aprendiendo) o si hablaste bajito, y se lo pasa a Claude. La voz
-sintética lo acompaña, en todas las voces (las de tu PC y las de Pro), con el botón, en modo directo y con Ctrl+Enter
-(ahí cuenta el signo: "¡vamos!", "¿venís?"):
+**Tus pausas.** Cuando hacés una pausa, Bubble se fija si terminaste la idea. Si quedó a medias ("fui a buscar la
+espada y…"), espera a que sigas. Así no te corta a mitad de frase.
 
-- **gritaste:** más aguda (2,5 semitonos), más fuerte, un poco más rápida y con la melodía más marcada;
-- **exclamaste:** algo más aguda y más fuerte;
-- **bajito:** más grave y más suave;
-- **preguntaste:** la voz sube al final (si la voz ya sube sola, no se toca).
+**Cómo lo decís.** "¿Vamos a la torre?" y "vamos a la torre" tienen las mismas palabras; lo que cambia es cómo suena.
+Bubble lo escucha en tu voz y la voz traducida lo acompaña:
 
-Para que una afirmación no se tome como pregunta, la voz tiene que subir al final al menos 1,5 semitonos: con lo que
-había aprendido «Entrenar tu voz» (0,5) las frases rioplatenses que suben un poquito al final salían traducidas como
-preguntas.
+| Si… | La voz traducida… |
+|---|---|
+| gritaste | sube, suena más fuerte y un poco más rápida |
+| exclamaste | sube un poco y suena más fuerte |
+| hablaste bajito | baja y suena más suave |
+| preguntaste | sube al final |
 
-**Aprende tu forma de hablar.** Cuanto más lo usás, mejor te entiende y más rápido traduce:
+Compara con cómo hablás vos normalmente, que va aprendiendo, así una afirmación con la entonación rioplatense no se
+toma como pregunta.
 
-- Whisper recibe un ejemplo fijo y corto de cómo se habla (voseo, jerga de juego, con ¿? y ¡!): entiende mejor y
-  pone los signos. Nada más: con listas de palabras o frases aprendidas, en frases cortas ("hola") inventaba o
-  repetía ("Hola Hola Hola"). Si alguna vez copia el ejemplo en vez de escucharte, se da cuenta y vuelve a leer.
-- Tus palabras y nombres (de tus amigos, tu jerga, lo que Whisper no te entendía) se los pasa a **Claude**: así
-  entiende qué quisiste decir aunque Whisper haya escuchado otra cosa parecida.
-- Solo aprende lo seguro: nada con palabras repetidas ni cosas que no son palabras. Lo que se había aprendido mal
-  antes se limpia solo.
-- Lo que ya dijiste queda guardado: si volvés a decir lo mismo ("dale, esperame"), sale al instante.
-- En **Pruebas** corregís lo que entendió o cómo lo tradujo: Claude usa esas traducciones de modelo para sonar como
-  vos querés.
+**Aprende tu forma de hablar.** Cuanto más lo usás, mejor te entiende. Tus palabras y los nombres de tus amigos se los
+pasa a Claude para que entienda qué quisiste decir aunque Whisper haya escuchado algo parecido. Las palabras de
+Roblox (*robux*, *obby*, *gamepass*, *Bubble*…) ya las conoce. Lo que ya dijiste queda guardado: si volvés a decir
+lo mismo, sale al instante. Todo queda en `%LOCALAPPDATA%\Bubble\perfil_voz.json`, solo en tu PC, y se borra desde
+**Pruebas**.
 
-Todo queda en `%LOCALAPPDATA%\Bubble\perfil_voz.json` (solo en tu PC); se borra desde **Pruebas**.
+**Cómo suena.** Voz de mujer o de hombre, velocidad y **Probar voz**. Con **Escucharla yo también**, tu voz traducida
+suena bajito en tus auriculares, así sabés qué dijo.
 
-Lo que se va a decir en voz se traduce como se habla (palabras completas, sin "vc" ni "kkkk", y en la escritura del
-idioma: el hindi, en devanagari), para que la voz no lea abreviaturas letra por letra.
+- Casi todos los idiomas tienen voz de mujer y de hombre, elegidas a mano. Cuando Piper tiene una sola, la otra es una
+  voz de Windows de ese idioma si la tenés o, si no, se arma a partir de la que hay (se le cambia el timbre y el tono).
+- Algunos idiomas usan la voz de uno muy parecido: el croata y el serbio, la eslovena; el malayo y el tagalo, la
+  indonesia; el bielorruso, la rusa.
+- El tamil, el guyaratí y el panyabí no tienen voz en Piper: hablan con las voces de Windows si las agregaste
+  (Configuración → Hora e idioma → Voz). Con Pro, la nube habla varios más.
+- Cada frase se lleva al tono y al volumen de siempre de esa voz, así no parece otra persona cada vez.
 
-**Cómo suena:** voz **femenina** o **masculina**, **velocidad** y **Probar voz**. Con **Escucharla yo también**, tu
-voz traducida suena en tus auriculares, más bajo, así sabés qué dijo.
+### Que te escuchen los demás
 
-- Hay voz para español, inglés, portugués, francés, alemán, italiano, ruso, polaco, neerlandés, chino, hindi, turco,
-  árabe, coreano, indonesio, vietnamita y tagalo (con la voz indonesia: se escriben y se leen casi igual). Japonés y
-  tailandés, con las voces de Windows si agregaste ese idioma en Windows (Configuración › Hora e idioma › Voz); con
-  Pro, el japonés lo dice la nube.
-- **Mujer y hombre en cada idioma.** Las voces están elegidas a mano. Si Piper tiene una sola (portugués, turco y
-  árabe solo tienen hombre; coreano, indonesio, vietnamita y chino, solo mujer), la otra es una voz de Windows de ese
-  idioma si la tenés y, si no, se arma a partir de la que hay: se corren los formantes (el timbre) y se lleva el tono
-  al de una voz de ese género, sin cambiar la duración.
-- **Siempre la misma voz.** Cada frase se lleva al tono y al volumen de siempre de esa voz: la voz de la nube varía
-  sola de un pedido al otro (medido: la misma voz salía a 100 Hz en una frase y a 250 Hz en la siguiente, y hasta 10 dB
-  más baja) y parecía otra persona a cada rato. Las de tu PC salían ~5 dB más fuertes que las de la nube: ahora todas
-  suenan igual de fuerte. Y la traducción se dice en dos tandas como mucho (la primera oración apenas está lista y el
-  resto junto), porque cada pedido separado era una oportunidad de que cambiara.
-- Si elegiste un idioma con región (por ejemplo, inglés del Reino Unido), la voz es de esa región, siempre la misma.
+Windows no deja que un programa hable "por tu micrófono"; hace falta un micrófono virtual. Bubble usa **VB-Audio
+Virtual Cable**, que es gratis:
 
-**Que te escuchen los demás (como Soundpad).** Windows no deja que un programa hable "por tu micrófono": hace falta
-un micrófono virtual. Bubble usa **VB-Audio Virtual Cable**, gratis (es el "driver" que se descarga):
+1. En **Voz → Micrófono**, tocá **Instalar (gratis)**. Windows pide permiso de administrador; en el instalador tocá
+   **Install Driver**. Si te pide reiniciar, reiniciá.
+2. Abrí Bubble. Si el instalador te cambió el micrófono o el parlante de Windows, Bubble lo deja como estaba.
+3. Listo.
 
-1. En **Voz → Micrófono**, tocá **Instalar (gratis)**. Windows pide permiso de administrador; en el instalador
-   tocá **Install Driver**. Si te lo pide, reiniciá la PC.
-2. Abrí Bubble. El instalador suele dejar el cable como micrófono o parlante de Windows (dejás de escuchar, o
-   Discord deja de escucharte): Bubble lo vuelve a dejar como estaba, solo.
-3. Listo, no hay que configurar nada más.
-
-Mientras Bubble está abierto, el micrófono de Windows es el virtual y Bubble le pasa tu micrófono real en vivo: te
-escuchan igual que siempre y, cuando suena tu voz traducida (con el botón, en modo directo o con Ctrl+Enter), tu voz
-baja. Al cerrar Bubble, Windows vuelve a tu micrófono (y si Bubble se cerró de golpe, lo arregla al abrirse). Si
+Mientras Bubble está abierto, el micrófono de Windows es el virtual y Bubble le pasa tu voz real en vivo: te escuchan
+igual que siempre y, cuando suena la voz traducida, tu voz baja. Al cerrar Bubble, Windows vuelve a tu micrófono. Si
 algo queda raro, **Voz → Arreglar Windows**.
 
-**Abrí Bubble antes que Roblox.** Roblox arma su lista de micrófonos una sola vez, al abrirse, y usa el que en ese
-momento es el de Windows (se ve en su registro). Bubble pone el micrófono virtual apenas abre (sin esperar a
-conectarse) y no lo saca aunque cierres Roblox: el próximo Roblox lo toma solo. Si Roblox ya estaba abierto, Bubble
-se da cuenta (mira de qué micrófono está grabando Roblox) y te avisa en la ventana y en el juego: elegí **CABLE
-Output** en Roblox (**Esc → Configuración → Dispositivo de entrada**) o volvé a abrir Roblox.
-
+- **Abrí Bubble antes que Roblox.** Roblox elige el micrófono una sola vez, al abrirse. Si ya estaba abierto, Bubble te
+  avisa: elegí **CABLE Output** en Roblox (Esc → Configuración → Dispositivo de entrada) o volvé a abrir Roblox.
 - Con **Pasar también mi voz real** apagado, solo escuchan la voz traducida.
-- Discord usa el micrófono de Windows: mientras está prendido, también escucha la voz traducida. Si no querés, en
-  Discord elegí tu micrófono de verdad en vez de "Predeterminado".
-- ¿Por qué no como Soundpad? Soundpad se mete dentro de cada programa para hablar por su micrófono. Con Roblox eso
-  choca con su anti-trampas y puede traer problemas; el micrófono virtual no toca Roblox.
+- Discord también usa el micrófono de Windows. Si no querés que escuche la voz traducida, elegí ahí tu micrófono de
+  verdad en vez de "Predeterminado".
+- Tu micrófono en Roblox tiene que estar activado. Si hablás estando muteado, Bubble te avisa.
+- ¿Por qué no como Soundpad? Soundpad se mete dentro de cada programa, y con Roblox eso choca con su anti-trampas. El
+  micrófono virtual no toca Roblox.
 
-**Tu micrófono en Roblox tiene que estar activado** (el de arriba a la izquierda, sin la raya roja): si estás
-muteado, no te escucha nadie. Bubble no lo prende ni lo apaga; si hablás estando muteado, la página **Voz** te avisa.
-
-Sin el micrófono virtual, la página **Voz** te avisa: tu voz traducida suena solo en tus auriculares.
-
-El chat de voz de Roblox pide verificación de edad. Usar voz sintética puede ir contra sus reglas en algunos
-casos: usala con cuidado, para comunicarte.
-
-**Cómo es tan rápido.** Whisper se entrenó con ventanas de 30 s y, de la forma normal, procesa siempre 30 s aunque la
-frase dure 2. Bubble le pasa la frase completada con silencio hasta 3 s: tarda muchas veces menos. Mientras alguien
-habla usa un modelo rápido (`base`) y para el texto final uno más preciso (`small`); en inglés alcanza con el rápido.
-En procesadores chicos se usan modelos más livianos solos.
-
-Con menos de 3 s ("hola", "dale" solos), el modelo no sabía dónde terminaba la frase: repetía ("Dale Dale") o
-inventaba. Completándola a 3 s, en las mismas frases de prueba (voces de Windows en español) pasó de 39 % a 10 % de
-palabras mal entendidas en frases cortas, y de 11 % a 8 % en largas, sin tardar más. Los modelos grandes
-(`large-v3-turbo`) así recortados repiten las palabras cortas ("Hola Hola Hola") y tardan 2 s: se probaron y no se
-usan. Si igual quedara todo repetido ("Dale. Dale. Dale."), se deja una vez. Con tu micrófono, el ruido que Whisper
-convierte en texto (una tecla, un golpe → "y", "¡Vamos!") se reconoce y se descarta.
-
-La voz y las burbujas tienen **su propio carril con Claude**: una sesión aparte (no espera detrás de las traducciones
-del chat), con **Haiku** y sin "pensar" antes de responder. Medido: tu voz se traduce en ~0,75 s (con Opus ~1,9 s) y
-los subtítulos en ~1 s (con Opus ~1,6 s), casi con la misma calidad; el chat escrito sigue con Opus, que traduce mejor
-la jerga. Si alguna vez tarda de más, se le pregunta también al carril del chat y gana el primero. Desde que terminás
-de hablar hasta que suena tu voz traducida:
-
-| | Al principio | Ahora |
-|---|---|---|
-| Saber que terminaste | 0,8 s | 0,2 s (y lo leído ya sirve) |
-| Entender tu voz | 0,9 s | 0,4 a 0,7 s |
-| Traducir | 2,6 s (a veces 15 s o nada) | 0,8 a 1,2 s |
-| Armar la voz | 0,4 s | 0,2 a 0,4 s |
-| **Total** | **~4,7 s** | **~2 s** |
-
-**Inglés rápido.** Con gente que habla muy rápido y se pisa (una pelea, por ejemplo), el reconocimiento que entra en
-tu PC se equivoca bastante: en una grabación real así, 66 % de palabras mal (medido). Se probaron cortes más cortos,
-más hipótesis y modelos más grandes: nada mejora sin volverse lento (el grande con la ventana completa baja a 50 %
-pero tarda 6 veces más de lo que dura el audio). La alternativa en estudio son los **Subtítulos en vivo de Windows**
-(Win + Ctrl + L), que están hechos para eso.
-
-**Probarlo sin Roblox.** El laboratorio de voz arma conversaciones con voces sintéticas (una persona, gente
-hablando rápido, un grupo que se pisa, siete idiomas, música y explosiones de fondo, un monólogo largo) y mide
-cuánto tarda y cuánto entiende:
-
-```powershell
-.venv\Scripts\python.exe -m bubble.tools.voice_lab --sin-claude   # solo escuchar (gratis)
-.venv\Scripts\python.exe -m bubble.tools.voice_lab                # con traducción
-.venv\Scripts\python.exe -m bubble.tools.voice_lab --directo       # tu voz, traducción directa
-```
+El chat de voz de Roblox pide verificación de edad, y usar voz sintética puede ir contra sus reglas en algunos casos.
+Usalo para comunicarte.
 
 ## Pruebas
 
-La página **Pruebas** sirve para probar todo sin jugar. Todo suena solo en tus auriculares: nada le llega a Roblox.
+Para probar todo sin jugar. Suena solo en tus auriculares; a Roblox no le llega nada.
 
-- **Tu micrófono:** leés una frase y te dice si va a andar **bien, normal o mal** para traducir tu voz. Mide el
-  volumen de tu voz, el ruido de fondo, si satura y cuántas palabras entendió, y te dice qué cambiar (subir el
-  volumen, acercarlo, alejarlo del ventilador…).
-- **Tu voz traducida:** tocás **Hablar**, decís algo como en el juego y ves qué entendió, cómo lo dijiste
-  (pregunta, gritando…), cómo lo tradujo y cuánto tardó cada paso; y la escuchás. Si algo salió mal, lo corregís y
-  tocás **Guardar**: aprende tus palabras y cómo querés sonar.
-- **Chat a voz:** como Ctrl+Enter: escribís y escuchás cómo lo dice.
-- **Lo que te dicen:** una voz sintética dice una frase en inglés, como otro jugador, y ves el subtítulo.
-- **Tu equipo:** lo que Bubble detectó al abrirse —Windows, procesador, memoria, placa de video, pantalla y escala,
-  tu micrófono y el virtual, Roblox, tu cuenta de Claude, los idiomas para leer texto y tu internet— y cómo se
-  adaptó. Si algo impide que ande del todo, te lo dice con palabras claras y qué hacer. **Medir internet** mide de
-  nuevo (se hace solo una vez por día: se conecta con Claude y con la nube de Pro, y baja 3 MB de prueba de
-  Cloudflare).
-- **Cuánto tarda en tu PC** (Basic; con Pro queda difuminado, porque la voz va por la nube: se prueba en
-  **✦ Pro → Comparar con mi voz**): cuánto tarda de verdad en esta PC entender una frase y armar la voz, y cuánto va a
-  tardar tu voz traducida. Te dice si anda excelente, bien, normal o lenta, y qué ajustar.
-- **Lo que aprendió:** cuántas frases y palabras tuyas conoce, cuántas traducciones aprobaste, cuántas salen al
-  instante y los tiempos promedio de tu voz. **Borrar lo aprendido** empieza de cero.
+- **Tu micrófono:** leés una frase y te dice si va a andar bien, normal o mal, y qué cambiar (subir el volumen,
+  acercarlo, alejarlo del ventilador…).
+- **Tu voz traducida:** hablás como en el juego y ves qué entendió, cómo lo dijiste, cómo lo tradujo y cuánto tardó.
+  Si algo salió mal, lo corregís y tocás **Guardar**: aprende de eso.
+- **Chat a voz:** como Ctrl+Enter.
+- **Lo que te dicen:** una voz dice algo en inglés, como otro jugador, y ves el subtítulo.
+- **Tu equipo:** lo que Bubble vio de tu PC (Windows, procesador, memoria, pantalla, micrófonos, Roblox, tu cuenta de
+  Claude, internet) y cómo se acomodó. Si algo le impide andar, te lo dice.
+- **Cuánto tarda en tu PC** (solo en Basic): cuánto tarda de verdad tu voz traducida en esta PC.
+- **Lo que aprendió:** cuántas palabras y frases tuyas conoce. **Borrar lo aprendido** empieza de cero.
 
-**Si Windows bloquea las voces de Bubble.** En Windows 11, el **Control inteligente de aplicaciones** (Seguridad de
-Windows › Control de aplicaciones y exploradores) no deja cargar programas sin firma digital, y una parte de Piper (las
-voces de Basic) no la tiene. Bubble se da cuenta solo y usa **las voces que trae Windows** (Sabina, Raúl, Zira,
-Mark…): suenan un poco menos naturales, pero andan siempre. Para otro idioma, agregale una voz a Windows en
-Configuración › Hora e idioma › Voz. Con **Bubble Pro**, las voces son las de la nube y no cambia nada. No hace falta
-(ni conviene) apagar esa protección de Windows: una vez apagada, no se puede volver a prender sin reinstalar Windows.
+**Si Windows bloquea las voces.** En Windows 11, el **Control inteligente de aplicaciones** a veces no deja cargar una
+parte de Piper. Bubble se da cuenta y usa las voces que trae Windows (suenan un poco menos naturales, pero andan).
+Con Pro no cambia nada. No apagues esa protección: después no se puede volver a prender sin reinstalar Windows.
 
 ## Bubble Pro
 
-Bubble viene en dos planes. **Basic** es gratis y todo corre en tu PC. **✦ Pro** lleva la voz a la nube (Deepgram):
-entiende y habla mejor. La traducción, en los dos, la hace tu suscripción de Claude.
+Bubble viene en dos planes. **Basic** es gratis y todo corre en tu PC. **✦ Pro** manda la voz a la nube de
+[Deepgram](https://deepgram.com), con tu propia cuenta, y entiende y habla mejor. La traducción, en los dos, la hace
+tu Claude.
 
 | | Basic (tu PC) | ✦ Pro (la nube) |
 |---|---|---|
-| Entender voces | Whisper | Nova-3: mucho mejor con gente que habla rápido o se pisa (en una pelea real, tu PC erraba 2 de cada 3 palabras) |
-| Idiomas | ~100, uno por frase | más de 60; inglés, español, portugués, francés, alemán, italiano, ruso, hindi, japonés y neerlandés mezclados en la misma frase, y los demás (coreano, chino, polaco, turco, vietnamita, indonesio…) averiguando el idioma de cada frase dudosa |
-| Voces que hablan por vos | Piper | Aura-2: naturales y con personalidad (ver abajo) |
-| Tu voz traducida | suena cuando está lista | empieza a sonar a los ~0,35 s (mientras la nube la sigue armando), sin cortes |
-| Palabras tuyas y de juego | Whisper con ejemplos | la nube las prioriza, en tu voz y en las del juego (*robux*, *obby*, *gamepass*, *Blox Fruits*, *Bubble Gum Simulator*, *farmear*, los nombres del chat y lo que aprendió de vos) |
-| Tu procesador | trabaja para la voz | libre: Whisper ni se carga (queda de respaldo) |
-| Se ve | como siempre, con la insignia BASIC | dorado: ventana, insignia PRO, barra para escribir y traducciones en el juego |
+| Entender voces | Whisper | Nova-3: mucho mejor cuando hablan rápido, se pisan o mezclan idiomas |
+| Idiomas mezclados | uno por frase | varios en la misma frase; si una frase sale dudosa, se vuelve a escuchar para saber bien el idioma |
+| Voces que hablan por vos | Piper | Aura-2, y en inglés Flux, que suena con emoción |
+| Tu voz traducida | suena cuando está lista | empieza a sonar mientras la nube la sigue armando |
+| Palabras de Roblox | Whisper con ejemplos | la nube las prioriza (*robux*, *obby*, *Blox Fruits*, los nombres del chat…) |
+| Tu procesador | trabaja para la voz | libre |
+| Cómo se ve | como siempre | dorado |
 
-**Idiomas que la nube no mezcla.** Las voces del juego se escuchan mezclando idiomas (alguien puede decir "hagamos
-pvp"). Mezclando, lo que la nube no entiende lo escribe en otro idioma: medido con frases de prueba, el coreano y el
-chino salían en japonés, el polaco en ruso, el vietnamita en hindi (¡con 88 % de confianza!), el turco y el árabe como
-inglés inventado, y el indonesio ni salía. Claude no podía traducir eso. Ahora, si una frase sale dudosa (confianza
-menor a 90 %, o en hindi, japonés o ruso, que es donde caen los demás), ese mismo tramo se escucha de nuevo con la
-detección de idioma de Deepgram, que los reconoce al 99 %, y queda la mejor versión. Solo las dudosas: las claras no
-se pagan dos veces. Tu voz no pasa por esto (tu idioma ya se sabe).
+**Las voces de Pro.** Tres personalidades, cada una con voz de mujer y de hombre: **Alegre** (con energía),
+**Canchera** (casual, la de siempre) y **Tranquila** (calma). Hay voces en inglés, español, francés, alemán, italiano,
+neerlandés y japonés, y si elegiste una región, la voz es de ahí: en México hablan Olivia y Javier; en España, Carina
+y Álvaro; en Argentina, Antonia. En los demás idiomas habla la voz de tu PC. **Probar voz Pro** la hace sonar en tus
+auriculares.
 
-**Tu voz con el botón, en vivo:** mientras mantenés el botón, tu voz va a la nube; cuando hacés la pausa final, la
-nube lo nota (~0,9 s) y el texto ya está: no se manda de nuevo (antes se leía todo lo dicho en cada pausa, ~1 s cada
-vez, pagándolo varias veces). Los nombres de los jugadores del chat se reconocen como se dicen ("xXShadowXx_2012" →
-"Shadow"), y las siglas deletreadas se juntan ("p v p" → "pvp").
+**En inglés, con tus ganas.** Las voces en inglés son las nuevas de Deepgram (Flux). Si gritás, la voz grita; si
+hablás bajito, habla calma. Si Flux alguna vez no responde, habla la voz de antes (Aura) y no te enterás.
 
-**Sin Claude.** Si no tenés Claude Code, no iniciaste sesión o tu cuenta de Claude es la gratuita (que no incluye
-Claude Code), Bubble te lo dice al abrirse y te ofrece dos caminos (también desde **Pruebas → Tu equipo → Cómo
-seguir** y desde **Preparar Bubble**):
+**Cambiar de plan:** en la página **✦ Pro**, o en el juego con **Ctrl+P** (o un clic en «BASIC» / «✦ PRO» en la
+barra para escribir). Todo se rearma solo en menos de un segundo. Con Pro, lo de Basic que no se usa se ve
+difuminado.
 
-- **Bubble Pro con créditos:** con la clave de Deepgram (la cuenta nueva trae 200 US$, sin tarjeta), Pro también
-  traduce: usa el agente de voz de Deepgram, que trae a Claude Haiku 4.5, con las mismas instrucciones que usa Bubble
-  con tu Claude. Traduce en ~1 a 3 s (medido con una cuenta real). Deepgram lo cobra por minuto de conexión abierta
-  (0,075 US$), así que la conexión se abre recién cuando hay algo para traducir y se corta sola a los 20 s sin
-  mensajes: una partida tranquila gasta centavos por hora; un servidor muy activo, hasta ~4,50 US$ por hora. El chat
-  y la voz van por conexiones separadas (la voz no espera detrás del chat), y la voz nunca abre dos a la vez para lo
-  mismo. Lo que gastás aparece en **✦ Pro → Gasto y ahorro**.
-- **Conectar Claude:** iniciás sesión (con Claude Pro alcanza) y tocás **Listo, revisar**: Bubble se reconecta con tu
-  suscripción, la traducción deja de gastar crédito y Basic se desbloquea.
+**Sin Claude.** Si todavía no tenés Claude Code, o tu cuenta de Claude es la gratis, Bubble te lo dice y te da dos
+caminos:
 
-Mientras traduce sin Claude, **Pro queda activado**: en la página **✦ Pro** lo de Basic se ve difuminado, con un
-candado («Basic necesita Claude»), y ni el interruptor ni **Ctrl+P** pasan a Basic hasta que conectes Claude. Si la
-cuenta de Deepgram se queda sin crédito, Bubble te avisa y te vuelve a mostrar los dos caminos.
+- **Pro con el crédito de Deepgram:** Pro también traduce, con Claude Haiku a través de Deepgram. La cuenta nueva trae
+  200 US$ de regalo. Una partida tranquila gasta centavos por hora.
+- **Conectar Claude:** iniciás sesión (Claude Pro alcanza) y tocás **Listo, revisar**. La traducción deja de gastar
+  crédito y se desbloquea Basic.
 
-**Con Pro, lo de Basic queda en pausa.** Para que no haya confusiones, lo que Pro reemplaza se ve difuminado: la
-columna Basic de la comparación y **Pruebas → Cuánto tarda en tu PC** (mide Basic). Al volver a Basic, vuelve todo.
-
-**Cambiar de plan:** en la página **✦ Pro**, o **en el juego**: en la barra para escribir, **Ctrl+P** (o un clic en
-«BASIC» / «✦ PRO», abajo a la derecha). Arriba del juego aparece un aviso que confirma el cambio. La escucha y tu voz
-se rearman solas en menos de un segundo.
-
-**Las voces de Pro.** Tres personalidades, en voz femenina o masculina (la de la página Voz):
-
-- **Alegre:** enérgica y entusiasta.
-- **Canchera:** casual y expresiva (la de siempre). En español rioplatense, la femenina es **Antonia**, argentina.
-- **Tranquila:** calma y natural.
-
-Están todas las voces de Deepgram, con mujer y hombre en cada idioma y repartidas por personalidad según cómo las
-describe Deepgram: inglés (de EE. UU., británico, australiano y filipino), español (argentino, mexicano, colombiano,
-de España y latinoamericano), francés, alemán, italiano, neerlandés y japonés. Con la región del que te escucha
-(la que elegiste), la voz es de esa zona: en México, Olivia y Javier; en España, Carina y Álvaro; en Argentina,
-Antonia (Deepgram no tiene un hombre argentino: habla Aquila, latinoamericano). En los demás idiomas (portugués,
-ruso…) habla la voz de tu PC, con el mismo volumen. **Probar voz Pro** la hace sonar en tus auriculares, aunque estés
-en Basic.
-
-El signo del final lo pone tu expresión: la nube corta el final de las palabras sueltas sin signo ("nice"), así que
-se les agrega uno, pero antes era siempre "!" y "ok" sonaba exaltado aunque lo dijeras tranquilo. Ahora es "?" si
-preguntaste, "!" si exclamaste o gritaste y "." si no.
-
-**Cómo se paga:** con tu propia cuenta de [Deepgram](https://console.deepgram.com/signup), por uso (precios de
+**Cuánto cuesta.** Se paga por uso, con tu cuenta de [Deepgram](https://console.deepgram.com/signup) (precios de
 septiembre de 2026):
 
 | | US$ |
 |---|---|
-| Voces del juego, en vivo (varios idiomas mezclados) | 0,0058 por minuto de voz (~0,35 por hora) + 0,0013 por las palabras priorizadas (las de Roblox) |
-| Tu voz, en vivo (tu idioma) | 0,0048 por minuto + 0,0013 por las palabras priorizadas |
+| Voces del juego, en vivo | 0,0058 por minuto (~0,35 por hora) + 0,0013 por las palabras priorizadas |
+| Tu voz, en vivo | 0,0048 por minuto + 0,0013 por las palabras priorizadas |
 | Una frase con el botón | 0,0052 por minuto |
-| Una frase dudosa del juego, escuchada de nuevo con su idioma | lo mismo que una frase con el botón (solo esas) |
-| Voces de Pro | 0,030 cada 1.000 letras (una frase típica: ~0,001) |
-| Quién habla, según la nube (opcional) | +0,0020 por minuto |
+| Voces de Pro | 0,030 cada 1.000 letras (una frase típica, ~0,001) |
+| Voces en inglés (Flux) | 0,045 cada 1.000 letras |
 
-La cuenta nueva trae **200 US$ de crédito gratis**: cientos de horas de partidas. En **✦ Pro** ves cuántos minutos y
-cuántas letras se usaron este mes, y cuánto costaron (aproximado).
+La cuenta nueva trae **200 US$ gratis**: cientos de horas de partidas. En **✦ Pro → Gasto y ahorro** ves cuánto
+llevás este mes.
 
-**Cómo ahorra, sin perder nada:**
-
-- Solo se manda audio cuando alguien habla (lo detecta tu PC). Dentro de una frase, las pausas largas tampoco: se
-  manda un poquito de silencio (para que la nube note el final enseguida) y nada más.
-- Las voces lejanas (fuera del [radio de escucha](#voz)) y los ruidos no se mandan.
-- Fuera del juego no se escucha nada (ni tu micrófono en modo directo, ni el juego).
-- Una frase que ya dijo una voz de Pro (*"gg"*, *"gracias"*) se guarda y no se vuelve a pagar.
-- Quién habla lo reconoce tu PC, gratis (la opción de la nube es aparte).
-- Las palabras priorizadas se usan solo para tu voz, que es donde más importa entenderte bien; lo del juego lo
-  corrige Claude al traducir.
-- Con el botón, el silencio de antes y después de tu frase se recorta.
-- La conexión con Deepgram queda abierta entre frases: no se paga, y cada pedido sale ~0,3 s antes.
+**Para no gastar de más:** solo se manda audio cuando alguien habla, las voces lejanas y los ruidos no se mandan,
+fuera del juego no se escucha nada y una frase que ya dijo una voz de Pro ("gg", "gracias") no se vuelve a pagar.
 
 **Cómo se activa:**
 
-1. En **✦ Pro**, tocá **Crear cuenta en Deepgram** (gratis).
-2. En Deepgram: **API Keys** → **Create a New API Key** → copiala.
-3. Pegala en Bubble y tocá **Guardar y probar**. Se guarda cifrada con Windows: solo tu usuario la puede leer, y no
-   queda en ningún archivo de texto.
+1. En **✦ Pro**, tocá **Crear cuenta en Deepgram**.
+2. En Deepgram: **API Keys → Create a New API Key**, y copiala.
+3. Pegala en Bubble y tocá **Guardar y probar**. Se guarda cifrada con Windows: solo tu usuario la puede leer.
 4. Prendé **Bubble Pro**.
 
-**Comparar con mi voz:** decís una frase y ves lo que entiende tu PC y lo que entiende la nube, y cuánto tarda cada
-uno.
-
-**Si algo falla:** sin internet, esa frase se entiende con tu PC (y habla la voz de tu PC) y te avisa. Si la clave deja
-de andar o la cuenta se queda sin saldo, Bubble vuelve solo a Basic, te avisa y todo sigue con tu PC. Si la nube no
-entiende un idioma con su modelo nuevo, usa el anterior (Nova-2).
+**Si algo falla:** sin internet, esa frase la entiende tu PC y te avisa. Si la clave deja de andar o se acaba el
+saldo, Bubble vuelve solo a Basic y te avisa.
 
 ## Jerga, dialectos y tono
 
-**Lo que te llega:**
+**Lo que te llega** se traduce a cómo hablás vos, con tu variante (la de Windows, por ejemplo `es-AR`):
 
-- Tu idioma incluye **tu variante** (por defecto la de Windows, por ejemplo `es-AR`). Lo que te llega se traduce a
-  cómo hablás vos: "vlw mano, tmj kkkk" → "¡gracias, bro, sos un crack! jajaja".
-- Si alguien escribe en tu idioma pero con jerga de otro país ("no mames wey, neta"), se adapta a tu variante.
-- Las risas se convierten al instante, sin llamar a Claude (kkkk, wkwk, ㅋㅋㅋ, mdr → jajaja).
-- Las palabras de juego que se usan en todos los idiomas ("pvp", "lag", "noob", "loot", "farmear", "tradear",
-  "lobby"…) no dicen nada del idioma: "vamos a hacer pvp" o "tengo lag" son español y no se traducen, y "gg noob"
-  se entiende igual en cualquier idioma.
-- Si una expresión no tiene equivalente, se aclara breve entre paréntesis ("skill issue: problema tuyo").
+- "vlw mano, tmj kkkk" → "¡gracias, bro, sos un crack! jajaja".
+- Si alguien escribe en tu idioma pero con jerga de otro país ("no mames wey, neta"), se pasa a la tuya.
+- Las risas se convierten al instante (kkkk, wkwk, ㅋㅋㅋ, mdr → jajaja).
+- Las palabras de juego que se usan en todos lados ("pvp", "lag", "noob", "farmear") no se traducen: "tengo lag" es
+  español.
+- Si algo no tiene equivalente, se aclara corto entre paréntesis ("skill issue: problema tuyo").
 
-**Lo que escribís:**
+**Lo que escribís** sale como lo diría un jugador del otro idioma: "che boludo, posta que está re zarpado, ahre" →
+"yo bro, fr that's insane lol jk".
 
-- Se interpreta con tu jerga y sale como lo diría un jugador del otro idioma: "che boludo, posta que está re
-  zarpado, ahre" → "yo bro, fr that's insane lol jk".
+**El tono** cambia *cómo* se dice, nunca *qué* se dice. Con "no me jodas, me mataron de nuevo por el lag":
 
-El diccionario de jerga por idioma y país está en
-[src/bubble/translate/slang.py](../src/bubble/translate/slang.py).
-
-**Tono de lo que enviás.** Solo cambia *cómo* se dice, nunca *qué* se dice. Cada nivel tiene que sonar claramente
-distinto del siguiente: antes el 1, el 2 y el 3 salían casi iguales, porque el idioma de destino se describía "como
-lo escriben los gamers" hasta en el tono neutro (y en voz, "Hey dude, for real…" con tono 1). Ahora, en los tonos 1 y
-2 la variante va sin su jerga, Claude recibe un ejemplo de la misma frase en los 5 niveles y, en cada pedido, lo que
-no puede faltar de ese nivel. Medido con "no me jodas, me mataron de nuevo por el lag":
-
-| Nivel | Chat (inglés) |
+| Nivel | Sale en inglés |
 |---|---|
 | 1 · Neutro | I cannot believe it. I was killed again because of the lag. |
 | 2 · Amable | Oh, come on! I got killed again because of the lag. |
@@ -540,34 +374,51 @@ no puede faltar de ese nivel. Medido con "no me jodas, me mataron de nuevo por e
 | 4 · Gamer | bruh no way, died again cuz of lag smh |
 | 5 · Jerga nativa | bro ur fr kidding me, this lag got me killed AGAIN wtf 💀 |
 
-Lo que va a voz mantiene el nivel pero sin abreviaturas ("for real", no "fr").
+Lo que va a voz mantiene el nivel pero sin abreviaturas ("for real", no "fr"), así la voz no las lee letra por letra.
+
+La jerga por idioma y país está en [src/bubble/translate/slang.py](../src/bubble/translate/slang.py).
+
+## Idiomas
+
+Bubble traduce entre 59 idiomas. Todos se pueden elegir con Tab en la barra para escribir y en **Voz → Te escuchan
+en**:
+
+> español · inglés · portugués · francés · alemán · italiano · neerlandés · ruso · ucraniano · polaco · turco · árabe ·
+> hebreo · persa · urdu · hindi · bengalí · maratí · telugu · tamil · guyaratí · panyabí · japonés · coreano · chino ·
+> vietnamita · tailandés · indonesio · malayo · tagalo · sueco · noruego · danés · finlandés · islandés · checo · eslovaco
+> · húngaro · rumano · griego · búlgaro · serbio · croata · esloveno · macedonio · lituano · letón · estonio ·
+> bielorruso · georgiano · armenio · kazajo · azerí · catalán · euskera · galés · albanés · afrikáans · suajili
+
+Para saber en qué idioma está cada mensaje, Bubble lo detecta en tu PC, sin preguntarle a Claude. Si el mensaje ya
+está en tu idioma, no gasta nada. Con tantos idiomas parecidos (español y catalán, noruego y danés), cuando duda entre
+el tuyo y otro muy cercano, se queda con el tuyo; y si el mensaje está escrito en otro alfabeto, lo traduce aunque sea
+una sola palabra ("дякую", "תודה").
 
 ## Configuración
 
-Copiá [config.example.toml](../config.example.toml) a `%APPDATA%\Bubble\config.toml`. Lo más útil:
+Casi todo se cambia desde la ventana. Si preferís un archivo, copiá [config.example.toml](../config.example.toml) a
+`%APPDATA%\Bubble\config.toml`. Lo más útil:
 
 | Opción | Para qué |
 |---|---|
 | `[user] language` | Tu idioma y variante (`auto` = el de Windows) |
-| `[user] tone` | Tono de lo que enviás, de 1 a 5 |
+| `[user] tone` | Tono de lo que mandás, de 1 a 5 |
+| `[user] ui_language` | En qué idioma se ve Bubble (`auto` = el de Windows) |
+| `[user] auto_update` | Bajar e instalar las versiones nuevas solo |
 | `[roblox] username` | Tu nombre en Roblox: tus mensajes no se traducen |
 | `[roblox] hotkey` | El atajo para escribir |
 | `[roblox] performance` | `auto`, `alta`, `media` o `baja` |
-| `[roblox] gpu_capture` | Capturar la pantalla con la placa de video |
-| `[claude] model` | `opus` por defecto (el más preciso en las pruebas) |
+| `[claude] model` | `opus` por defecto |
 | `[voice] gender`, `speed` | Cómo suena tu voz traducida |
-| `[voice] mic` | Tu micrófono (vacío = el predeterminado de Windows) |
+| `[voice] mic` | Tu micrófono (vacío = el de Windows) |
 | `[appearance] theme` | `oscuro` o `claro` |
 | `[appearance] pill_color`, `accent`, `pill_opacity`, `text_scale` | Cómo se ven las traducciones |
-| `[appearance] in_screenshots` | Que las traducciones salgan en tus capturas |
-
-Casi todo esto se cambia más fácil desde la ventana (Ajustes y Voz).
 
 ## Cómo está hecho
 
 ```mermaid
 flowchart LR
-    S[Pantalla de Roblox] -->|captura por GPU| O[OCR de Windows]
+    S[Pantalla de Roblox] -->|captura| O[OCR de Windows]
     O --> T[Seguidor del chat]
     T -->|mensaje nuevo| L{¿En tu idioma?}
     L -->|sí| K[Queda como está]
@@ -575,52 +426,34 @@ flowchart LR
     C --> V[Traducción encima del mensaje]
 ```
 
-**Leer bien:**
-
-- El chat se prepara como letras negras sobre blanco, sea cual sea el fondo del juego. Lee el 99 % de las líneas,
-  también con fondos claros como nieve.
-- Cuando el fondo del chat se desvanece, se suma una segunda lectura, y lo que salió solo en esa se confirma
-  antes de traducirlo.
-- Si una lectura queda incompleta, se repite: con la cámara moviéndose, la siguiente suele salir bien.
-
-**No repetir ni perder mensajes:**
-
-- El chat se sigue como una **secuencia ordenada**, no como textos sueltos:
-  - un mensaje repetido abajo es nuevo;
-  - uno que el OCR salteó y aparece entre dos conocidos también;
-  - lo que aparece arriba es historial.
-
-**Velocidad:**
-
-- Sesiones de Claude persistentes (3 a la vez), sin herramientas ni configuración del usuario: solo traducen.
-- El idioma se detecta localmente (lingua): si el mensaje ya está en tu idioma, no se llama a Claude.
-- Frases universales ("gg", "xd", emojis) y un caché de frases cortas responden al instante.
-- Si una sesión de Claude se cuelga, se reintenta con otra a los 5 s.
-
-**Se adapta a la PC:**
-
-- Captura por GPU (DXGI, cualquier placa): en 1080p baja de ~50 ms a ~3 ms.
-- Un ritmo adaptativo mide cuánto cuesta cada lectura y la espacia según el procesador, para no quitarle
-  rendimiento a Roblox.
-
-**Seguro:** Bubble nunca toca el proceso de Roblox. Solo mira la pantalla (como un programa de grabación), muestra
-ventanas propias y escribe como lo harías vos.
+- **Leer bien.** El chat se prepara como letras negras sobre blanco, sea cual sea el fondo del juego, y se lee con el
+  OCR de Windows. Si una lectura sale incompleta, se repite.
+- **No repetir ni perder mensajes.** El chat se sigue como una lista ordenada: un mensaje repetido abajo es nuevo, uno
+  que el OCR salteó y aparece entre dos conocidos también, y lo que aparece arriba es historial.
+- **Rápido.** Hay tres sesiones de Claude abiertas todo el tiempo, que solo traducen. El idioma se detecta en tu PC,
+  y las frases que se repiten mucho ("gg", "xd") salen al instante. La voz y las burbujas tienen su propio carril,
+  con un modelo más rápido, para no esperar detrás del chat.
+- **Liviano.** La pantalla se captura con la placa de video, y Bubble mide cuánto le cuesta cada lectura para no
+  quitarle fluidez a Roblox.
+- **Seguro.** Bubble nunca toca el proceso de Roblox. Mira la pantalla como un programa de grabación, muestra sus
+  propias ventanas y escribe como lo harías vos.
 
 ```
 src/bubble/
-  capture/      pantalla, OCR, detección del chat, seguidor del chat, burbujas
-  translate/    motor, Claude, prompt y jerga, caché, detección de idioma
-  ui/           ventana, traducciones sobre el juego, barra para escribir, tutorial
-  performance.py  CPU y GPU: ritmo adaptativo
-  win32.py      ventanas, teclado, atajos
-  tools/        simulador de Roblox y pruebas en tiempo real
-tests/          tests con proveedores falsos (no gastan tu suscripción)
+  capture/      pantalla, OCR, chat y burbujas
+  translate/    Claude, instrucciones, jerga, caché y detección de idioma
+  voice/        escuchar, reconocer, hablar y el micrófono virtual
+  cloud/        Deepgram (Bubble Pro)
+  ui/           ventana, lo que se ve en el juego, barra para escribir y tutorial
+  locales/      Bubble en otros idiomas
+  tools/        simuladores y laboratorios de prueba
+tests/          tests que no gastan tu suscripción
 ```
 
 ## Probarlo sin Roblox
 
-**Con tus grabaciones de Roblox.** El grabador de Roblox (Esc → Grabar) guarda el juego sin las traducciones encima.
-Bubble puede "jugar" ese video a su velocidad real, con el mismo código que usa en el juego, y medir cómo le fue:
+**Con tus grabaciones.** El grabador de Roblox (Esc → Grabar) guarda el juego sin las traducciones encima. Bubble
+puede "jugar" ese video con el mismo código que usa en el juego y decirte cómo le fue:
 
 ```powershell
 python -m bubble.tools.recording_lab chat     "$env:USERPROFILE\Videos\Roblox\Roblox-....mp4"
@@ -628,90 +461,48 @@ python -m bubble.tools.recording_lab burbujas "$env:USERPROFILE\Videos\Roblox\Ro
 python -m bubble.tools.recording_lab voz      "$env:USERPROFILE\Videos\Roblox\Roblox-....mp4" --referencia ref.json
 ```
 
-- **chat:** mensajes encontrados (con `--esperados`, una lista de los que había de verdad), repetidos o basura,
-  traducciones fuera del chat y parpadeos.
-- **burbujas:** cuántas burbujas tienen su traducción, cuántas quedan fuera de lugar y cada texto que se leyó (así se
-  ve si alguno salió cortado).
-- **voz:** lo que entendió de cada frase, cuánto tarda y, con una transcripción de referencia, cuántas palabras
-  entendió mal.
+Los resultados quedan en `%LOCALAPPDATA%\Bubble\recording_lab`. Las grabaciones tienen nombres de otros jugadores:
+no se suben a ningún lado.
 
-Guarda cómo se vería en `%LOCALAPPDATA%\Bubble\recording_lab`. Las grabaciones tienen nombres de otros jugadores: no
-se suben a ningún lado.
-
-**Con el simulador.**
-
-```powershell
-python -m bubble.tools.realtime_benchmark lento medio rapido rafagas
-```
-
-Abre un **simulador de Roblox** y la app real, y mide todo. El simulador tiene chat con banderitas, nombres de
-colores, avisos del sistema, spam, fondo que se desvanece, burbujas que se apilan y cámara en movimiento. Se mide:
-
-- mensajes detectados y perdidos;
-- demoras de detección y de traducción;
-- parpadeos;
-- costo y uso de CPU;
-- cuánto tardan las traducciones en acomodarse.
-
-Otros escenarios:
-
-- `lento_transparente`: el chat sin fondo.
-- `detectar`: la app encuentra el chat sola.
-- `envio`: escribe y manda mensajes, y verifica que ninguna otra tecla le llegue al juego.
-
-Cada 3 s guarda una imagen de lo que ve el jugador en `%LOCALAPPDATA%\Bubble\benchmark\`.
-
-**Laboratorio del chat, sin pantalla y sin gastar:**
-
-```powershell
-python -m bubble.tools.chat_lab medio_transparente rafagas_transparente medio rafagas
-```
-
-Corre el ciclo real de lectura (captura, OCR, seguidor del chat, píldoras) contra el simulador dibujado en memoria,
-con traducciones falsas instantáneas. Como sabe dónde está cada mensaje en cada momento, mide parpadeos,
-píldoras fuera de lugar, mensajes sin tapar y basura. Tarda un minuto por escenario.
+**Con el simulador.** `python -m bubble.tools.realtime_benchmark lento medio rapido rafagas` abre un Roblox de
+mentira (chat con banderitas, spam, fondo que se desvanece, burbujas apiladas, cámara en movimiento) y la app real, y
+mide mensajes perdidos, demoras, parpadeos y uso del procesador.
 
 **Otras herramientas:**
 
-- `python -m pytest` corre los tests.
-- `python -m bubble.tools.voice_lab` es el laboratorio de voz (ver [Voz](#voz)).
-- `python -m bubble.tools.bench_latency --models opus sonnet` mide la latencia por modelo.
-- `python -m bubble --console` traduce por consola (`Nombre: mensaje`, o `> lo que escribís`).
+- `python -m bubble.tools.chat_lab medio rafagas`: el ciclo de lectura del chat, en memoria y sin gastar.
+- `python -m bubble.tools.voice_lab --sin-claude`: conversaciones con voces sintéticas (una persona, gente que se
+  pisa, varios idiomas, ruido de fondo) para medir cuánto entiende y cuánto tarda.
+- `python -m bubble.tools.ui_strings --idiomas en,pt`: vuelve a traducir la ventana a esos idiomas.
+- `python -m pytest`: los tests.
+- `python -m bubble --console`: traduce por consola.
 
 ## Soporte y Acerca de
 
-**Soporte** (el link de abajo de todo, o **Ajustes → Ayuda → Soporte…**) es para contar un problema o una idea sin
-salir de Bubble: un **título** que diga qué pasa, **qué pasó y cómo** (los pasos), y si querés **imágenes** —de un
-archivo, una captura que copiaste con Win + Shift + S (**Pegar captura**) o una foto de la ventana de Roblox en ese
-momento (**Captura de Roblox**)—. Podés sumar los datos de tu PC (sin nada personal) y el registro de errores, que
-ayudan a entender el problema mucho más rápido, y tu mail si querés que te respondan.
+**Soporte** (abajo de todo en la ventana, o **Ajustes → Ayuda → Soporte…**) sirve para contarme un problema o una
+idea sin salir de Bubble. Ponés qué pasó, cómo pasó y, si querés, imágenes: un archivo, una captura que copiaste con
+Win + Shift + S o una foto de la ventana de Roblox en ese momento. Si sumás los datos de tu PC (nada personal) y el
+registro de errores, lo puedo arreglar mucho más rápido. Dejá tu mail si querés respuesta.
 
-Se manda con [FormSubmit](https://formsubmit.co), un servicio de formularios que lo reenvía por mail al creador de
-Bubble. Las imágenes se achican antes de mandarse (hasta 10 MB entre todas). Si no hay internet o el servicio no
-responde, Bubble deja el mensaje y las imágenes en una carpeta del escritorio (**Bubble - soporte**) y te abre el
-mail con el texto listo para mandarlo a mano.
+Se manda con [FormSubmit](https://formsubmit.co), que me lo reenvía por mail. Si no hay internet, Bubble deja todo en
+una carpeta del escritorio (**Bubble - soporte**) y te abre el mail listo para mandarlo a mano.
 
 **Acerca de** muestra la versión, quién lo hizo, con qué está hecho y a dónde van tus datos.
 
 ## Si algo no anda
 
-Bubble anota lo que va haciendo en `%APPDATA%\Bubble\bubble.log` (cuándo se sacó una captura, si escucha solo a
-Roblox, qué pasó con tu voz traducida…) y los errores en `errores.log`. No anota lo que dicen en el chat ni lo que tecleás. Si algo
-falla, esos dos archivos dicen por qué.
+Bubble anota lo que va haciendo en `%APPDATA%\Bubble\bubble.log` y los errores en `errores.log`. No anota lo que dicen
+en el chat ni lo que escribís. Si algo falla, esos dos archivos suelen decir por qué.
 
-
-- **No encuentra el chat:** esperá a que haya dos o tres mensajes a la vista y tocá **Ajustes → Buscar el chat**,
-  o **Marcarlo a mano**.
-- **Las traducciones no aparecen:** Roblox tiene que estar al frente y sin otras ventanas encima del chat.
-- **El mensaje no se envía:** el chat de Roblox se abre con la tecla física "/" (en un teclado latinoamericano es
-  la tecla "-"). Si el juego usa otra, cambiá `open_chat_key`.
-- **Ves mensajes ya traducidos por Roblox:** volvé a apagar su traducción automática (a veces se reactiva).
-- **Los demás no escuchan tu voz traducida:** hace falta el micrófono virtual (**Voz → Micrófono**) y, en Roblox,
-  elegir **CABLE Output** como micrófono.
-- **Bubble se cerró de golpe:** los errores quedan en `%APPDATA%\Bubble\errores.log`. Si se cerró mientras
-  preparaba la voz, la próxima vez abre con la voz en pausa.
-- **No lee el chat y dice que falta un idioma para leer texto:** Bubble usa el lector de texto de Windows con
-  cualquier idioma que tengas; si no hay ninguno, agregá **Inglés** en Configuración → Hora e idioma → Idioma y
-  región.
-- **Nada de esto:** escribí en **Soporte** (ver [Soporte y Acerca de](#soporte-y-acerca-de)), con una captura si
-  podés.
+- **No encuentra el chat:** esperá a que haya dos o tres mensajes a la vista y tocá **Ajustes → Buscar el chat**, o
+  **Marcarlo a mano**.
+- **No aparecen las traducciones:** Roblox tiene que estar al frente, sin otras ventanas encima del chat.
+- **El mensaje no se manda:** el chat de Roblox se abre con la tecla "/" (en un teclado latinoamericano, la tecla
+  "-"). Si el juego usa otra, cambiá `open_chat_key`.
+- **Ves mensajes ya traducidos por Roblox:** volvé a apagar su traducción automática; a veces se prende sola.
+- **No escuchan tu voz traducida:** hace falta el micrófono virtual (**Voz → Micrófono**) y, en Roblox, elegir
+  **CABLE Output**.
+- **Dice que falta un idioma para leer texto:** agregá **Inglés** en Configuración → Hora e idioma → Idioma y región.
+- **Bubble se cerró de golpe:** los errores quedan en `errores.log`. Si se cerró preparando la voz, la próxima vez
+  abre con la voz en pausa.
+- **Nada de esto:** escribime desde **Soporte**, con una captura si podés.

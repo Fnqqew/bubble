@@ -25,8 +25,8 @@ class SetupWindow:
         self.window, body = widgets.dialog(root, "Preparar Bubble")
         colors = widgets.palette()
         ttk.Label(body, text="Preparar Bubble", font="SunValleySubtitleFont").pack(anchor="w")
-        widgets.muted(body, "Bubble instala solo lo que le falta. La primera vez tarda unos minutos (se descarga): podés "
-                            "seguir usando la PC.", pady=(2, 12))
+        widgets.muted(body, "Instalo solo lo que falta. La primera vez tarda unos minutos, pero podés seguir "
+                            "usando la PC.", pady=(2, 12))
         self.rows: dict[str, tuple[ttk.Label, ttk.Label]] = {}
         self.buttons: dict[str, tuple[ttk.Button, ttk.Frame]] = {}  # lo que necesita tu permiso (se va al estar listo)
         for step in self.steps:
@@ -146,7 +146,7 @@ class SetupWindow:
         self.bar.stop()
         self.bar.configure(mode="determinate", value=1.0 if not failed else 0.0)
         if failed:
-            self.status.configure(text="Algo no se pudo instalar. Revisá tu conexión y probá de nuevo.")
+            self.status.configure(text="Algo no se pudo instalar. Fijate la conexión y probá otra vez.")
             self.close_button.configure(text="Cerrar")
         else:
             self.status.configure(text="✓ Todo listo." if installed or not self._manual_pending() else
@@ -181,7 +181,7 @@ class UninstallWindow:
         self.on_done = on_done
         self.window, body = widgets.dialog(root, "Desinstalar Bubble")
         ttk.Label(body, text="Desinstalar Bubble", font="SunValleySubtitleFont").pack(anchor="w")
-        widgets.muted(body, "Elegí qué borrar. Antes, Windows vuelve a usar tu micrófono y tu parlante de verdad.",
+        widgets.muted(body, "Elegí qué querés borrar. Tu micrófono y tus parlantes quedan como antes.",
                       pady=(2, 12))
         self.vars: dict[str, tk.BooleanVar] = {}
         for part in uninstall.parts():

@@ -79,7 +79,7 @@ def test_mic_check_rates_good_quiet_and_noisy_microphones():
     noisy = np.concatenate([tone(150, 150, 1.0, level=0.02, noise=0.02), tone(150, 150, 2.0, level=0.05, noise=0.02)])
     assert analyze_mic(good, sentence, sentence).rating == "bien"
     report = analyze_mic(quiet, sentence, sentence)
-    assert report.rating == "mal" and any("baja" in tip for tip in report.tips)
+    assert report.rating == "mal" and any("bajo" in tip for tip in report.tips)
     assert analyze_mic(noisy, sentence, sentence).rating in ("mal", "normal")
     assert analyze_mic(good, "che viene a la torre", sentence).rating == "normal"  # entendió solo una parte
     assert word_error_rate("hola che", "hola che") == 0 and word_error_rate("hola che", "") == 1
