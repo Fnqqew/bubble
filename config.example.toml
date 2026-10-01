@@ -20,6 +20,9 @@ ui_language = "auto"
 auto_update = false
 
 [translation]
+# Chat rápido: primero una traducción rápida (~1 s) y enseguida la versión más precisa, que la reemplaza si es distinta
+# (el doble de pedidos a Claude por mensaje).
+quick_chat = true
 # Líneas recientes del chat que se envían como contexto (mejora la precisión).
 context_lines = 6
 # Mensajes cortos (<= esta cantidad de palabras) se guardan en cache.
@@ -100,6 +103,9 @@ mic = ""
 pass_my_voice = true
 # Reconocimiento de voz (texto final): "auto" (según tu procesador), "tiny", "base" o "small".
 model = "auto"
+# Traducir mientras hablan: la traducción aparece mientras la persona habla, sin esperar a que termine (consume más
+# de la suscripción de Claude: varios pedidos por frase).
+live_translation = true
 # Radio de escucha de las voces del juego: "cerca", "normal", "lejos" o "todo". Los que están lejos suenan más bajo y no
 # se traducen; los ruidos (música, explosiones, risas) no se traducen nunca.
 earshot = "normal"

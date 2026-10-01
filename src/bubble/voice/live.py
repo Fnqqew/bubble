@@ -65,8 +65,8 @@ class Settings:
     split_overlap_s: float = 1.5  # la frase siguiente comienza un poco antes del corte (ver `drop_overlap`)
     pre_roll_s: float = 0.2
     min_speech_s: float = 0.25
-    partial_every_s: float = 0.6
-    first_partial_s: float = 0.45
+    partial_every_s: float = 0.4  # (con la traducción en vivo, cada lectura nueva se traduce enseguida)
+    first_partial_s: float = 0.35
     speaker_after_s: float = 1.0  # a partir de aquí se intenta identificar al hablante
     # En estos idiomas el modelo rápido entiende casi igual que el preciso: si su última lectura abarcó toda la frase,
     # esa es la versión final (sale ~0,5 s antes). En los demás (hindi, ruso…) el modelo preciso es necesario.

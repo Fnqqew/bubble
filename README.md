@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 4.0" src="https://img.shields.io/badge/versión-4.0-4a90e2?style=flat-square">
+  <img alt="Versión 4.1" src="https://img.shields.io/badge/versión-4.1-4a90e2?style=flat-square">
   <img alt="Basic gratis" src="https://img.shields.io/badge/Basic-gratis-5b6270?style=flat-square">
   <img alt="Bubble Pro" src="https://img.shields.io/badge/✦%20Bubble-Pro-f2c14e?style=flat-square&labelColor=2b2f36">
   <img alt="59 idiomas" src="https://img.shields.io/badge/idiomas-59-2b2f36?style=flat-square">
@@ -39,7 +39,8 @@ Bubble observa la pantalla mientras jugás y traduce todo lo que aparece:
 - **Las burbujas** que aparecen sobre los jugadores, aunque muevas la cámara.
 - **Lo que escribís.** Presionás °, escribís con normalidad y el mensaje llega al chat traducido. Con Tab elegís el
   idioma, entre 59 opciones.
-- **Las voces.** Lo que te dicen aparece subtitulado en la parte inferior, como en una película.
+- **Las voces.** Lo que te dicen aparece subtitulado en la parte inferior, como en una película, y la traducción
+  se va mostrando mientras la persona habla, sin esperar a que termine.
 - **Tu voz.** Hablás en tu idioma y los demás te escuchan en el suyo, con voz de mujer o de hombre y con tu misma
   expresión: si gritás, la voz grita; si preguntás, la voz pregunta.
 

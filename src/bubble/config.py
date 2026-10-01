@@ -50,6 +50,10 @@ class TranslationConfig:
     # Adapta a la variante del jugador los mensajes en su idioma que usan jerga de otro país ("no mames wey" -> "no te
     # puedo creer"). Desactivado: lo que ya está en su idioma no se modifica.
     adapt_slang: bool = False
+    # Chat rápido: cada mensaje se traduce primero con el modelo rápido (~1 s) y enseguida lo corrige el modelo
+    # principal, más preciso con la jerga (la píldora cambia solo si la versión precisa es distinta). Duplica los
+    # pedidos del chat.
+    quick_chat: bool = True
 
 
 @dataclass
@@ -115,6 +119,9 @@ class VoiceConfig:
     # Radio de escucha de las voces del juego: "cerca", "normal", "lejos" o "todo" (las voces lejanas suenan más bajo y
     # no se traducen). Lo que suena a ruido y no a una persona hablando nunca se traduce.
     earshot: str = "normal"
+    # Traducción en vivo de lo que dicen los demás: la traducción aparece mientras hablan, sin esperar a que terminen.
+    # Hace varios pedidos a Claude por frase.
+    live_translation: bool = True
 
 
 @dataclass

@@ -68,6 +68,10 @@ GAME_TERMS = ("Robux", "Roblox", "obby", "noob", "pvp", "lag", "gg", "afk", "oof
               "Forsaken", "Dead Rails", "Piggy", "Evade", "Royale High", "Pls Donate", "The Strongest Battlegrounds",
               "Toilet Tower Defense", "Natural Disaster Survival", "Bubble")
 KEYTERM_TOKENS = 450  # Deepgram admite hasta 500 "tokens" en total
+# Voces del juego: la frase se cierra tras 0,8 s sin voz (y se envían 0,6 s de silencio para que Deepgram detecte el
+# final por su cuenta). Con la traducción en vivo, cerrar antes acelera la traducción definitiva sin perder nada.
+GAME_HOLD_S = 0.8
+GAME_TAIL_S = 0.6
 
 
 # Al mezclar idiomas ("multi"), lo que la nube no entiende se transcribe como otro idioma (coreano y chino salían como
@@ -300,7 +304,11 @@ class DeepgramListener:
                  on_fatal: Callable[[CloudError], None] = lambda _exc: None, language: str | None = None,
                  diarize: bool = True, judge=None, vad=None, endpointing_ms: int = 300, earshot=None,
                  noise_filter: bool = False, keyterms: Callable[[], list[str]] | list[str] = (),
-                 speakers=None, send_all: bool = False, recheck: bool = False) -> None:
+                 speakers=None, send_all: bool = False, recheck: bool = False, hold_s: float | None = None,
+                 tail_s: float | None = None) -> None:
+        """`hold_s`/`tail_s`: pausa tras la cual se cierra la frase y silencio que se envía después de la voz (las
+        voces del juego usan valores más cortos, para que la frase se cierre antes; ver HOLD_S y TAIL_S).
+        """
         self.key = key
         self.on_caption = on_caption
         self.source_factory = source_factory
@@ -311,6 +319,8 @@ class DeepgramListener:
         # cómo lo dijo esa voz (perfil del jugador); si no hay, se compara cada voz con su propio ritmo
         self.judge = judge
         self.endpointing_ms = endpointing_ms
+        self.hold_s = self.HOLD_S if hold_s is None else hold_s
+        self.tail_s = self.TAIL_S if tail_s is None else tail_s
         self._older_model = False  # Nova-3 rechazó el idioma: se usa Nova-2
         # Radio de escucha y filtro de ruido (voice/hearing.py): lo que suena lejos no se envía ni se cobra.
         self.earshot = earshot
@@ -428,14 +438,14 @@ class DeepgramListener:
             if not self._sending and not self._far:
                 self._sending = self._open = True
                 self._send(self._recent)  # audio previo: el comienzo de la palabra
-        elif self._far and now - self._last_voice > self.HOLD_S:
+        elif self._far and now - self._last_voice > self.hold_s:
             self._far = False  # terminó esa voz: la siguiente se vuelve a medir
         self._recent = np.concatenate([self._recent, samples])[-int(self.PREROLL_S * SAMPLE_RATE):]
         if self._sending:
             self._send(samples)
-            if now - self._last_voice > self.TAIL_S:
+            if now - self._last_voice > self.tail_s:
                 self._sending = False  # pausa: no se envía más silencio (si vuelve el habla, se retoma)
-        if self._open and now - self._last_voice > self.HOLD_S:
+        if self._open and now - self._last_voice > self.hold_s:
             self._open = False
             self._outbox.put(_FINALIZE)  # terminó el habla: Deepgram cierra la frase ya
 

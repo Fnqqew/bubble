@@ -318,6 +318,10 @@ def _settings(app: BubbleWindow, page) -> None:
     ttk.Button(row, text="Buscar el chat", command=app._detect_chat).pack(side="left")
     ttk.Button(row, text="Marcarlo manualmente", command=app._calibrate).pack(side="left", padx=8)
     ttk.Button(row, text="Probar lectura", command=app._capture_test).pack(side="left")
+    app.quick_chat_var = tk.BooleanVar(value=app.config.translation.quick_chat)
+    widgets.switch_row(box, "chat", "Traducción rápida del chat",
+                       "Primero una traducción rápida y enseguida la más precisa. Usa más de tu suscripción.",
+                       app.quick_chat_var, lambda: _change_quick_chat(app), pady=(12, 0))
 
     box = widgets.card(page, "Rendimiento")
     app.perf_var = tk.StringVar(value=app.config.roblox.performance
@@ -678,6 +682,11 @@ def _change_screenshots(app: BubbleWindow) -> None:
     app.config.appearance.in_screenshots = bool(app.shots_var.get())
     save_setting("appearance", "in_screenshots", app.config.appearance.in_screenshots)
     app._start_screenshots()
+
+
+def _change_quick_chat(app: BubbleWindow) -> None:
+    app.config.translation.quick_chat = bool(app.quick_chat_var.get())
+    save_setting("translation", "quick_chat", app.config.translation.quick_chat)
 
 
 def _change_auto_update(app: BubbleWindow) -> None:

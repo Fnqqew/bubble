@@ -113,7 +113,10 @@ traducciones en español.
 **El chat.** Cada mensaje en otro idioma se traduce encima del original, dejando visible el nombre del jugador. Los
 mensajes en tu idioma no se modifican.
 
-- La traducción aparece completa, unos 2 segundos después del mensaje.
+- **Traducción rápida del chat.** Cada mensaje se traduce primero con un modelo rápido (aparece en alrededor de un
+  segundo) y enseguida lo revisa el modelo principal, más preciso con la jerga: si su versión es distinta, reemplaza a
+  la primera. Usa el doble de pedidos a Claude; se puede desactivar en **Ajustes → Chat de Roblox → Traducción rápida
+  del chat**, y en ese caso la traducción aparece completa unos 2 segundos después del mensaje.
 - Si el mensaje ocupa dos renglones y la traducción es corta, se reparte entre ambos, para que no quede un renglón
   cubierto y vacío.
 - Solo se traducen los mensajes nuevos: si subís en el chat, lo anterior no se modifica. Cuando el chat se desplaza,
@@ -182,8 +185,12 @@ habla y **Piper** genera la voz. Claude solo recibe el texto. La primera vez se 
 
 Activá **Lo que te dicen por voz**, en Inicio, y lo que dicen los demás aparece subtitulado en la parte inferior.
 
-- Mientras la persona habla, lo que va diciendo se muestra en gris. En cuanto hace una pausa, llega la traducción en
-  blanco, unos 2 segundos después.
+- **Traducción mientras hablan.** La traducción aparece mientras la persona todavía está hablando y se actualiza cada
+  pocas palabras, con "…" al final hasta que termina la frase. Si al terminar la última traducción ya abarcaba todo, queda
+  como definitiva sin esperar; si no, se reemplaza por la final. Usa más de tu suscripción de Claude (varios pedidos por
+  frase): se puede desactivar en **Voz → Traducir mientras hablan**, y en ese caso la traducción llega unos 2 segundos
+  después de cada pausa.
+- Antes de la primera traducción, lo que va diciendo se muestra en gris.
 - Cada persona tiene su color y su número (**Voz 1**, **Voz 2**…), y Bubble la reconoce cuando vuelve a hablar.
 - Se detecta **cómo lo dijeron**: si preguntaron, gritaron o exclamaron. Bubble lo mide en el audio para que la
   traducción tenga los signos y la emoción correspondientes.
@@ -438,9 +445,12 @@ flowchart LR
   se lee con el OCR de Windows. Si una lectura es incompleta, se repite.
 - **Sin repetir ni perder mensajes.** El chat se sigue como una lista ordenada: un mensaje repetido abajo es nuevo, uno
   que el OCR omitió y aparece entre dos conocidos también, y lo que aparece arriba es historial.
-- **Velocidad.** Hay tres sesiones de Claude abiertas de forma permanente, dedicadas solo a traducir. El idioma se
-  detecta en tu PC, y las frases frecuentes ("gg", "xd") salen al instante. La voz y las burbujas tienen su propio
-  canal, con un modelo más rápido, para no esperar detrás del chat.
+- **Velocidad.** Hay sesiones de Claude abiertas de forma permanente, dedicadas solo a traducir, en tres canales: el
+  del chat (el modelo principal), el de la voz y las burbujas (un modelo más rápido) y, en PCs con 10 GB de memoria o
+  más, uno propio para lo que dicen los demás, con dos sesiones. Ese último hace la traducción en vivo sin demorar tu
+  voz, y la traducción definitiva de cada frase se pide a la vez en los dos canales rápidos: gana la primera que
+  responde. Los canales se mantienen activos mientras jugás, para que nunca empiecen en frío. El idioma se detecta en
+  tu PC, y las frases frecuentes ("gg", "xd") salen al instante.
 - **Bajo consumo.** La pantalla se captura con la placa de video, y Bubble mide el costo de cada lectura para no
   afectar el rendimiento de Roblox.
 - **Seguridad.** Bubble nunca interviene en el proceso de Roblox: observa la pantalla como una aplicación de

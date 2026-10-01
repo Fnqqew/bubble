@@ -631,7 +631,7 @@ class BubbleWindow:
         self.translator = await asyncio.to_thread(build_translator, self.config, key,
                                                   self._cloud_fatal if key else None)
         await self.translator.start()
-        for provider in self.translator.router.providers:
+        for provider in self.translator.providers:
             if hasattr(provider, "keep_warm_when"):
                 provider.keep_warm_when = win32.roblox_is_foreground  # solo mientras se juega
         rbx = self.config.roblox
@@ -1121,12 +1121,21 @@ class BubbleWindow:
         msg_id = next(self._msg_ids)
 
         async def translate() -> None:
-            result = await self.translator.translate_incoming(
+            translator = self.translator
+            # Chat rápido: primero el modelo rápido y enseguida el preciso, que reemplaza la píldora si es distinto.
+            quick = self.config.translation.quick_chat and translator.fast_ready()
+            result = await translator.translate_incoming(
                 line.text, line.speaker,
                 on_delta=lambda chunk: self.events.put(("chat_delta", (msg_id, chunk))),
                 on_pending=lambda: self.events.put(("chat_pending", (msg_id, line))),
+                draft=quick,
             )
             self.events.put(("chat", (msg_id, line, result)))
+            if quick and result.status in ("translated", "adapted"):
+                better = await translator.translate_incoming(line.text, line.speaker, refine=True)
+                if better.status in ("translated", "adapted") and better.translation.strip() and \
+                        better.translation.strip() != result.translation.strip():
+                    self.events.put(("chat_refined", (msg_id, line, better)))
 
         asyncio.get_running_loop().create_task(translate())
 
@@ -1671,6 +1680,13 @@ class BubbleWindow:
                 self.overlay.show(line.speaker, text)
         else:
             self.overlay.remove(row)  # nada nuevo que mostrar (ya estaba en el idioma del jugador, nombres, etc.)
+
+    def _ev_chat_refined(self, payload: tuple[int, ChatLine, TranslationResult]) -> None:
+        """La versión precisa de un mensaje que ya se mostraba con la traducción rápida (chat rápido)."""
+        msg_id, line, result = payload
+        if self.inline_mode:
+            self.inline_chat.final(msg_id, line, result.translation)
+        self._append(f"   ↳ {result.translation}\n", "info")
 
     def _ev_sim_result(self, payload) -> None:
         (direction, speaker), future = payload

@@ -87,9 +87,10 @@ def build_system_prompt(explain_slang: bool = True) -> str:
 
 
 _OPEN_TAG = re.compile(r"<t(\d{1,3})>")
-_CLOSE_TAG = re.compile(r"</t\d{0,3}>")
+# A veces el modelo cierra la respuesta con la marca del pedido (</m1>) en lugar de </t1>: también vale como cierre.
+_CLOSE_TAG = re.compile(r"</[tm]\d{0,3}>")
 # Final del buffer que podría ser el comienzo de una marca de cierre partida entre fragmentos.
-_PARTIAL_CLOSE = re.compile(r"<(?:/(?:t(?:\d{1,3})?)?)?$")
+_PARTIAL_CLOSE = re.compile(r"<(?:/(?:[tm](?:\d{1,3})?)?)?$")
 
 
 class OutputFilter:
@@ -211,6 +212,10 @@ def build_user_prompt(requests: TranslationRequest | Sequence[TranslationRequest
                          "translate it as an exclamation, keeping the emotion.")
         elif "soft" in marks:
             parts.append("They said it quietly and calmly: keep it calm, no exclamation marks.")
+    if first.partial:
+        parts.append("The speaker is still talking: this is only the beginning of what they are saying and it may stop "
+                     "mid-sentence. Translate only the words that are there, without completing or guessing the rest, "
+                     "and without adding a final period.")
     if first.from_speech and first.vocabulary:
         parts.append("Words and names this player often says (the speech recognition may have misheard them as "
                      f"similar-sounding words): {escape(', '.join(first.vocabulary))}.")

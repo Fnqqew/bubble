@@ -7,11 +7,14 @@ Uso:
     python -m bubble.tools.voice_lab                       # todos los escenarios, con traducción (Claude)
     python -m bubble.tools.voice_lab grupo idiomas         # algunos
     python -m bubble.tools.voice_lab --sin-claude          # solo escuchar y transcribir (gratis)
+    python -m bubble.tools.voice_lab --sin-vivo            # sin traducción en vivo (solo al terminar cada frase)
+    python -m bubble.tools.voice_lab --pro                 # voces reconocidas en la nube (Deepgram, unos centavos)
     python -m bubble.tools.voice_lab --directo             # voz propia, traducción directa (se habla y sale en voz)
 
-Para cada escenario informa: tiempo hasta que aparece el texto, tiempo hasta la traducción, palabras mal entendidas
-(WER), acierto de idioma, identificación de hablantes (voces encontradas y aciertos) y uso de CPU. Guarda capturas de
-los subtítulos en %LOCALAPPDATA%\\Bubble\\voice_lab.
+Para cada escenario informa: tiempo hasta que aparece el texto, tiempo hasta que se ve una traducción (en vivo o final,
+desde que la persona empieza a hablar), tiempo hasta la traducción definitiva, palabras mal entendidas (WER), acierto
+de idioma, identificación de hablantes (voces encontradas y aciertos) y uso de CPU. Guarda capturas de los subtítulos
+en %LOCALAPPDATA%\\Bubble\\voice_lab.
 """
 
 from __future__ import annotations
@@ -78,6 +81,8 @@ CAST = {
 
 
 RAW = False  # --sin-filtro: sin radio de escucha ni filtro de ruido (comparación)
+LIVE = True  # --sin-vivo: sin traducción en vivo (comparación)
+PRO = False  # --pro: las voces se reconocen en la nube (Deepgram, con la clave guardada; cuesta unos centavos)
 
 def scenarios() -> list[Scenario]:
     return [
@@ -303,6 +308,9 @@ class Record:
     translation_first: float | None = None
     translation_done: float | None = None
     translation: str = ""
+    live_asks: int = 0
+    shown_first: float | None = None  # primera traducción a la vista (en vivo o final)
+    definitive_at: float | None = None  # traducción definitiva (pedida al final o la última en vivo)
 
 
 @dataclass
@@ -330,35 +338,62 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
     records: dict[int, Record] = {}
     lock = threading.Lock()
 
-    def translate(text, language, speaker, on_piece, on_done, intonation="", *, _records=records):
-        caption_id = current_caption[0]
+    def translate(text, language, speaker, on_piece, on_done, intonation="", live=False, *, _records=records):
         with lock:
-            if caption_id in _records:
-                # Si se vuelve a pedir (el texto final cambió), cuenta el último pedido.
-                rec = _records[caption_id]
+            # (las traducciones en vivo pueden pedirse para una frase que no es la última que llegó)
+            caption_id = next((cid for cid, r in _records.items() if r.text == text), current_caption[0])
+            rec = _records.get(caption_id)
+            if live:
+                if rec:
+                    rec.live_asks += 1
+            elif rec:
                 rec.translation_asked = time.perf_counter()
                 rec.translation_first = rec.translation_done = None
                 rec.asks += 1
-        ask_number = _records[caption_id].asks if caption_id in _records else 0
+            ask_number = rec.asks if rec else 0
+
+        def shown():
+            rec = _records.get(caption_id)
+            if rec and rec.shown_first is None:
+                rec.shown_first = time.perf_counter()
+
+        if live:
+            def live_done(result, native=False):
+                if result and not native:
+                    with lock:
+                        shown()
+                on_done(result, native=native)
+
+            translate_fn(text, language, speaker, lambda _piece: None, live_done, "", live=True)
+            return
 
         def piece(chunk):
             with lock:
                 rec = _records.get(caption_id)
                 if rec and rec.asks == ask_number and rec.translation_first is None:
                     rec.translation_first = time.perf_counter()
+                shown()
             on_piece(chunk)
 
-        def done(result):
+        def done(result, native=False):
             with lock:
                 rec = _records.get(caption_id)
                 if rec and rec.asks == ask_number:
                     rec.translation_done = time.perf_counter()
                     rec.translation = result or ""
-            on_done(result)
+                if result:
+                    shown()
+            on_done(result, native=native)
 
-        translate_fn(text, language, speaker, piece, done)
+        translate_fn(text, language, speaker, piece, done, intonation)
 
-    board = CaptionBoard(my_language, translate)
+    def definitive(line):
+        with lock:
+            rec = records.get(line.id)
+            if rec and rec.definitive_at is None:
+                rec.definitive_at = time.perf_counter()
+
+    board = CaptionBoard(my_language, translate, live=LIVE, on_translated=definitive)
     current_caption = [0]
 
     def on_caption(caption):
@@ -380,9 +415,18 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
     speakers.voices.clear()
     from ..voice.hearing import Earshot
 
-    listener = LiveListener(final_asr, on_caption, partial_asr=partial_asr, speakers=speakers,
-                            source_factory=lambda: source, earshot=None if RAW else Earshot("normal"),
-                            noise_filter=not RAW)
+    if PRO:
+        from ..cloud.deepgram import GAME_HOLD_S, GAME_TAIL_S, GAME_TERMS, DeepgramListener
+        from ..cloud.keys import load_key
+
+        listener = DeepgramListener(load_key(), on_caption, source_factory=lambda: source,
+                                    earshot=None if RAW else Earshot("normal"), noise_filter=not RAW,
+                                    speakers=speakers, keyterms=list(GAME_TERMS), recheck=True,
+                                    hold_s=GAME_HOLD_S, tail_s=GAME_TAIL_S)
+    else:
+        listener = LiveListener(final_asr, on_caption, partial_asr=partial_asr, speakers=speakers,
+                                source_factory=lambda: source, earshot=None if RAW else Earshot("normal"),
+                                noise_filter=not RAW)
     cpu0 = time.process_time()
     wall0 = time.perf_counter()
     listener.start()
@@ -411,7 +455,7 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
     def related(r: Record, t: Truth) -> bool:
         return overlap(r, t) > min(0.25 * (t.end - t.start), 0.5 * (r.end - r.start))
 
-    first_text, final_lat, tr_first, tr_done = [], [], [], []
+    first_text, final_lat, tr_first, tr_done, visible, before_end, long_ones = [], [], [], [], [], 0, 0
     for truth in truths:
         matches = [r for r in records.values() if related(r, truth)]
         if not matches:
@@ -419,14 +463,21 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
         starting = [r for r in matches if r.start >= truth.start - 0.5]  # frases que comienzan con esta
         if starting:
             first_text.append(min(r.first_seen for r in starting) - source.wall(truth.start))
+        if truth.lang != mine:
+            seen = [r.shown_first for r in matches if r.shown_first]
+            if seen:
+                visible.append(min(seen) - source.wall(truth.start))
+            if truth.end - truth.start >= 2.5:
+                long_ones += 1
+                before_end += bool(seen) and min(seen) < source.wall(truth.end)
         closing = [r for r in matches if r.final_at and r.end >= truth.end - 0.3]
         if closing:
             rec = min(closing, key=lambda r: r.final_at)
             final_lat.append(rec.final_at - source.wall(truth.end))
             if truth.lang != mine and rec.translation_first:
                 tr_first.append(rec.translation_first - source.wall(truth.end))
-            if truth.lang != mine and rec.translation_done:
-                tr_done.append(rec.translation_done - source.wall(truth.end))
+            if truth.lang != mine and rec.definitive_at:
+                tr_done.append(rec.definitive_at - source.wall(truth.end))
     detected = sum(1 for t in truths if any(related(r, t) for r in finals))
     reference = " ".join(t.text for t in truths)
     hypothesis = " ".join(r.text for r in finals)
@@ -445,7 +496,7 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
         by_number.setdefault(number, []).append(who)
     right = sum(max(whos.count(w) for w in set(whos)) for number, whos in by_number.items() if number)
     speaker_ok = right / max(1, len(pairs))
-    translated = sum(1 for r in finals if r.translation)
+    translated = sum(1 for r in finals if r.translation or r.definitive_at)
     claude_first = [r.translation_first - r.translation_asked for r in finals
                     if r.translation_first and r.translation_asked]
     claude_done = [r.translation_done - r.translation_asked for r in finals
@@ -461,6 +512,9 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
         "voz_ok": speaker_ok, "traducidas": f"{translated}/{len(expected)}", "falsas": false_alarms,
         "cpu_nucleos": cpu, "claude_1a_p50": percentile(claude_first, 50),
         "claude_completa_p50": percentile(claude_done, 50),
+        "traduccion_visible_p50": percentile(visible, 50), "traduccion_visible_p90": percentile(visible, 90),
+        "antes_de_terminar": f"{before_end}/{long_ones}",
+        "pedidos_en_vivo": sum(r.live_asks for r in records.values()),
     }
     result.lines.append(f"  frases {detected}/{len(truths)} detectadas · texto aparece p50 {fmt(percentile(first_text, 50))}"
                         f" (desde que empieza a hablar)")
@@ -471,6 +525,9 @@ def run(scenario: Scenario, pipeline, translate_fn, my_language: str, shots_dir:
                         f"{len(found)} encontradas de {len(real)} · atribución {speaker_ok:.0%} · traducidas "
                         f"{translated}/{len(expected)} · falsas {false_alarms} · CPU {cpu:.2f} núcleos · "
                         f"pedidos a Claude {sum(r.asks for r in records.values())}")
+    result.lines.append(f"  traducción a la vista {fmt(percentile(visible, 50))} p50 / "
+                        f"{fmt(percentile(visible, 90))} p90 (desde que empieza a hablar) · ya visible antes de que termine {before_end}/{long_ones} "
+                        f"frases largas · pedidos en vivo {sum(r.live_asks for r in records.values())}")
     if claude_first:
         result.lines.append(f"  Claude (desde que se le pide): 1ª palabra {fmt(percentile(claude_first, 50))} p50, "
                             f"completa {fmt(percentile(claude_done, 50))} p50")
@@ -575,21 +632,31 @@ def make_pipeline(final_model: str, partial_model: str, final_threads: int, part
 
 def make_translate(use_claude: bool, outgoing: bool = False):
     if not use_claude:
-        return None, (lambda text, language, speaker, on_piece, on_done: on_done(None))
+        return None, (lambda text, language, speaker, on_piece, on_done, *_a, **_k: on_done(None))
     from ..async_runner import AsyncRunner
     from ..config import load_config
     from ..translate import build_translator
 
     config = load_config()
+    config.voice.subtitles = True  # (abre los mismos carriles que la ventana con los subtítulos prendidos)
     translator = build_translator(config)
     runner = AsyncRunner()
     runner.submit(translator.start()).result(timeout=90)
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline and not (translator._voice_ready() and (
+            translator.live_router is None or translator._live_ready())):
+        time.sleep(0.2)  # se mide con los carriles rápidos ya abiertos, como durante una partida
 
-    def translate(text, language, speaker, on_piece, on_done, intonation=""):
+    def translate(text, language, speaker, on_piece, on_done, intonation="", live=False):
+        # Igual que en la ventana (ui/voice_panel.py): carril rápido, con la entonación y en vivo si corresponde.
         async def work():
             try:
-                result = await translator.translate_incoming(text, f"Voz {speaker}", on_delta=on_piece)
-                on_done(result.translation if result.status != "error" else None)
+                result = await translator.translate_incoming(text, f"Voz {speaker}", on_delta=on_piece,
+                                                             from_speech=True, intonation=intonation, live=live)
+                if result.status == "same_language":
+                    on_done(None, native=True)
+                else:
+                    on_done(result.translation if result.status != "error" else None)
             except Exception:  # noqa: BLE001
                 on_done(None)
 
@@ -608,6 +675,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Laboratorio de voz de Bubble")
     parser.add_argument("escenarios", nargs="*")
     parser.add_argument("--sin-claude", action="store_true", help="no traducir (gratis): solo escuchar y transcribir")
+    parser.add_argument("--sin-vivo", action="store_true", help="sin traducción en vivo: solo al terminar cada frase")
+    parser.add_argument("--pro", action="store_true", help="reconocer las voces en la nube (Deepgram)")
     parser.add_argument("--final", default="small")
     parser.add_argument("--parcial", default="base")
     parser.add_argument("--hilos-final", type=int, default=4)
@@ -617,8 +686,10 @@ def main() -> None:
     parser.add_argument("--sin-filtro", action="store_true",
                         help="sin radio de escucha ni filtro de ruido (como antes de la 3.0)")
     args = parser.parse_args()
-    global RAW
+    global RAW, LIVE, PRO
     RAW = args.sin_filtro
+    LIVE = not args.sin_vivo
+    PRO = args.pro
     if args.directo:
         held, translate_out = make_translate(True, outgoing=True)
         pipeline = make_pipeline(args.final, "" if args.parcial == "no" else args.parcial, args.hilos_final,

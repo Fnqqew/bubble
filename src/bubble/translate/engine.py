@@ -40,15 +40,18 @@ log = logging.getLogger(__name__)
 
 class Translator:
     def __init__(self, config: Config, router: Router, detector: LanguageDetector | None = None,
-                 voice_router: Router | None = None) -> None:
+                 voice_router: Router | None = None, live_router: Router | None = None) -> None:
         """`voice_router`: carril de la voz, con su propia sesión y sin razonamiento previo a la respuesta. Así, lo
-        que el jugador dice y lo que le dicen por voz no espera detrás del chat.
+        que el jugador dice y lo que le dicen por voz no espera detrás del chat. `live_router`: carril de lo que dicen
+        los demás (traducción en vivo, y la final compite con el carril de la voz).
         """
         self.config = config
         self.hedge = True  # si la voz demora, se consulta también el carril del chat (ver _hedged)
         self.router = router
         self.voice_router = voice_router
         self._voice_lane: asyncio.Task | None = None
+        self.live_router = live_router
+        self._live_lane: asyncio.Task | None = None
         # Último idioma en el que el jugador habló o escribió. Se conserva: en modo automático no se vuelve a elegir
         # según el chat en cada mensaje.
         self.last_target: str | None = None
@@ -80,12 +83,37 @@ class Translator:
         """
         if self.voice_router is not None and self._voice_lane is None:
             self._voice_lane = asyncio.get_running_loop().create_task(self._open_voice_lane())
+        if self.config.voice.subtitles:
+            self.start_live()
+
+    def start_live(self) -> None:
+        """Abre el carril de lo que dicen los demás (si esta PC lo tiene: ver build_translator)."""
+        if self.live_router is not None and self._live_lane is None:
+            self._live_lane = asyncio.get_running_loop().create_task(self._open_lane(self.live_router))
 
     async def _open_voice_lane(self) -> None:
-        await self.voice_router.start()
-        for provider in self.voice_router.providers:
+        await self._open_lane(self.voice_router)
+
+    @staticmethod
+    async def _open_lane(router: Router) -> None:
+        await router.start()
+        for provider in router.providers:
             if hasattr(provider, "warm_up"):
                 await provider.warm_up()
+
+    def fast_ready(self) -> bool:
+        """Indica si el carril rápido ya está abierto (el chat rápido lo usa para la primera traducción)."""
+        return self._voice_ready()
+
+    def _live_ready(self) -> bool:
+        lane = self._live_lane
+        return lane is not None and lane.done() and not lane.cancelled() and lane.exception() is None
+
+    @property
+    def providers(self) -> list:
+        """Todos los proveedores de todos los carriles (para mantenerlos precalentados mientras se juega)."""
+        routers = (self.router, self.voice_router, self.live_router)
+        return [provider for router in routers if router is not None for provider in router.providers]
 
     def _voice_ready(self) -> bool:
         lane = self._voice_lane
@@ -96,6 +124,9 @@ class Translator:
         if self._voice_lane is not None:
             self._voice_lane.cancel()
             await self.voice_router.close()
+        if self._live_lane is not None:
+            self._live_lane.cancel()
+            await self.live_router.close()
         await self.router.close()
 
     @property
@@ -161,15 +192,23 @@ class Translator:
         from_speech: bool = False,
         intonation: str = "",
         fast: bool = False,
+        live: bool = False,
+        draft: bool = False,
+        refine: bool = False,
     ) -> TranslationResult:
         """`on_pending` se llama (sin esperar) justo antes de pedirle la traducción a Claude: permite reservar el
         lugar del mensaje en pantalla, respetando el orden del chat. `from_speech`: el mensaje se dijo por voz
         (va por el carril rápido y Claude sabe que puede haber palabras mal entendidas). `fast`: no espera a
         agrupar mensajes y usa el carril rápido si está abierto (burbujas, que se muestran junto al jugador).
+        `live`: traducción en vivo de una frase que todavía se está diciendo. Chat rápido: `draft` es la primera
+        traducción, por el carril rápido (no se guarda en la caché), y `refine` la versión precisa del mismo mensaje
+        (no se vuelve a agregar al contexto).
         """
         lang, region = self.my_locale
+        stage = "live" if live else "draft" if draft else "refine" if refine else ""
         return await self._translate(text, lang, region, "incoming", speaker, on_delta, on_pending=on_pending,
-                                     from_speech=from_speech, intonation=intonation, fast=fast)
+                                     from_speech=from_speech, intonation=intonation, fast=fast or draft,
+                                     partial=live, stage=stage)
 
     async def translate_outgoing(
         self,
@@ -211,8 +250,16 @@ class Translator:
         examples: tuple[tuple[str, str], ...] = (),
         vocabulary: tuple[str, ...] = (),
         fast: bool = False,
+        partial: bool = False,
+        stage: str = "",
     ) -> TranslationResult:
+        """`partial`: traducción en vivo de una frase que todavía se está diciendo. No se guarda en la caché ni en el
+        contexto, ni cuenta para estimar los idiomas del servidor: la versión definitiva llega al terminar la frase.
+        `stage`: "draft" o "refine" en el chat rápido (ver translate_incoming).
+        """
         start = time.perf_counter()
+        repeat = partial or stage == "refine"  # el mensaje ya se contó y está en el contexto (o es provisorio)
+        keep = not partial and stage != "draft"  # se guarda en la caché
         text = text.strip()
 
         def result(translation: str, status: str, source: str | None, provider: str = "", **extra) -> TranslationResult:
@@ -240,7 +287,7 @@ class Translator:
         confident = bool(detection and detection.is_confident(SKIP_CONFIDENCE))
         if len(hint_langs) == 1 and not (detection and detection.is_confident(TRACK_CONFIDENCE)):
             source = next(iter(hint_langs))  # la jerga identifica el idioma mejor que el detector
-        if direction == "incoming":
+        if direction == "incoming" and not repeat:
             if source and (hints or (detection and detection.is_confident(TRACK_CONFIDENCE))):
                 self._incoming_langs.append(source)
             self._incoming_regions.extend((h.lang, h.region) for h in hints if h.region)
@@ -251,7 +298,8 @@ class Translator:
         # extranjero.
         stray = foreign_words(text, target)
         foreign = any(h.lang != target for h in hints) or len(stray) >= max(1, (len(tokens) + 1) // 2)
-        if direction == "incoming" and source and detection and detection.is_confident(TRACK_CONFIDENCE):
+        if direction == "incoming" and not repeat and source and detection and \
+                detection.is_confident(TRACK_CONFIDENCE):
             self._speaker_langs.setdefault(speaker, deque(maxlen=4)).append(source)
         # Ya está en el idioma del lector: el detector lo indica con seguridad o casi todas sus palabras son comunes en
         # ese idioma (clave en mensajes cortos como "hola", "dale voy", "todo bien?").
@@ -264,16 +312,18 @@ class Translator:
             if self.config.translation.adapt_slang and self._foreign_region(hints, target, region):
                 mode = "adapt"  # mismo idioma, con jerga de otro país
             else:
-                self.history.append(ChatLine(speaker, text))
+                if not repeat:
+                    self.history.append(ChatLine(speaker, text))
                 return result(text, "same_language", source)
 
         # El modo de decirlo importa: "vamos a la torre" como pregunta no se traduce igual que como afirmación.
         cache_key = (f"{target}-{region}:{mode}:{direction}:{tone if direction == 'outgoing' else ''}:{spoken}:"
                      f"{intonation}")
         if (cached := self.cache.get(text, cache_key)) is not None:
-            self.history.append(ChatLine(speaker, text))
+            if not repeat:
+                self.history.append(ChatLine(speaker, text))
             return result(cached, "cache", source)
-        flight = (" ".join(text.casefold().split()), cache_key)
+        flight = (" ".join(text.casefold().split()), cache_key, partial, stage)
         if (shared := self._inflight.get(flight)) is not None:
             # Ya se está traduciendo (el mismo mensaje en el chat y en la burbuja): se espera ese pedido.
             if on_pending:
@@ -285,7 +335,7 @@ class Translator:
         try:
             finished = await self._ask(text, target, region, direction, speaker, source, mode, hints, tone, spoken,
                                        from_speech, intonation, examples, vocabulary, cache_key, on_delta,
-                                       on_pending, fast, result)
+                                       on_pending, fast, result, partial, repeat, keep)
         except BaseException as exc:
             finished = result(text, "error", source, error=str(exc) or type(exc).__name__)
             pending.set_result(finished)
@@ -297,16 +347,19 @@ class Translator:
         return finished
 
     async def _ask(self, text, target, region, direction, speaker, source, mode, hints, tone, spoken, from_speech,
-                   intonation, examples, vocabulary, cache_key, on_delta, on_pending, fast, result) -> TranslationResult:
+                   intonation, examples, vocabulary, cache_key, on_delta, on_pending, fast, result,
+                   partial=False, repeat=False, keep=True) -> TranslationResult:
         """Pedido a Claude (ya se sabe que es necesario: no estaba en caché ni en curso)."""
         request = TranslationRequest(
             text, target, direction, speaker, tuple(self.history),
             target_region=region, mode=mode, slang_hints=_hint_tuples(hints), tone=tone, spoken=spoken,
             from_speech=from_speech, intonation=intonation, examples=tuple(examples), vocabulary=tuple(vocabulary),
+            partial=partial,
         )
         # Se agrega al contexto de inmediato, sin esperar el resultado, para que el siguiente mensaje del chat lo tenga
         # en cuenta.
-        self.history.append(ChatLine(speaker, text))
+        if not repeat:
+            self.history.append(ChatLine(speaker, text))
         if on_pending:
             on_pending()
         try:
@@ -323,9 +376,11 @@ class Translator:
         if direction == "incoming" and mode == "translate" and unchanged(text, routed.text):
             # Claude lo devolvió sin cambios: ya estaba en el idioma del lector y el detector dudó. No se muestra como
             # traducción.
-            self.cache.put(text, cache_key, text)
+            if keep:
+                self.cache.put(text, cache_key, text)
             return result(text, "same_language", target, routed.provider)
-        self.cache.put(text, cache_key, routed.text)
+        if keep:
+            self.cache.put(text, cache_key, routed.text)
         status = "adapted" if mode == "adapt" else "translated"
         return result(routed.text, status, source, routed.provider, ttft_s=routed.ttft_s)
 
@@ -335,15 +390,25 @@ class Translator:
         mensajes; - mensajes del chat: en lotes, porque llegan en ráfagas.
         """
         voice = request.spoken or request.from_speech or fast
+        others = request.direction == "incoming" and (request.from_speech or fast)  # voz, burbujas y chat rápido
+        if request.partial and self._live_ready():
+            # En vivo: no se duplica (la reemplaza la siguiente).
+            return await self.live_router.translate(request, on_delta)
         if voice and self._voice_ready():
-            if not self.hedge:  # (sin Claude se paga por conexión abierta: nunca dos a la vez para lo mismo)
+            # Sin Claude se paga por conexión abierta: nunca dos a la vez para lo mismo. Una traducción en vivo tampoco
+            # se duplica: la reemplaza la siguiente.
+            if not self.hedge or request.partial:
                 return await self.voice_router.translate(request, on_delta)
+            if others and self._live_ready():
+                # Lo que dicen los demás: los dos carriles rápidos a la vez desde el comienzo; gana el primero.
+                return await self._hedged(request, on_delta, second=self.live_router, after=0.0, name="en vivo")
             return await self._hedged(request, on_delta)
         if voice or request.direction == "outgoing":
             return await self.router.translate(request, on_delta)
         return await self.batcher.translate(request, on_delta)
 
-    async def _hedged(self, request: TranslationRequest, on_delta: DeltaCallback | None = None):
+    async def _hedged(self, request: TranslationRequest, on_delta: DeltaCallback | None = None,
+                      second: Router | None = None, after: float | None = None, name: str = "chat"):
         """Carril rápido; si demora, se consulta también el del chat y gana el primero que termine bien. El
         perdedor termina por sí solo (cortarlo reiniciaría su sesión). Con `on_delta` (la voz se dice por
         oraciones), los fragmentos que se entregan son solo los del carril que empezó a responder primero, y ese
@@ -363,18 +428,20 @@ class Translator:
 
             return forward
 
+        other_router = second or self.router
+        after = HEDGE_AFTER_S if after is None else after
         first = asyncio.ensure_future(self.voice_router.translate(request, relay("voz")))
-        done, _pending = await asyncio.wait({first}, timeout=HEDGE_AFTER_S)
+        done, _pending = await asyncio.wait({first}, timeout=after) if after > 0 else (set(), set())
         if first in done:
             if first.exception() is None:
                 return first.result()
             if owner:  # ya se emitió parte de esta traducción: no se inicia otra encima
                 raise first.exception()
-            return await self.router.translate(request, relay("chat"))
+            return await other_router.translate(request, relay(name))
         if owner:  # el carril rápido ya está respondiendo: se lo espera sin otro pedido
             return await first
-        second = asyncio.ensure_future(self.router.translate(request, relay("chat")))
-        tasks = {"voz": first, "chat": second}
+        second = asyncio.ensure_future(other_router.translate(request, relay(name)))
+        tasks = {"voz": first, name: second}
         pending = {first, second}
         error: BaseException | None = None
         while pending:
@@ -386,7 +453,7 @@ class Translator:
                     for other in pending:
                         other.add_done_callback(_forget)
                     if task is second:
-                        log.info("Voz: respondió antes el carril del chat")
+                        log.info("Voz: respondió antes el carril %s", name)
                     return task.result()
                 error = task.exception()
                 if owner:

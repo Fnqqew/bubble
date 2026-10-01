@@ -36,7 +36,17 @@ def build_translator(config: Config, cloud_key: str = "", on_fatal=None) -> Tran
     voice = ClaudeSubscriptionProvider(config.claude, prompt, model=config.claude.voice_model, thinking=False,
                                        name="claude-voz")
     voice_router = Router([voice], timeout_s=config.translation.timeout_s, first_token_s=6.0)
-    return Translator(config, router, voice_router=voice_router)
+    live_router = None
+    if config.claude.pool_size >= 3:
+        # Lo que dicen los demás tiene su propio carril, con dos sesiones del modelo rápido: la traducción en vivo no
+        # demora la voz del jugador, y la traducción final de cada frase compite con el carril de la voz (gana la
+        # primera). Solo con memoria de sobra: cada sesión ocupa ~250 MB.
+        from dataclasses import replace
+
+        live = ClaudeSubscriptionProvider(replace(config.claude, pool_size=2), prompt, model=config.claude.voice_model,
+                                          thinking=False, name="claude-vivo", min_sessions=2)
+        live_router = Router([live], timeout_s=config.translation.timeout_s, first_token_s=6.0)
+    return Translator(config, router, voice_router=voice_router, live_router=live_router)
 
 
 __all__ = ["Translator", "Router", "build_translator"]

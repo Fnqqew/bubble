@@ -156,3 +156,45 @@ async def test_short_foreign_messages_with_game_words_are_translated():
         assert result.status == "translated", text
     assert native_by_words("tengo lag", "es") and native_by_words("vamos a hacer pvp", "es")
     assert not native_by_words("carry me pls", "es")  # "me" y "pls" también se usan en español; "carry" no
+
+
+async def test_what_others_say_races_both_fast_lanes_and_live_goes_by_its_own():
+    main = FakeProvider("claude", reply="hola (chat)")
+    voice = FakeProvider("claude-voz", reply="hola (voz)", delay=0.5)
+    live = FakeProvider("claude-vivo", reply="hola (vivo)")
+    config = Config()
+    config.user.language = "es"
+    config.voice.subtitles = True
+    translator = Translator(config, Router([main]), FakeDetector({"hello there": ("en", 0.9)}),
+                            voice_router=Router([voice]), live_router=Router([live]))
+    translator.start_voice()
+    await translator._voice_lane
+    await translator._live_lane
+    started = asyncio.get_running_loop().time()
+    result = await translator.translate_incoming("hello there", "Voz 1", from_speech=True)
+    assert result.translation == "hola (vivo)" and asyncio.get_running_loop().time() - started < 0.4
+    assert len(voice.requests) == 1 and main.requests == []  # (los dos carriles rápidos, desde el comienzo)
+    await translator.translate_incoming("hello there my friend", "Voz 1", from_speech=True, live=True)
+    assert live.requests[-1].partial and len(voice.requests) == 1  # en vivo: solo su carril
+
+
+async def test_quick_chat_shows_the_fast_one_first_and_keeps_the_precise_one():
+    main = FakeProvider("claude", reply="hola, amigo")
+    voice = FakeProvider("claude-voz", reply="hola amigo")
+    config = Config()
+    config.user.language = "es"
+    translator = Translator(config, Router([main]), FakeDetector({"hello my friend": ("en", 0.9)}),
+                            voice_router=Router([voice]))
+    translator.batcher.start()
+    translator.start_voice()
+    await translator._voice_lane
+    assert translator.fast_ready()
+    draft = await translator.translate_incoming("hello my friend", "Ana", draft=True)
+    assert draft.translation == "hola amigo" and draft.status == "translated"
+    again = await translator.translate_incoming("hello my friend", "Ana", draft=True)
+    assert again.status == "translated"  # la versión rápida no se guarda en la caché
+    better = await translator.translate_incoming("hello my friend", "Ana", refine=True)
+    assert better.translation == "hola, amigo" and len(main.requests) == 1
+    assert [line.text for line in translator.history].count("hello my friend") == 2  # (una por cada borrador)
+    cached = await translator.translate_incoming("hello my friend", "Ana", draft=True)
+    assert cached.status == "cache" and cached.translation == "hola, amigo"  # la precisa sí queda guardada

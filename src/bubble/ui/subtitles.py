@@ -62,7 +62,8 @@ def speaker_name(number: int) -> str:
 
 def _body(line: Line) -> tuple[str, tuple]:
     if line.translation.strip():
-        return line.translation.strip(), TEXT
+        # Traducción en vivo (la persona sigue hablando): con "…" hasta que llega la definitiva.
+        return line.translation.strip() + (" …" if line.live and not line.done else ""), TEXT
     return (line.original + ("" if line.final else " …")).strip(), PENDING
 
 
@@ -195,7 +196,7 @@ class SubtitleView:
         fresh = freshness(lines, time.monotonic())
         self.animating = bool(fresh)
         key = (SETTINGS.version, tuple(sorted(fresh.items())),
-               *((line.id, line.speaker, line.language, line.original, line.translation, line.final)
+               *((line.id, line.speaker, line.language, line.original, line.translation, line.final, line.live)
                  for line in lines))
         if key != self._key:
             self._image = render_subtitles(lines, fresh=fresh)

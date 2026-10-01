@@ -68,8 +68,24 @@ sumado a otros usos de Claude, puede acercarte al límite de 5 horas. Con Max 5x
 **Para consultar el consumo:** claude.ai → Configuración → Uso (muestra el porcentaje del límite de 5 horas y del
 semanal). Si te acercás al límite, Claude Code lo avisa y Bubble lo registra en `%APPDATA%\Bubble\bubble.log`.
 
+## Velocidad a cambio de más consumo
+
+Por defecto, Bubble prioriza la velocidad de lo que dicen y escriben los demás, aunque eso use más de tu suscripción:
+
+- **Traducción en vivo de la voz:** mientras alguien habla, lo dicho hasta el momento se traduce cada pocas palabras
+  (varios pedidos por frase, con el modelo rápido). La traducción aparece mientras la persona habla, y no unos
+  segundos después de que termina.
+- **Traducción rápida del chat:** cada mensaje se traduce dos veces: primero con el modelo rápido y después con el
+  principal, que corrige la primera si hace falta.
+- **Traducción definitiva en dos canales a la vez:** la de cada frase de voz se pide en paralelo a dos sesiones del
+  modelo rápido, y se usa la que responde primero.
+
+Las tres se pueden desactivar: **Voz → Traducir mientras hablan** y **Ajustes → Chat de Roblox → Traducción rápida
+del chat** (o `live_translation = false` en `[voice]` y `quick_chat = false` en `[translation]`).
+
 ## Cómo reducir el consumo
 
+- **Desactivar la traducción en vivo y la traducción rápida del chat** (ver la sección anterior).
 - **Usar Sonnet:** en `config.toml`, `[claude] model = "sonnet"`. Consume algo menos y responde más rápido; Opus
   interpreta la jerga un poco mejor.
 - **Desactivar lo que no uses:** las burbujas o los subtítulos de voz (interruptores en Inicio).

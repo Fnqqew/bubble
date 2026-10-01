@@ -73,6 +73,7 @@ class VoicePanel:
         self.speed_var = tk.DoubleVar(value=self.config.speed)
         self.pass_var = tk.BooleanVar(value=self.config.pass_my_voice)
         self.earshot_var = tk.StringVar(value=self.earshot.radius)
+        self.live_var = tk.BooleanVar(value=self.config.live_translation)
         self._cable_ok = True  # hasta revisar los dispositivos
         self._soundpad = False  # el micrófono de Windows es el virtual (ver voice/devices.py)
         # El micrófono virtual pasa a ser el de Windows apenas arranca el puente; hasta entonces no se corrige la
@@ -101,6 +102,10 @@ class VoicePanel:
         widgets.muted(self.earshot_box, "Los que están lejos se escuchan más bajo. Con «Cerca» traduzco solo a "
                                         "los que tenés al lado. La música, las explosiones y las risas no se "
                                         "traducen.")
+        ttk.Checkbutton(self.earshot_box, text="Traducir mientras hablan", variable=self.live_var,
+                        command=self._toggle_live, style="Switch.TCheckbutton").pack(anchor="w", pady=(12, 0))
+        widgets.muted(self.earshot_box, "La traducción aparece mientras la persona habla, sin esperar a que termine. "
+                                        "Usa más de tu suscripción de Claude.")
 
         box = widgets.card(page, "Tu voz para los demás")
         widgets.switch_row(box, "mic", "Traducir mi voz", "Hablás en tu idioma y te escuchan en el suyo.",
@@ -186,6 +191,12 @@ class VoicePanel:
         subtitles_look = getattr(self.app, "subs_box", None)
         if subtitles_look is not None:
             widgets.dim(subtitles_look, not self.subtitles_var.get(), animate)
+
+    def _toggle_live(self) -> None:
+        self.config.live_translation = self.live_var.get()
+        save_setting("voice", "live_translation", self.config.live_translation)
+        if self.board is not None:
+            self.board.live = self.config.live_translation
 
     def _change_earshot(self) -> None:
         self.config.earshot = self.earshot.radius = self.earshot_var.get()
@@ -420,7 +431,12 @@ class VoicePanel:
         self._open_voice_lane()
         if self.board is None:
             self.board = CaptionBoard(self.app.config.user.language, self._translate_heard,
+                                      live=self.config.live_translation,
                                       is_native=self._is_my_language, on_translated=lambda line: self.app.events.put(("voice_line", line)))
+        # Con el carril propio de lo que dicen los demás, dos traducciones en vivo a la vez; si no, una.
+        from ..voice.captions import LIVE_PARALLEL
+
+        self.board.parallel = LIVE_PARALLEL if getattr(self.app.translator, "live_router", None) else 1
         key = self._cloud_key()
         kind = "nube" if key else "pc"
         if kind != self._kind:
@@ -432,14 +448,15 @@ class VoicePanel:
             self._kind = kind
         if self.subtitles_var.get():
             if self.listener is None and key:
-                from ..cloud.deepgram import DeepgramListener
+                from ..cloud.deepgram import GAME_HOLD_S, GAME_TAIL_S, DeepgramListener
                 from ..voice import audio as audio_io
 
                 self.listener = DeepgramListener(key, self.board.caption, source_factory=audio_io.game_audio,
                                                  on_error=lambda msg: self._set_status(msg),
                                                  on_fatal=self._cloud_failed, diarize=self.app.config.pro.diarize,
                                                  earshot=self.earshot, noise_filter=True, speakers=speakers,
-                                                 keyterms=self._game_keyterms, recheck=True)
+                                                 keyterms=self._game_keyterms, recheck=True,
+                                                 hold_s=GAME_HOLD_S, tail_s=GAME_TAIL_S)
             elif self.listener is None:
                 self.listener = LiveListener(final, self.board.caption, partial_asr=quick, speakers=speakers,
                                              on_error=lambda msg: self._set_status(msg),
@@ -696,7 +713,9 @@ class VoicePanel:
         threading.Thread(target=self._scan_devices, daemon=True).start()
 
     # ------------------------------------------------------------ lo que te dicen: frase → traducción → subtítulo
-    def _translate_heard(self, text: str, language: str, speaker: int, on_piece, on_done, intonation: str = "") -> None:
+    def _translate_heard(self, text: str, language: str, speaker: int, on_piece, on_done, intonation: str = "",
+                         live: bool = False) -> None:
+        """`live`: traducción en vivo de lo dicho hasta el momento (la persona sigue hablando)."""
         if self._is_my_language(text, language):
             on_done(None, native=True)  # en el idioma del jugador: no se traduce (se ve el original, o nada)
             return
@@ -704,7 +723,8 @@ class VoicePanel:
         async def translate() -> None:
             try:
                 result = await self.app.translator.translate_incoming(text, speaker_name(speaker), on_delta=on_piece,
-                                                                      from_speech=True, intonation=intonation)
+                                                                      from_speech=True, intonation=intonation,
+                                                                      live=live)
                 if result.status == "same_language":
                     on_done(None, native=True)
                 else:
@@ -853,6 +873,8 @@ class VoicePanel:
 
         async def open_lane() -> None:
             translator.start_voice()
+            if self.subtitles_var.get():
+                translator.start_live()
 
         self.app.runner.submit(open_lane())
 
@@ -907,6 +929,7 @@ class VoicePanel:
             from ..voice.captions import CaptionBoard
 
             self.board = CaptionBoard(self.app.config.user.language, self._translate_heard,
+                                      live=self.config.live_translation,
                                       is_native=self._is_my_language, on_translated=lambda line: self.app.events.put(("voice_line", line)))
         self.board.notice(text)
 
@@ -967,6 +990,7 @@ class VoicePanel:
             from ..voice.captions import CaptionBoard
 
             self.board = CaptionBoard(self.app.config.user.language, self._translate_heard,
+                                      live=self.config.live_translation,
                                       is_native=self._is_my_language, on_translated=lambda line: self.app.events.put(("voice_line", line)))
         self.board.mine(original, translation, language)
 

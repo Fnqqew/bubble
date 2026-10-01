@@ -52,6 +52,8 @@ class TranslationRequest:
     from_speech: bool = False
     # Entonación con que se dijo: "question" (sube al final) o "exclaim" (con énfasis). Whisper no la registra.
     intonation: str = ""
+    # Traducción en vivo: la persona sigue hablando y el texto es solo el comienzo de lo que dice.
+    partial: bool = False
     # Estilo deseado: pares (texto original, versión aprobada) confirmados por el jugador en la página Pruebas.
     examples: tuple[tuple[str, str], ...] = ()
     # Palabras y nombres del perfil de voz del jugador, que Whisper puede haber reconocido mal.
