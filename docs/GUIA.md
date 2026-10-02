@@ -249,9 +249,15 @@ suena en tus auriculares a menor volumen, para que sepas qué se dijo.
   es una voz de Windows de ese idioma, si está instalada, o se genera a partir de la existente (cambiando el timbre y
   el tono).
 - Algunos idiomas usan la voz de uno muy similar: el croata y el serbio, la eslovena; el malayo y el tagalo, la
-  indonesia; el bielorruso, la rusa.
-- El tamil, el guyaratí y el panyabí no tienen voz en Piper: usan las voces de Windows, si las agregaste
-  (Configuración → Hora e idioma → Voz). Con Pro, la nube ofrece varios idiomas más.
+  indonesia; el bielorruso, la rusa; el lituano, la letona (la voz lituana de Piper no llega a hablar).
+- El japonés necesita un complemento que se descarga una sola vez (unos 110 MB) la primera vez que lo elegís en
+  Basic. Mientras se descarga, Bubble lo indica; después habla sin demoras.
+- El tailandés, el tamil, el guyaratí y el panyabí no tienen voz en Piper: usan las voces de Windows, si las
+  agregaste (Configuración → Hora e idioma → Voz). Con Pro, la nube ofrece varios idiomas más.
+- **Probar voz** dice una frase en el idioma elegido. Si ese idioma no tiene voz en tu PC, lo indica y te explica
+  cómo agregarla.
+- Si una voz no produce sonido (por ejemplo, porque no pudo leer el texto), Bubble prueba con otra voz del mismo
+  idioma. Si ninguna funciona, en el juego aparece un aviso de que tu voz no salió, en lugar de quedar en silencio.
 - Cada frase se ajusta al tono y al volumen habituales de esa voz, para que no parezca otra persona en cada frase.
 
 ### Que te escuchen los demás
@@ -522,6 +528,9 @@ dice en el chat ni lo que escribís. Si algo falla, esos dos archivos suelen ind
 - **Aparecen mensajes ya traducidos por Roblox:** volvé a desactivar su traducción automática; a veces se reactiva.
 - **No escuchan tu voz traducida:** hace falta el micrófono virtual (**Voz → Micrófono**) y, en Roblox, elegir
   **CABLE Output**.
+- **Aparece «Tu voz no salió»:** el idioma al que traducís no tiene voz en tu PC. Agregala en Configuración → Hora e
+  idioma → Voz, o probá con la otra voz (de mujer o de hombre) en **Voz → Probar voz**. Si cambiaste de auriculares,
+  Bubble busca la salida nueva solo, en unos segundos.
 - **Indica que falta un idioma para leer texto:** agregá **Inglés** en Configuración → Hora e idioma → Idioma y región.
 - **Bubble se cerró de forma inesperada:** los errores quedan en `errores.log`. Si se cerró mientras preparaba la voz,
   la próxima vez abre con la voz en pausa.

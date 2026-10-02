@@ -23,7 +23,7 @@ SOURCES = LOCALES / "_textos.json"
 # Archivos que contienen los textos visibles para el jugador (ventana, avisos, revisión del equipo, etc.).
 FILES = [*sorted((PACKAGE / "ui").glob("*.py")), *(PACKAGE / name for name in (
     "system.py", "support.py", "install.py", "update.py", "uninstall.py", "pro.py", "win32.py", "cloud/errors.py",
-    "voice/checks.py", "translate/base.py"))]
+    "voice/checks.py", "voice/pipelines.py", "translate/base.py"))]
 SKIP_IN = {"rtl.py"}  # sin textos para traducir
 _WORD = re.compile(r"[A-Za-zÁÉÍÓÚáéíóúñÑüÜ¿¡]{3,}")
 _TECHNICAL = ("$s.", "\r\n", "tasklist", "rmdir", "irm https", "install -e", "Content-Disposition", "\\Scripts\\")

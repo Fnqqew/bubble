@@ -54,10 +54,17 @@ class Turn:
 class VoiceOut:
     """Reproduce un texto con voz sintética: al micrófono virtual y, opcionalmente, a los auriculares del jugador."""
 
+    OUTPUT_FRESH_S = 3.0  # cada cuánto se vuelve a buscar la salida (micrófono virtual o auriculares)
+
     def __init__(self, voices: Voices, hear_myself: bool = True, output: audio_io.Output | None = None,
                  bridge=None) -> None:
         self.voices = voices
-        self.output = output or audio_io.voice_output()
+        # La salida se busca al hablar, no una sola vez: si el micrófono virtual se instaló después, o el jugador cambió
+        # de auriculares, la voz seguía yendo al dispositivo anterior (y no se escuchaba). Una salida fija (pruebas)
+        # se respeta.
+        self._fixed = output
+        self._output: audio_io.Output | None = None
+        self._output_at = 0.0
         # micrófono del jugador pasando al virtual (ver bridge.py); baja mientras suena la traducción
         self.bridge = bridge
         # Con el micrófono virtual, la voz traducida llega a Roblox y el jugador no la escucharía: también suena, más
@@ -69,6 +76,30 @@ class VoiceOut:
         self._warm_lock = threading.Lock()
         self._warm_next: str | None = None
         self._warming = False
+
+    @property
+    def output(self) -> audio_io.Output:
+        if self._fixed is not None:
+            return self._fixed
+        now = time.monotonic()
+        if self._output is None or now - self._output_at > self.OUTPUT_FRESH_S:
+            self._output, self._output_at = audio_io.voice_output(), now
+        return self._output
+
+    def _play(self, play) -> None:
+        """Reproduce con la salida actual; si falla (el dispositivo desapareció), vuelve a buscarla una vez."""
+        try:
+            play(self.output)
+        except Exception as exc:  # noqa: BLE001 - se reintenta con la salida actualizada
+            if self._fixed is not None:
+                raise
+            log.warning("No se pudo reproducir la voz en %s (%s): busco la salida de nuevo", self.output.name, exc)
+            self._output = None
+            play(self.output)
+
+    def _local(self):
+        """Voces de la PC (las de la nube tienen las de la PC detrás, en `local`)."""
+        return getattr(self.voices, "local", None) or self.voices
 
     def warm_up(self, language: str) -> None:
         """Carga de antemano la voz de ese idioma (la primera vez tarda ~3 s), para que la primera frase no espere.
@@ -101,14 +132,25 @@ class VoiceOut:
         la voz está lista y empieza a sonar (sirve para medir la demora). `style`: cómo se dijo la frase
         (gritada, en voz baja, etc.).
         """
+        if not any(char.isalnum() for char in text):
+            return True  # solo emojis o signos («👍», «...»): no hay nada que decir, y no es que falte la voz
         started = time.perf_counter()
         style = style or written_style(text)
         streaming = getattr(self.voices, "stream", None)
         if streaming is not None:
             opened = streaming(text, language, style=style)
             if opened is not None:
-                return self._say_streaming(text, opened, started, on_ready)
+                if self._say_streaming(text, opened, started, on_ready):
+                    return True
+                # La nube no mandó audio (se cortó la conexión o respondió vacío): la frase sale con la voz de la PC
+                # en lugar de perderse.
+                log.warning("La voz de la nube no mandó audio para %r: va con la voz de la PC", text[:60])
+                speech = self._local().synthesize(text, language, style=style)
+                return self._say_speech(speech, started, on_ready)
         speech = self.voices.synthesize(text, language, style=style)
+        return self._say_speech(speech, started, on_ready)
+
+    def _say_speech(self, speech, started: float, on_ready) -> bool:
         if speech is None:
             return False
         if on_ready:
@@ -122,16 +164,20 @@ class VoiceOut:
             if self.hear_myself and self.output.is_cable:
                 threading.Thread(target=self._monitor, args=(speech,), name="bubble-tu-voz-escucha",
                                  daemon=True).start()
-            audio_io.play(self.output, speech.audio, speech.sample_rate)
+            self._play(lambda output: audio_io.play(output, speech.audio, speech.sample_rate))
         return True
 
     def _say_streaming(self, text: str, opened, started: float, on_ready) -> bool:
         """Voces de la nube: suenan apenas llega el primer fragmento. Los avisos de duración se renuevan con cada
-        fragmento, porque el largo total no se conoce hasta el final.
+        fragmento, porque el largo total no se conoce hasta el final. Devuelve False si no llegó audio.
         """
         rate, pieces = opened
-        first = next(pieces, None)
-        if first is None:
+        try:
+            first = next(pieces, None)
+        except Exception as exc:  # noqa: BLE001 - sin audio de la nube: quien llama usa la voz de la PC
+            log.warning("La voz de la nube falló antes de sonar: %s", exc)
+            first = None
+        if first is None or not len(first):
             return False
         if on_ready:
             on_ready(time.perf_counter() - started)
@@ -157,7 +203,7 @@ class VoiceOut:
         with self._lock:
             ahead(max(len(first) / rate, len(text) / 16))
             try:
-                audio_io.play_stream(self.output, tee(), rate, on_piece=ahead)
+                self._play(lambda output: audio_io.play_stream(output, tee(), rate, on_piece=ahead))
             finally:
                 if monitor is not None:
                     monitor.put(None)
@@ -178,6 +224,14 @@ class VoiceOut:
             audio_io.play(audio_io.monitor_output(), speech.audio * self.monitor_volume, speech.sample_rate)
         except Exception:  # noqa: BLE001 - es solo para que la escuches
             log.debug("No se pudo reproducir tu voz traducida en tus parlantes", exc_info=True)
+
+
+def no_voice(language: str) -> str:
+    """Aviso de una frase que no salió en voz (el idioma, por su nombre)."""
+    from ..translate.languages import DISPLAY_NAMES
+
+    name = DISPLAY_NAMES.get(language.split("-")[0].lower(), language)
+    return f"No hay voz para «{name}» en esta PC"
 
 
 _SENTENCE_BOUNDARY = re.compile(r"[.!?…]+['\"»”)]*\s")
@@ -536,8 +590,8 @@ class VoiceSpeaker:
             turn.translation, turn.language = translated
             self.on_event("traduccion", turn.translation)
             if not self.out.say(turn.translation, turn.language, on_ready=ready, style=turn.intonation):
-                turn.error = f"No hay voz para el idioma «{turn.language}»"
-                self.on_event("error", turn.error)
+                turn.error = no_voice(turn.language)
+                self.on_event("sin_voz", turn.error)
         except Exception as exc:  # noqa: BLE001
             log.exception("Falló la traducción de tu voz")
             turn.error = str(exc)
@@ -573,8 +627,8 @@ class VoiceSpeaker:
             self.on_event("traduccion", turn.translation)
         voice.join()
         if missing and not turn.error:
-            turn.error = f"No hay voz para el idioma «{missing[0]}»"
-            self.on_event("error", turn.error)
+            turn.error = no_voice(missing[0])
+            self.on_event("sin_voz", turn.error)
 
 
 class DirectVoice:
@@ -690,7 +744,7 @@ class DirectVoice:
                 text, language = translated
                 self.on_event("traduccion", text)
                 if not self.out.say(text, language, style=intonation):
-                    self.on_event("error", f"No hay voz para el idioma «{language}»")
+                    self.on_event("sin_voz", no_voice(language))
             except Exception as exc:  # noqa: BLE001
                 log.exception("Falló la traducción directa")
                 self.on_event("error", str(exc))

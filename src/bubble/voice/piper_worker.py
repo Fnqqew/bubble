@@ -26,6 +26,10 @@ import numpy as np
 log = logging.getLogger(__name__)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 MAX_LOADED = 3  # voces cargadas a la vez en el proceso (60-100 MB cada una)
+# Tiempo máximo de un pedido (cargar una voz y decir una frase de hasta un minuto tarda bastante menos). Si el proceso
+# se cuelga, se reinicia: sin este límite, la voz quedaba esperando para siempre y las frases siguientes, detrás.
+TIMEOUT_S = 45.0
+START_TIMEOUT_S = 30.0
 
 
 class VoiceError(Exception):
@@ -81,27 +85,50 @@ class PiperProcess:
         process = subprocess.Popen([_python(), "-m", "bubble.voice.piper_worker"],
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                    creationflags=NO_WINDOW, env=env)
-        reply = _read(process.stdout)  # el proceso avisa que está listo (o el motivo por el que no)
+        watchdog = threading.Timer(START_TIMEOUT_S, process.kill)
+        watchdog.start()
+        try:
+            reply = _read(process.stdout)  # el proceso avisa que está listo (o el motivo por el que no)
+        except (EOFError, OSError, ValueError, struct.error) as exc:
+            process.kill()
+            raise RuntimeError(f"el proceso de voces no arrancó: {exc}") from exc
+        finally:
+            watchdog.cancel()
         if not reply.get("ok"):
             process.kill()
             raise RuntimeError(reply.get("error") or "el proceso de voces no arrancó")
         self.loaded = []
         return process
 
-    def _ask(self, message: dict) -> tuple[dict, bytes]:
+    def _ask(self, message: dict, timeout: float = TIMEOUT_S) -> tuple[dict, bytes]:
         with self._lock:
             for attempt in (0, 1):
                 if self._process is None or self._process.poll() is not None:
                     self._process = self._start()
+                process = self._process
+                hung = threading.Event()
+
+                def give_up(process=process, hung=hung) -> None:
+                    hung.set()
+                    process.kill()  # la lectura de abajo termina con EOFError
+
+                watchdog = threading.Timer(timeout, give_up)
+                watchdog.start()
                 try:
-                    _write(self._process.stdin, message)
-                    reply = _read(self._process.stdout)
-                    payload = _read_exactly(self._process.stdout, 4 * reply["samples"]) if reply.get("samples") else b""
+                    _write(process.stdin, message)
+                    reply = _read(process.stdout)
+                    payload = _read_exactly(process.stdout, 4 * reply["samples"]) if reply.get("samples") else b""
                     return reply, payload
                 except (EOFError, OSError, ValueError, struct.error) as exc:
                     self.close()  # se cayó: se reinicia una sola vez
+                    if hung.is_set():
+                        # Colgado: se reinicia para la próxima frase, pero esta no se vuelve a intentar (tardaría
+                        # otro tanto).
+                        raise VoiceError(f"la voz no respondió en {timeout:.0f} s") from exc
                     if attempt:
                         raise RuntimeError(f"el proceso de voces se cerró: {exc}") from exc
+                finally:
+                    watchdog.cancel()
         raise RuntimeError("el proceso de voces no responde")
 
     def load(self, name: str, model: Path, config: Path) -> None:

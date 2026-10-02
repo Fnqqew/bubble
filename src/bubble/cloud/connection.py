@@ -117,6 +117,9 @@ class Pool:
         raise CloudError("Sin respuesta de Deepgram")
 
     def _pieces(self, connection, response, size: int):
+        """Fragmentos de la respuesta. Si la conexión se corta a mitad de camino, se termina lo que llegó (quien
+        los recibe decide qué hacer si no llegó nada: ver VoiceOut, que usa la voz de la PC).
+        """
         finished = False
         try:
             while True:
@@ -125,8 +128,10 @@ class Pool:
                     break
                 yield data
             finished = True
-        except (http.client.HTTPException, OSError):
-            pass
+        except (http.client.HTTPException, OSError) as exc:
+            import logging
+
+            logging.getLogger(__name__).warning("Se cortó la respuesta de Deepgram: %s", exc)
         finally:
             if finished:
                 self._give(connection)

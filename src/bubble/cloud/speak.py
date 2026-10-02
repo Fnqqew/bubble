@@ -25,7 +25,7 @@ import numpy as np
 
 from .. import pro
 from ..voice.prosody import POLISH, Streaming
-from ..voice.tts import STYLES, Speech
+from ..voice.tts import STYLES, Speech, audible
 from .connection import pool
 from .errors import BadKey, CloudError, NoCredit
 
@@ -254,13 +254,16 @@ class CloudVoices:
         except Exception:  # noqa: BLE001 - es solo la cuenta
             log.debug("No se pudo anotar el uso de la voz de la nube", exc_info=True)
         samples = np.frombuffer(raw[: len(raw) // 2 * 2], dtype="<i2").copy()
-        if not len(samples):
-            return None
+        speech = self._speech(samples, name, style) if len(samples) else None
+        if speech is None or not audible(speech.audio, speech.sample_rate):
+            # Respuesta vacía o muda: la frase va con la voz de la PC en lugar de no sonar.
+            log.warning("La voz %s de la nube no devolvió sonido para %r: va con la voz de tu PC", name, text[:60])
+            return self.local.synthesize(text, language, gender, speed, style)
         with self._cache_lock:
             self._cache[key] = samples
             while len(self._cache) > CACHE_SIZE:
                 self._cache.popitem(last=False)
-        return self._speech(samples, name, style)
+        return speech
 
     def stream(self, text: str, language: str, gender: str | None = None, speed: float | None = None,
                style: str = ""):

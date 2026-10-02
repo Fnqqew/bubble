@@ -301,6 +301,13 @@ class TestsPanel:
             speech = self._voices().synthesize(translation, target, style=how)
             voice = time.perf_counter() - started
             self._last_speech = speech
+            if speech is None:
+                from .voice_panel import ADD_WINDOWS_VOICE, language_label
+
+                problem = f"No hay voz para «{language_label(target)}» en esta PC. {ADD_WINDOWS_VOICE}"
+                self._ui(lambda: (self.mine_heard.set(heard.text), self.mine_said.set(translation),
+                                  self.mine_info.configure(text=problem), self.mine_state.configure(text="")))
+                return
             profile.note_times({"entender": understand, "traducir": translate, "voz": voice})
             info = (f"Cómo lo dijiste: {describe_how(how)} · traducción: {source}\n"
                     f"Entender {_seconds(understand)} · traducir {_seconds(translate)} · voz {_seconds(voice)} → "
@@ -340,6 +347,13 @@ class TestsPanel:
             speech = self._voices().synthesize(result.translation, target)
             voice = time.perf_counter() - started
             self._last_speech = speech
+            if speech is None:
+                # Antes mostraba los tiempos como si hubiera hablado y no sonaba nada.
+                from .voice_panel import ADD_WINDOWS_VOICE, language_label
+
+                problem = f"No hay voz para «{language_label(target)}» en esta PC. {ADD_WINDOWS_VOICE}"
+                self._ui(lambda: (self.chat_said.set(result.translation), self.chat_info.configure(text=problem)))
+                return
             info = f"En {target.upper()} · traducir {_seconds(translate)} · voz {_seconds(voice)}"
             self._ui(lambda: (self.chat_said.set(result.translation), self.chat_info.configure(text=info)))
             self._play(speech)

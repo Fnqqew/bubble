@@ -274,7 +274,8 @@ class FakeWindowsVoices:
 
     def synthesize(self, text, language, gender="femenina", speed=1.0, style="", name=""):
         self.said.append((text, language, gender, style))
-        return (np.zeros(2205, np.float32), 22050) if self.has(language) else None
+        voice = (0.3 * np.sin(2 * np.pi * 150 * np.arange(11025) / 22050)).astype(np.float32)  # (medio segundo)
+        return (voice, 22050) if self.has(language) else None
 
 
 def test_when_windows_blocks_piper_the_windows_voices_are_used(monkeypatch):

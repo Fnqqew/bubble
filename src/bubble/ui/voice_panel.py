@@ -27,16 +27,14 @@ if TYPE_CHECKING:
 
 MODES = {"boton": "Con un botón", "directo": "Directo, sin botón"}
 GENDERS = {"femenina": "Femenina", "masculina": "Masculina"}
-SAMPLES = {
-    "en": "Hi! This is how I'm going to sound.", "pt": "Oi! É assim que eu vou soar.",
-    "es": "¡Hola! Así va a sonar mi voz.", "fr": "Salut ! Voilà comment je vais sonner.",
-    "de": "Hallo! So werde ich klingen.", "it": "Ciao! Ecco come suonerò.", "ru": "Привет! Вот так я буду звучать.",
-    "hi": "नमस्ते! मेरी आवाज़ ऐसी सुनाई देगी।", "pl": "Cześć! Tak będę brzmieć.", "nl": "Hoi! Zo ga ik klinken.",
-    "tr": "Merhaba! Sesim böyle olacak.", "id": "Halo! Beginilah suaraku.", "zh": "你好！我的声音听起来是这样的。",
-    "ko": "안녕하세요! 제 목소리는 이렇게 들려요.", "ja": "こんにちは！こんな声になります。",
-    "vi": "Xin chào! Giọng của tôi sẽ như thế này.", "th": "สวัสดี! เสียงของฉันจะเป็นแบบนี้", "ar": "مرحبا! هكذا سيبدو صوتي.",
-}
 NO_VOICE_PACK = 'Falta instalar la parte de voz: .venv\\Scripts\\python.exe -m pip install -e ".[voz]"'
+ADD_WINDOWS_VOICE = "Podés agregarla en Windows: Configuración › Hora e idioma › Voz."
+
+
+def language_label(code: str) -> str:
+    from ..translate.languages import DISPLAY_NAMES
+
+    return DISPLAY_NAMES.get(code.split("-")[0].lower(), code)
 
 
 WARM_DELAY_MS = 600  # con Tab: la voz se prepara cuando se deja de cambiar de idioma
@@ -52,6 +50,7 @@ class VoicePanel:
         self._warm_after = None  # preparar la voz del idioma elegido (con Tab) poco después
         self._cloud_warned = 0.0
         self._cloud_voices = None  # voces de la nube (Bubble Pro), con prioridad sobre las de la PC
+        self._installing: str | None = None  # idioma cuya voz se está descargando (paquete a pedido: japonés)
         self._out_of_game = 0.0  # desde cuándo el jugador no está en el juego (pausa la escucha)
         from ..voice.hearing import Earshot
 
@@ -487,7 +486,9 @@ class VoicePanel:
                                            target=self.app.translator.outgoing_target,
                                            mic_factory=self._my_microphone, profile=self.profile, listener=cloud_ear)
             elif self.speaker is None:
-                self.out.warm_up(self.app.translator.outgoing_target())
+                target = self.app.translator.outgoing_target()
+                if not self._ensure_pack(target):
+                    self.out.warm_up(target)
                 binding = win32.parse_binding(self.config.push_to_talk)
                 stream = None
                 if key:
@@ -624,12 +625,49 @@ class VoicePanel:
         self._cloud_voices.personality = pro_config.personality
         return self._cloud_voices
 
+    def _ensure_pack(self, language: str) -> bool:
+        """La voz japonesa necesita un paquete pesado que se instala recién cuando alguien la elige: se baja una sola
+        vez, en segundo plano, avisando en la ventana. Devuelve True si la voz todavía no está lista.
+        """
+        from ..voice.tts import PACK_MB
+
+        local = self.voices
+        if local is None or not hasattr(local, "pack_missing") or not local.pack_missing(language):
+            return False
+        if self._voices_now() is not local:
+            from ..cloud.speak import voice_name
+
+            if voice_name(language) is not None:
+                return False  # con Pro, ese idioma lo dice la nube
+        if self._installing:
+            return True
+        self._installing = language
+        name = language_label(language).lower()
+        size = PACK_MB.get(language.split("-")[0].lower(), 100)
+        self._set_status(f"Preparando la voz en {name}: se descarga una sola vez (~{size} MB)…")
+
+        def work() -> None:
+            try:
+                ready = local.install_pack(language)
+            finally:
+                self._installing = None
+            if ready:
+                self._set_status(f"Lista la voz en {name}.")
+                if self.out is not None:
+                    self.out.warm_up(language)
+            else:
+                self._set_status(f"No se pudo bajar la voz en {name}. Revisá la conexión y probá de nuevo.")
+
+        threading.Thread(target=work, name="bubble-voz-paquete", daemon=True).start()
+        return True
+
     def _sample_language(self) -> str:
-        language = "en"
+        """El idioma en que te escuchan. Sin voz para ese idioma no se cambia a otro en silencio (sonaba una voz en
+        inglés y parecía que todas andaban): la prueba lo dice.
+        """
         if self.app.ready and self.app.translator is not None:
-            language = self.app.translator.outgoing_target().split("-")[0]
-        voices = self._voices_now() if self.voices is not None else None
-        return language if voices is None or voices.voice_for(language) else "en"
+            return self.app.translator.outgoing_target().split("-")[0]
+        return "en"
 
     def warm_up(self) -> None:
         """Deja lista la voz elegida (se llama al abrir la página «Voz» y al cambiar de voz)."""
@@ -638,6 +676,8 @@ class VoicePanel:
             try:
                 voices = self._voices_now()
                 language = self._sample_language()
+                if self._ensure_pack(language):
+                    return
                 if not voices.is_loaded(language):
                     voices.prepare(language)
             except Exception:  # noqa: BLE001 - es solo para que después salga rápido
@@ -654,8 +694,15 @@ class VoicePanel:
             try:
                 from ..voice import audio as audio_io
 
+                from ..voice.samples import sample_for
+
                 voices = self._voices_now()
                 language = self._sample_language()
+                if self._ensure_pack(language):
+                    return  # (avisa que se está bajando)
+                if voices.voice_for(language) is None:
+                    self._set_status(f"No hay voz para «{language_label(language)}» en esta PC. {ADD_WINDOWS_VOICE}")
+                    return
                 key = (language, self.config.gender, self.config.speed, type(voices).__name__,
                        getattr(voices, "personality", ""))
                 speech = self._samples.get(key)
@@ -664,12 +711,14 @@ class VoicePanel:
                         self._set_status("Descargando esta voz (una sola vez, ~60 MB)…")
                     elif not voices.is_loaded(language):
                         self._set_status("Preparando la voz…")
-                    speech = voices.synthesize(SAMPLES.get(language, SAMPLES["en"]), language)
-                    if speech is not None:
-                        self._samples[key] = speech
+                    speech = voices.synthesize(sample_for(language), language)
+                    if speech is None:
+                        self._set_status(f"La voz de «{language_label(language)}» no pudo hablar. Probá con la "
+                                         f"otra voz (mujer u hombre). {ADD_WINDOWS_VOICE}")
+                        return
+                    self._samples[key] = speech
                     self._set_status("")
-                if speech is not None:
-                    audio_io.play(audio_io.monitor_output(), speech.audio, speech.sample_rate)
+                audio_io.play(audio_io.monitor_output(), speech.audio, speech.sample_rate)
             except ImportError:
                 self._set_status(NO_VOICE_PACK)
             except Exception as exc:  # noqa: BLE001
@@ -889,8 +938,10 @@ class VoicePanel:
 
     def _warm_language(self) -> None:
         self._warm_after = None
-        if self.out is not None and self.app.translator is not None:
-            self.out.warm_up(self.app.translator.outgoing_target())
+        if self.app.translator is not None:
+            target = self.app.translator.outgoing_target()
+            if not self._ensure_pack(target) and self.out is not None:
+                self.out.warm_up(target)
 
     def _watch_roblox_mic(self) -> None:
         """Cada pocos segundos comprueba si Roblox está grabando del micrófono de Bubble. Si Roblox se abrió antes
@@ -943,6 +994,15 @@ class VoicePanel:
             self.app.events.put(("voice_subtitle", ("(vos)", text, "→")))
         elif kind == "error":
             self._set_status(f"Tu voz: {text}")
+        elif kind == "sin_voz":
+            # La traducción ya se mostró como dicha: se avisa también en el juego, que es donde mira el jugador.
+            if self._installing:
+                text = f"la voz en {language_label(self._installing).lower()} se está descargando (una sola vez)"
+                self._set_status(f"Tu voz: {text}.")
+                self.app.events.put(("voice_notice", f"Tu voz todavía no sale: {text}."))
+                return
+            self._set_status(f"Tu voz: {text}. {ADD_WINDOWS_VOICE}")
+            self.app.events.put(("voice_notice", f"Tu voz no salió: {text}. {ADD_WINDOWS_VOICE}"))
 
     def _playing(self, seconds: float) -> None:
         # Si la voz traducida suena en los parlantes del jugador (sin micrófono virtual, o por elección), no debe
@@ -975,7 +1035,9 @@ class VoicePanel:
                 for language, text in pairs:
                     self.app.events.put(("voice_subtitle", (original, text, language)))
                     if not out.say(text, language):
-                        self._set_status(f"No hay voz sintética para el idioma «{language}».")
+                        problem = f"No hay voz para «{language_label(language)}» en esta PC. {ADD_WINDOWS_VOICE}"
+                        self._set_status(problem)
+                        self.app.events.put(("voice_notice", f"Tu voz no salió: {problem}"))
             except ImportError:
                 self._set_status(NO_VOICE_PACK)
             except Exception as exc:  # noqa: BLE001

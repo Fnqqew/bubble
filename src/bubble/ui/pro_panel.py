@@ -327,14 +327,19 @@ class ProPanel:
                 started = time.perf_counter()
                 opened = cloud.stream(SAMPLE.get(code, SAMPLE["en"]), language)
                 if opened is None:
-                    message = "La nube no tiene voz en ese idioma: se usa la de tu PC."
+                    message = ("La nube no tiene voz en ese idioma: habla la de tu PC (probala en la página Voz).")
                 else:
                     rate, pieces = opened
                     first = next(pieces, None)
                     waited = time.perf_counter() - started
-                    if first is not None:
-                        name = (voice_name(language, voice.voices.gender, self.config.personality) or "")
-                        message = f"{name.split('-')[2].capitalize()} · empezó a sonar en {_money(waited)} s"
+                    if first is None or not len(first):
+                        # Antes la prueba quedaba en blanco: no sonaba nada y no decía nada.
+                        message = "La nube no mandó audio. Probá de nuevo; si sigue, revisá tu conexión."
+                    else:
+                        # "aura-2-thalia-en" → Thalia; "flux-heather-en" → Heather (antes decía «En»).
+                        name = voice_name(language, voice.voices.gender, self.config.personality) or ""
+                        label = name.split("-")[-2].capitalize() if name.count("-") >= 2 else "Voz de Pro"
+                        message = f"{label} · empezó a sonar en {_money(waited)} s"
                         audio_io.play_stream(audio_io.monitor_output(), itertools.chain([first], pieces), rate)
             except Exception as exc:  # noqa: BLE001 - se muestra
                 message = f"No se pudo probar: {exc}"

@@ -21,6 +21,9 @@ CATEGORIES = (r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech_OneCore\Voices",  #
               r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices")
 SAMPLE_RATE = 22050
 FORMAT_22K_16BIT_MONO = 22  # SAFT22kHz16BitMono
+# El texto se lee tal cual. Sin esta marca, SAPI interpreta como XML un texto que empieza con «<» («<3 gg») y la voz
+# queda muda o falla.
+SPEAK_NOT_XML = 16  # SVSFIsNotXML
 # Cómo acompaña la voz a la emoción detectada (como en tts.STYLES): la velocidad. El volumen y el tono los define
 # prosody.py.
 STYLES = {"": 1.0, "shout": 1.12, "exclaim": 1.06, "soft": 0.94}
@@ -153,7 +156,7 @@ class WindowsVoices:
             # SAPI: de -10 (lento) a 10 (rápido); 0 es la velocidad normal de la voz.
             speaker.Rate = max(-10, min(10, round((speed * pace - 1.0) * 10)))
             speaker.Volume = 100
-            speaker.Speak(text, 0)
+            speaker.Speak(text, SPEAK_NOT_XML)
             data = bytes(stream.GetData())
         if not data:
             return None
