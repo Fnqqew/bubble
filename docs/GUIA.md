@@ -245,19 +245,22 @@ desde **Pruebas**.
 **Cómo suena.** Voz de mujer o de hombre, velocidad y **Probar voz**. Con **Escucharla yo también**, la voz traducida
 suena en tus auriculares a menor volumen, para que sepas qué se dijo.
 
-- Casi todos los idiomas tienen voz de mujer y de hombre, elegidas una por una. Cuando Piper tiene una sola, la otra
-  es una voz de Windows de ese idioma, si está instalada, o se genera a partir de la existente (cambiando el timbre y
-  el tono).
-- Algunos idiomas usan la voz de uno muy similar: el croata y el serbio, la eslovena; el malayo y el tagalo, la
-  indonesia; el bielorruso, la rusa; el lituano, la letona (la voz lituana de Piper no llega a hablar).
-- El japonés necesita un complemento que se descarga una sola vez (unos 110 MB) la primera vez que lo elegís en
-  Basic. Mientras se descarga, Bubble lo indica; después habla sin demoras.
-- El tailandés, el tamil, el guyaratí y el panyabí no tienen voz en Piper: usan las voces de Windows, si las
-  agregaste (Configuración → Hora e idioma → Voz). Con Pro, la nube ofrece varios idiomas más.
-- **Probar voz** dice una frase en el idioma elegido. Si ese idioma no tiene voz en tu PC, lo indica y te explica
-  cómo agregarla.
+- Los 59 idiomas tienen voz de mujer y de hombre, elegidas una por una. Cuando Piper tiene una sola, la otra es una
+  voz de Windows de ese idioma, si está instalada, o se genera a partir de la existente (cambiando el timbre y el
+  tono).
+- Algunos idiomas usan la voz de uno muy similar, con la pronunciación que mejor se entiende: el croata y el serbio,
+  la eslovena (el serbio en cirílico se pasa a letras latinas para leerlo); el malayo y el tagalo, la indonesia; el
+  bielorruso, la rusa; el macedonio, la búlgara; el lituano, la letona; el azerí, la turca; el afrikáans, la
+  neerlandesa.
+- El tamil lo leen las voces malayalam, y el guyaratí y el panyabí, las del hindi, cada uno con su propia
+  pronunciación. Tienen algo de acento, pero se entienden.
+- El japonés y el tailandés necesitan un complemento que se descarga una sola vez la primera vez que elegís el idioma
+  en Basic (unos 110 MB el japonés y 20 MB el tailandés). Mientras se descarga, Bubble lo indica.
+- **Probar voz** dice una frase en el idioma elegido.
 - Si una voz no produce sonido (por ejemplo, porque no pudo leer el texto), Bubble prueba con otra voz del mismo
   idioma. Si ninguna funciona, en el juego aparece un aviso de que tu voz no salió, en lugar de quedar en silencio.
+- Todas las voces suenan con el mismo volumen al oído (las graves ya no quedan más bajas que las agudas), y las que
+  suenan apagadas, como la japonesa, reciben más presencia para que se escuchen claras.
 - Cada frase se ajusta al tono y al volumen habituales de esa voz, para que no parezca otra persona en cada frase.
 
 ### Que te escuchen los demás
@@ -528,9 +531,11 @@ dice en el chat ni lo que escribís. Si algo falla, esos dos archivos suelen ind
 - **Aparecen mensajes ya traducidos por Roblox:** volvé a desactivar su traducción automática; a veces se reactiva.
 - **No escuchan tu voz traducida:** hace falta el micrófono virtual (**Voz → Micrófono**) y, en Roblox, elegir
   **CABLE Output**.
-- **Aparece «Tu voz no salió»:** el idioma al que traducís no tiene voz en tu PC. Agregala en Configuración → Hora e
-  idioma → Voz, o probá con la otra voz (de mujer o de hombre) en **Voz → Probar voz**. Si cambiaste de auriculares,
-  Bubble busca la salida nueva solo, en unos segundos.
+- **Aparece «Tu voz no salió»:** el idioma al que traducís no tiene voz en tu PC. Ocurre si Windows bloquea las voces
+  de Piper (ver más arriba) o si el complemento del japonés o del tailandés no se pudo descargar: Bubble lo vuelve a
+  intentar al elegir el idioma. También podés agregar una voz de Windows en Configuración → Hora e idioma → Voz, o
+  probar con la otra voz (de mujer o de hombre) en **Voz → Probar voz**. Si cambiaste de auriculares, Bubble busca la
+  salida nueva solo, en unos segundos.
 - **Indica que falta un idioma para leer texto:** agregá **Inglés** en Configuración → Hora e idioma → Idioma y región.
 - **Bubble se cerró de forma inesperada:** los errores quedan en `errores.log`. Si se cerró mientras preparaba la voz,
   la próxima vez abre con la voz en pausa.

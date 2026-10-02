@@ -45,6 +45,20 @@ def dependencies(project: Path) -> str:
     return "\n".join(line for line in text.splitlines() if not line.strip().startswith("version"))
 
 
+def _rename(source: Path, target: Path, tries: int = 20) -> None:
+    """Renombra reintentando unos segundos: el antivirus o el indexador de Windows a veces tienen un archivo abierto
+    un instante, y la actualización fallaba con «Acceso denegado».
+    """
+    for attempt in range(tries):
+        try:
+            source.rename(target)
+            return
+        except PermissionError:
+            if attempt == tries - 1:
+                raise
+            time.sleep(0.5)
+
+
 def replace_files(project: Path, staged: Path) -> bool:
     """Copia la versión nueva a la carpeta de Bubble (sin tocar .venv ni .git). Si algo falla, conserva la versión
     anterior. Devuelve si cambiaron las dependencias.
@@ -52,7 +66,9 @@ def replace_files(project: Path, staged: Path) -> bool:
     changed = dependencies(project) != dependencies(staged)
     package, backup = project / "src" / "bubble", project / "src" / "bubble.anterior"
     shutil.rmtree(backup, ignore_errors=True)
-    package.rename(backup)
+    if backup.exists():  # (quedó de una actualización anterior y no se pudo borrar)
+        backup = project / "src" / f"bubble.anterior-{int(time.time())}"
+    _rename(package, backup)
     try:
         shutil.copytree(staged / "src" / "bubble", package)
         for item in staged.iterdir():
@@ -64,7 +80,7 @@ def replace_files(project: Path, staged: Path) -> bool:
                 shutil.copy2(item, project / item.name)
     except BaseException:
         shutil.rmtree(package, ignore_errors=True)
-        backup.rename(package)
+        _rename(backup, package)
         raise
     shutil.rmtree(backup, ignore_errors=True)
     return changed
@@ -93,9 +109,12 @@ def run(plan: dict, say=print) -> dict:
     """Ejecuta todos los pasos. Devuelve el resultado que lee Bubble al iniciarse (ver update.finished)."""
     project = Path(plan["project"])
     result = {"version": plan["version"], "ok": False, "error": ""}
+    closed = True
     try:
         say("Esperando que Bubble se cierre…")
-        wait_for(int(plan["pid"]))
+        closed = wait_for(int(plan["pid"]))
+        if not closed:  # (antes se reemplazaban los archivos igual, con Bubble abierto, y se abría otro)
+            raise RuntimeError("Bubble no terminó de cerrarse. La actualización se intentará la próxima vez.")
         time.sleep(0.5)  # (para que Windows libere los archivos)
         say(f"Poniendo Bubble {plan['version']}…")
         changed = git_pull(project) if plan["kind"] == "git" else replace_files(project, Path(plan["staged"]))
@@ -111,7 +130,7 @@ def run(plan: dict, say=print) -> dict:
     except OSError:
         pass
     say("✓ ¡Listo! Abriendo Bubble…" if result["ok"] else f"No se pudo actualizar: {result['error']}")
-    if plan.get("reopen", True):  # (si se actualiza al cerrar Bubble, no se reabre)
+    if plan.get("reopen", True) and closed:  # (si se actualiza al cerrar Bubble, no se reabre)
         subprocess.Popen(plan["relaunch"], cwd=str(project), close_fds=True, creationflags=0x00000008)  # DETACHED
     return result
 

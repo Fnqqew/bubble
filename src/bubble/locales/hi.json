@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "अनज़िप हो रहा है…",
 "Listo para actualizar.": "अपडेट के लिए तैयार।",
+"git no pudo consultar el repositorio": "git रिपॉज़िटरी की जानकारी नहीं ले पाया",
+"no se pudo consultar si hay una versión nueva": "नया वर्शन है या नहीं, यह पता नहीं चल पाया",
 "La descarga no es válida. Probá de nuevo más tarde.": "डाउनलोड सही नहीं है। थोड़ी देर बाद फिर कोशिश करें।",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "Bubble की यह कॉपी अपने आप अपडेट नहीं हो सकती। नया वर्शन GitHub से डाउनलोड करें।",
 "Revisando tus cambios…": "तुम्हारे बदलाव देख रहा हूँ…",

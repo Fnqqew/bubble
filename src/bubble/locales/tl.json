@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "Ine-extract…",
 "Listo para actualizar.": "Handa nang i-update.",
+"git no pudo consultar el repositorio": "Hindi na-check ng git ang repository",
+"no se pudo consultar si hay una versión nueva": "Hindi ma-check kung may bagong bersyon",
 "La descarga no es válida. Probá de nuevo más tarde.": "Hindi valid ang download. Subukan ulit mamaya.",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "Hindi nag-a-update nang kusa ang kopyang ito ng Bubble. I-download ang bagong bersyon mula sa GitHub.",
 "Revisando tus cambios…": "Sinusuri ang mga binago mo…",

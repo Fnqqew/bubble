@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "展開中…",
 "Listo para actualizar.": "アップデートの準備ができたよ。",
+"git no pudo consultar el repositorio": "gitがリポジトリを確認できなかったよ",
+"no se pudo consultar si hay una versión nueva": "新しいバージョンがあるか確認できなかったよ",
 "La descarga no es válida. Probá de nuevo más tarde.": "ダウンロードしたファイルが正しくありません。あとでもう一度試してね。",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "このBubbleは自動でアップデートできません。新しいバージョンをGitHubからダウンロードしてね。",
 "Revisando tus cambios…": "変更をチェック中…",

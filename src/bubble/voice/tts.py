@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import reading
 from .models import Progress, download, models_dir
 from .prosody import POLISH, change_gender, level_db
 
@@ -38,17 +39,19 @@ MAX_LOADED = 3  # máximo de voces cargadas a la vez (normalmente la del jugador
 # Idiomas cuya voz de Piper requiere paquetes que no se instalan (pesados o sin versión para este Python): sin ellos se
 # usa la voz de Windows, si existe. Lo mismo vale para las voces chinas nuevas (g2pW, transformers): se usa la clásica.
 NEEDS = {"ja": ("pyopenjtalk",), "th": ("tltk", "unicode_rbnf")}
-# Paquetes que se instalan solo cuando alguien elige ese idioma (son pesados: el japonés, unos 110 MB con su
-# diccionario). pyopenjtalk no tiene versión para este Python; pyopenjtalk-plus es su variante compatible (mismo
-# módulo). Los del tailandés (tltk) exigen versiones viejas de scikit-learn y gensim: no se instalan.
-PACKS = {"ja": ("pyopenjtalk-plus",)}
-PACK_MB = {"ja": 110}
+# Paquetes que se instalan solo cuando alguien elige ese idioma (el japonés, unos 110 MB con su diccionario).
+# pyopenjtalk no tiene versión para este Python; pyopenjtalk-plus es su variante compatible (mismo módulo). TLTK, el del
+# tailandés, se instala sin sus dependencias, que no usa la voz y no tienen versión para este Python (ver thai.py);
+# Piper lo probó con versiones anteriores a la 1.11.
+PACKS = {"ja": ("pyopenjtalk-plus",), "th": ("tltk==1.10", "unicode-rbnf>=2.4,<3")}
+PACK_MB = {"ja": 110, "th": 20}
+PACK_WITHOUT_DEPENDENCIES = {"th"}
 # Idiomas sin voz propia, que usan la de otro idioma de lectura casi idéntica: el tagalo se escribe como se pronuncia,
 # con las mismas vocales y sílabas que el indonesio; el malayo es casi indonesio; croata y serbio (en letras latinas) se
 # leen como el esloveno; el macedonio como el búlgaro, el bielorruso como el ruso, el azerí como el turco y el afrikáans
 # como el neerlandés. La voz «serbia» de Piper en realidad es sorabo. La voz lituana de Piper usa una fonética propia
-# que Piper 1.8 no reconoce («'lithuanian' is not a valid PhonemeType»: no hablaba): el lituano lo lee la letona, que
-# Whisper entiende igual de bien en lituano que en letón (57 % y 59 % de palabras mal en las mismas pruebas).
+# que Piper 1.8 no reconoce («'lithuanian' is not a valid PhonemeType»: no hablaba): el lituano lo lee la letona, con
+# la fonética lituana (ver reading.py).
 BORROWED = {"tl": "id", "ms": "id", "hr": "sl", "sr": "sl", "mk": "bg", "be": "ru", "az": "tr", "af": "nl",
             "lt": "lv"}
 # Variante preferida por idioma (la más neutra o más hablada entre los jugadores).
@@ -75,7 +78,7 @@ CURATED: dict[str, tuple[str | None, str | None]] = {
     "ko": ("ko_KR-kss-medium", None),
     "id": ("id_ID-news_tts-medium", None),
     "vi": ("vi_VN-vais1000-medium", None),
-    "th": ("th_TH-tsync2-medium", None),
+    "th": ("th_TH-tsync2-medium", None),  # (con TLTK: Whisper la entiende con 2 % de letras mal)
     # El género de las voces cuyo nombre no lo indica se determinó midiendo el tono.
     "uk": ("uk_UA-ukrainian_tts-medium#2", "uk_UA-ukrainian_tts-medium#1"),  # Tetiana, Mykyta
     "sv": ("sv_SE-alma-medium", "sv_SE-nst-medium"),
@@ -100,15 +103,20 @@ CURATED: dict[str, tuple[str | None, str | None]] = {
     "ka": ("ka_GE-natia-medium", None),
     "hy": (None, "hy_AM-gor-medium"),
     "kk": ("kk_KZ-issai-high#3", "kk_KZ-issai-high#1"),  # Raya, Iseke
-    "ca": ("ca_ES-upc_ona-medium", "ca_ES-upc_pau-x_low"),
+    # (la voz de hombre de Piper es de calidad mínima y sonaba entrecortada: se arma a partir de la de mujer)
+    "ca": ("ca_ES-upc_ona-medium", None),
     "eu": ("eu_ES-maider-medium", "eu_ES-antton-medium"),
     "cy": ("cy_GB-bu_tts-medium#1", "cy_GB-bu_tts-medium#2"),  # benyw (mujer), gwryw (hombre)
     "is": ("is_IS-salka-medium", "is_IS-bui-medium"),
     "sq": (None, "sq_AL-edon-medium"),
     "sw": (None, "sw_CD-lanfrica-medium"),
+    # Sin voz propia en Piper: los lee la voz de un idioma cercano con su propia fonética (ver reading.py). El tamil,
+    # las voces malayalam (22-25 % de letras mal); el guyaratí y el panyabí, las del hindi (19-20 % y 32 %). La voz de
+    # hombre del hindi se trababa con el panyabí (63 %): la de hombre se arma a partir de la de mujer.
+    "ta": ("ml_IN-meera-medium", "ml_IN-arjun-medium"),
+    "gu": ("hi_IN-priyamvada-medium", "hi_IN-pratham-medium"),
+    "pa": ("hi_IN-priyamvada-medium", None),
 }
-# Idiomas sin ninguna voz de Piper (tamil, guyaratí, panyabí): se usan las de Windows, si ese idioma está agregado.
-NO_PIPER = {"ta", "gu", "pa"}
 WINDOWS = "windows:"  # prefijo de una voz de Windows (en lugar de una de Piper)
 DERIVED = "~"  # "voz~masculina": voz del otro género generada a partir de esa (ver prosody.change_gender)
 # Por debajo de este volumen, lo que generó la voz no se escucha: una voz que no pudo leer el texto devuelve silencio
@@ -209,7 +217,7 @@ class Voices:
 
     def _piper_voice(self, family: str, gender: str) -> tuple[str | None, bool]:
         """Devuelve la voz de Piper para ese idioma si es del género pedido, o (None, False)."""
-        if family in NO_PIPER or not _has_modules(family):
+        if not _has_modules(family):
             return None, False
         female, male = CURATED.get(family, (None, None))
         wanted, other = (male, female) if gender.startswith("m") else (female, male)
@@ -272,9 +280,10 @@ class Voices:
         with self._pack_lock:
             if not self.pack_missing(language):
                 return family not in PACKS or _has_modules(family)
+            alone = ["--no-deps"] if family in PACK_WITHOUT_DEPENDENCIES else []
             try:
-                done = subprocess.run([_python(), "-m", "pip", "install", "--only-binary=:all:",
-                                       "--disable-pip-version-check", "--quiet", *PACKS[family]],
+                done = subprocess.run([_python(), "-m", "pip", "install", "--only-binary=:all:", "--no-cache-dir",
+                                       "--disable-pip-version-check", "--quiet", *alone, *PACKS[family]],
                                       capture_output=True, text=True, timeout=1800, creationflags=NO_WINDOW)
             except (OSError, subprocess.SubprocessError) as exc:
                 logging.getLogger(__name__).warning("No se pudo instalar la voz de %s: %s", family, exc)
@@ -341,6 +350,10 @@ class Voices:
         if name not in self._loaded:
             model, config = self._files(name)
             self._loaded[name] = PiperVoice.load(model, config_path=config)
+            from . import thai
+
+            if thai.needed(self._loaded[name]):
+                thai.load()
             while len(self._loaded) > MAX_LOADED:
                 del self._loaded[next(iter(self._loaded))]
         else:
@@ -427,7 +440,9 @@ class Voices:
             if not windows:
                 return None
             return windows.synthesize(text, language, gender, speed, style, name=name[len(WINDOWS):])
-        spoken = self._piper(name.split(DERIVED)[0], text, speed * pace, expressive)
+        family = language.split("-")[0].lower()
+        spoken = self._piper(name.split(DERIVED)[0], reading.prepare(text, language), speed * pace, expressive,
+                             reading.READS_AS.get(family))
         if spoken is None:
             return None
         audio, rate = spoken
@@ -435,13 +450,14 @@ class Voices:
             audio = change_gender(audio, rate, name.split(DERIVED)[1])
         return audio, rate
 
-    def _piper(self, name: str, text: str, pace: float, expressive: float) -> tuple[np.ndarray, int] | None:
+    def _piper(self, name: str, text: str, pace: float, expressive: float,
+               reads_as: str | None = None) -> tuple[np.ndarray, int] | None:
         import logging
 
         base, _, speaker = name.partition("#")
         # Variación natural (no monótona) y velocidad elegida.
         settings = {"length_scale": 1.0 / max(0.6, min(1.6, pace)), "noise_scale": expressive, "noise_w": 0.85,
-                    "speaker": int(speaker) if speaker else None}
+                    "speaker": int(speaker) if speaker else None, "reads_as": reads_as}
         worker = self._worker()
         if worker is not None:
             from .piper_worker import VoiceError
@@ -460,12 +476,14 @@ class Voices:
                 worker.close()
         from piper.config import SynthesisConfig
 
+        from .piper_worker import speak
+
         config = SynthesisConfig(speaker_id=settings["speaker"], length_scale=settings["length_scale"],
                                  noise_scale=expressive, noise_w_scale=0.85)
         with self._lock:  # una síntesis a la vez por voz
             try:
                 voice = self._load_here(base)
-                chunks = list(voice.synthesize(text, config))
+                chunks = speak(voice, text, config, reads_as)
             except Exception as exc:  # noqa: BLE001 - una voz que falla no corta nada: se avisa que no hay voz
                 logging.getLogger(__name__).warning("La voz %s no pudo decir el texto: %s", name, exc)
                 if _unusable(str(exc)):

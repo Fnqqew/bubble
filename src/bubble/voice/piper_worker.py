@@ -164,12 +164,27 @@ class PiperProcess:
 
 
 # ---------------------------------------------------------------- el proceso de voces
+def speak(voice, text: str, config, reads_as: str | None = None) -> list:
+    """Lo que dice la voz, por frases. `reads_as`: fonética de espeak con la que lee (la de otro idioma: la voz
+    malayalam leyendo tamil, por ejemplo; ver tts.READS_AS).
+    """
+    own = voice.config.espeak_voice
+    if reads_as:
+        voice.config.espeak_voice = reads_as
+    try:
+        return list(voice.synthesize(text, config))
+    finally:
+        voice.config.espeak_voice = own
+
+
 def _serve() -> None:
     stdin, stdout = sys.stdin.buffer, sys.stdout.buffer
     sys.stdout = sys.stderr  # evita que cualquier impresión se mezcle con los mensajes
     try:
         from piper import PiperVoice
         from piper.config import SynthesisConfig
+
+        from bubble.voice import thai
     except Exception as exc:  # noqa: BLE001 - se avisa y Bubble usa las voces en su proceso (o las de Windows)
         _write(stdout, {"ok": False, "error": f"{type(exc).__name__}: {exc}"})
         return
@@ -180,6 +195,8 @@ def _serve() -> None:
         name = message["name"]
         if name not in voices:
             voices[name] = PiperVoice.load(message["model"], config_path=message["config"])
+            if thai.needed(voices[name]):
+                thai.load()
             while len(voices) > MAX_LOADED:
                 voices.popitem(last=False)
         voices.move_to_end(name)
@@ -197,7 +214,7 @@ def _serve() -> None:
                 continue
             config = SynthesisConfig(speaker_id=message.get("speaker"), length_scale=message.get("length_scale"),
                                      noise_scale=message.get("noise_scale"), noise_w_scale=message.get("noise_w"))
-            chunks = list(chosen.synthesize(message["text"], config))
+            chunks = speak(chosen, message["text"], config, message.get("reads_as"))
             if not chunks:
                 _write(stdout, {"ok": True, "samples": 0})
                 continue

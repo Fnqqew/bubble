@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "جاري فك الضغط…",
 "Listo para actualizar.": "جاهز للتحديث.",
+"git no pudo consultar el repositorio": "تعذّر على git الاطلاع على المستودع",
+"no se pudo consultar si hay una versión nueva": "تعذّر التحقق من وجود إصدار جديد",
 "La descarga no es válida. Probá de nuevo más tarde.": "التنزيل غير صالح. جرّب مرة ثانية بعدين.",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "هذي النسخة من Bubble ما تتحدث لحالها. نزّل النسخة الجديدة من GitHub.",
 "Revisando tus cambios…": "جاري فحص تعديلاتك…",

@@ -23,13 +23,21 @@ from numpy.lib.stride_tricks import sliding_window_view
 HOP_S = 0.01
 FRAME_S = 0.04
 MIN_HZ, MAX_HZ = 60.0, 500.0
-TARGET_DB = -20.0  # volumen de la voz (RMS), igual para todas las voces y frases
+# Volumen de la voz como lo percibe el oído (ver loudness_db), igual para todas las voces y frases. Equivale a unos
+# -17,5 LUFS: 1,5 dB más que el promedio anterior (algunas voces se escuchaban bajitas).
+TARGET_DB = -15.0
 MAX_GAIN_DB = 14.0
 MAX_CORRECTION = 8.0  # máximo de semitonos que se corrige una frase (la nube varió más de una octava)
 NOT_THE_VOICE = 12.0  # más allá de este valor se trata de un error de medición, no de la voz (no se corrige)
 PULL = 0.8  # fracción que se acerca a la referencia; del todo sonaría plano (parte es expresión)
 DEADBAND = 0.6  # semitonos: por debajo no se percibe, así que una voz pareja casi no se toca
 MEMORY = 12  # frases que forman la referencia de cada voz
+# Timbre de las voces de Piper (mediana de todas): parte de la energía entre 2 y 5 kHz (presencia) y entre 5 y 8 kHz
+# (brillo), en dB. Una voz bastante por debajo en las dos suena apagada, como si murmurara (la japonesa: 8 dB menos de
+# presencia y 21 dB menos de brillo); se le sube la presencia (ver presence).
+PRESENCE_SHARE_DB = -16.7
+BRIGHTNESS_SHARE_DB = -19.6
+MAX_PRESENCE_DB = 8.0
 SEED_WEIGHT = 3  # el tono medido de antemano (voces de la nube) pesa como estas frases
 
 
@@ -253,6 +261,72 @@ def level_db(audio: np.ndarray, rate: int) -> float | None:
     return float(20 * np.log10(np.sqrt(np.mean(loud ** 2)) + 1e-12)) if len(loud) else None
 
 
+@lru_cache(maxsize=8)
+def _k_weighting(rate: int, size: int) -> np.ndarray:
+    """Cuánto pesa cada frecuencia para el oído (ponderación K de BS.1770: un estante de +4 dB desde ~1,7 kHz y un
+    corte por debajo de ~38 Hz), para una FFT de `size` muestras. Coeficientes de pyloudnorm, para cualquier
+    frecuencia de muestreo.
+    """
+    z = np.exp(2j * np.pi * np.fft.rfftfreq(size, 1 / rate) / rate)
+
+    def response(b, a):
+        return (b[0] + b[1] / z + b[2] / z ** 2) / (a[0] + a[1] / z + a[2] / z ** 2)
+
+    gain, q, cutoff = 3.999843853973347, 0.7071752369554196, 1681.974450955533
+    k = np.tan(np.pi * cutoff / rate)
+    high, band = 10 ** (gain / 20), 10 ** (gain / 20) ** 0.4996667741545416
+    a0 = 1 + k / q + k * k
+    shelf = response([(high + band * k / q + k * k) / a0, 2 * (k * k - high) / a0, (high - band * k / q + k * k) / a0],
+                     [1, 2 * (k * k - 1) / a0, (1 - k / q + k * k) / a0])
+    q, cutoff = 0.5003270373238773, 38.13547087602444
+    k = np.tan(np.pi * cutoff / rate)
+    a0 = 1 + k / q + k * k
+    low_cut = response([1, -2, 1], [1, 2 * (k * k - 1) / a0, (1 - k / q + k * k) / a0])
+    return np.abs(shelf * low_cut)
+
+
+def loudness_db(audio: np.ndarray, rate: int) -> float | None:
+    """Volumen de lo que suena como lo percibe el oído (ponderación K), en dB. Igualar el volumen eléctrico (RMS)
+    dejaba las voces graves y la japonesa hasta 5 dB más bajas al oído que las demás.
+    """
+    audio = np.asarray(audio, dtype=np.float32)
+    if len(audio) < int(0.06 * rate):
+        return None
+    size = 1 << int(np.ceil(np.log2(len(audio))))
+    weighted = np.fft.irfft(np.fft.rfft(audio, size) * _k_weighting(rate, size), size)[:len(audio)]
+    return level_db(weighted.astype(np.float32), rate)
+
+
+def timbre(audio: np.ndarray, rate: int) -> tuple[float, float] | None:
+    """(presencia, brillo) de la frase: parte de su energía entre 2 y 5 kHz y entre 5 y 8 kHz, en dB."""
+    audio = np.asarray(audio, dtype=np.float32)
+    if len(audio) < rate // 4:
+        return None
+    power = np.abs(np.fft.rfft(audio * np.hanning(len(audio)))) ** 2
+    frequencies = np.fft.rfftfreq(len(audio), 1 / rate)
+    total = power[(frequencies > 80) & (frequencies < 8000)].sum()
+    if total <= 0:
+        return None
+    def share(low: float, high: float) -> float:
+        return float(10 * np.log10(power[(frequencies >= low) & (frequencies < high)].sum() / total + 1e-12))
+
+    return share(2000, 5000), share(5000, 8000)
+
+
+def presence(audio: np.ndarray, rate: int, gain_db: float) -> np.ndarray:
+    """Más presencia: sube de forma suave lo que está por encima de 1 kHz, hasta `gain_db` desde los 3 kHz (ahí está
+    la claridad de la voz). Para las voces opacas, que sonaban apagadas, como si murmuraran.
+    """
+    audio = np.asarray(audio, dtype=np.float32)
+    if gain_db <= 0 or len(audio) < 64:
+        return audio
+    size = 1 << int(np.ceil(np.log2(len(audio) + 2048)))  # con margen: sin que el final se mezcle con el principio
+    frequencies = np.fft.rfftfreq(size, 1 / rate)
+    rise = np.clip(np.log2(np.maximum(frequencies, 1.0) / 1000.0) / np.log2(3.0), 0.0, 1.0)
+    curve = 10 ** (gain_db * (3 * rise ** 2 - 2 * rise ** 3) / 20)  # transición suave, sin resonancias
+    return np.fft.irfft(np.fft.rfft(audio, size) * curve, size)[:len(audio)].astype(np.float32)
+
+
 def _limit(audio: np.ndarray, ceiling: float = 0.97) -> np.ndarray:
     """Sin saturar: por encima de 0,8 se redondea suavemente hasta el techo, en lugar de recortar."""
     knee = 0.8
@@ -286,6 +360,7 @@ class Polish:
     def __init__(self) -> None:
         self._pitches: dict[str, deque] = {}
         self._seeds: dict[str, float] = {}
+        self._timbres: dict[str, deque] = {}
         self._lock = threading.Lock()
 
     def seed(self, pitches: dict[str, float]) -> None:
@@ -324,8 +399,21 @@ class Polish:
             return 0.0
         return float(np.clip(wrong * PULL, -MAX_CORRECTION, MAX_CORRECTION))
 
+    def brightening(self, voice: str, audio: np.ndarray, rate: int) -> float:
+        """Cuánta presencia le falta a esta voz (dB, 0 si no es opaca). Se aprende de sus frases, como el tono."""
+        measured = timbre(audio, rate)
+        with self._lock:
+            known = self._timbres.setdefault(voice, deque(maxlen=MEMORY))
+            if measured is not None:
+                known.append(measured)
+            if not known:
+                return 0.0
+            share, bright = np.median(np.array(known), axis=0)
+        missing = min(PRESENCE_SHARE_DB - share, BRIGHTNESS_SHARE_DB - bright)  # opaca: le faltan las dos cosas
+        return float(np.clip(missing * 0.8, 0.0, MAX_PRESENCE_DB))
+
     def apply(self, audio: np.ndarray, rate: int, voice: str = "", style: str = "", correct: float | None = None,
-              gain_db: float | None = None, tone: bool = True) -> np.ndarray:
+              gain_db: float | None = None, tone: bool = True, bright: bool = True) -> np.ndarray:
         """La frase entera, lista para reproducir. `correct`/`gain_db`: valores ya decididos (ver Streaming).
         `tone`: con False no se modifica el tono (la voz ya lo fijó según la expresión del jugador: ver
         cloud/speak.py, Flux).
@@ -343,8 +431,10 @@ class Polish:
             factor = self._factor(f0, voiced, rate, shift, how, len(audio))
             if factor is not None:
                 audio = psola(audio, rate, factor, f0, voiced)
+        if voice and bright:
+            audio = presence(audio, rate, self.brightening(voice, audio, rate))
         if gain_db is None:
-            level = level_db(audio, rate)
+            level = loudness_db(audio, rate)
             gain_db = 0.0 if level is None else float(np.clip(TARGET_DB - level, -MAX_GAIN_DB, MAX_GAIN_DB))
             gain_db += how.gain_db
         audio = audio * np.float32(10 ** (gain_db / 20))
@@ -397,7 +487,7 @@ class Streaming:
     LONGEST_S = 0.8  # sin pausas, se entrega igual cada cierto tiempo
     GAIN_STEP_DB = 3.0  # variación máxima de volumen entre un tramo y el siguiente
     PITCH_STEP = 2.0  # y de tono (semitonos)
-    TYPICAL_DB = -21.0  # volumen habitual de la voz de la nube (punto de partida)
+    TYPICAL_DB = -18.5  # volumen habitual de la voz de la nube, al oído (punto de partida)
 
     def __init__(self, polish: Polish, rate: int, voice: str, style: str, tone: bool = True) -> None:
         self.polish, self.rate, self.voice, self.style = polish, rate, voice, style
@@ -455,7 +545,7 @@ class Streaming:
                 self._correct = wanted
             else:
                 self._correct += float(np.clip(wanted - self._correct, -self.PITCH_STEP, self.PITCH_STEP))
-        level = level_db(audio, self.rate)
+        level = loudness_db(audio, self.rate)
         if level is not None and seconds >= 0.15:
             wanted = float(np.clip(TARGET_DB - level, -MAX_GAIN_DB, MAX_GAIN_DB)) + expression(self.style).gain_db
             step = self.GAIN_STEP_DB * min(1.0, seconds / 0.4)  # un tramo corto se mueve menos

@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "Arşivden çıkarılıyor…",
 "Listo para actualizar.": "Güncellemeye hazır.",
+"git no pudo consultar el repositorio": "git depoyu sorgulayamadı",
+"no se pudo consultar si hay una versión nueva": "Yeni bir sürüm olup olmadığı kontrol edilemedi",
 "La descarga no es válida. Probá de nuevo más tarde.": "İndirme geçerli değil. Daha sonra tekrar dene.",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "Bu Bubble kopyası kendi kendine güncellenemiyor. Yeni sürümü GitHub'dan indir.",
 "Revisando tus cambios…": "Değişikliklerin kontrol ediliyor…",

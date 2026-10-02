@@ -55,6 +55,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>""")
                      "Un aviso importante.")
     long = update.plain_notes("\n".join(f"línea {n}" for n in range(200)), limit=60)
     assert long.endswith("\n…") and len(long) < 70
+    table = update.plain_notes("Cuánto ocupa:\n\n| Parte | Antes | Ahora |\n|---|---:|---:|\n"
+                               "| Descarga | 1,1 GB | 770 MB |")
+    assert table == "Cuánto ocupa:\n\n• Parte · Antes · Ahora\n• Descarga · 1,1 GB · 770 MB"
     hearts = update.plain_notes("- Frases como «<3 gg» ya suenan.\n- Otra mejora.\n\n> Se actualiza solo.")
     assert hearts == "• Frases como «<3 gg» ya suenan.\n• Otra mejora.\n\nSe actualiza solo."
 
@@ -323,3 +326,76 @@ def test_notes_cut_every_line_are_joined_back():
     assert update.plain_notes(message) == ("Bubble 3.4: se actualiza solo\n\nAhora te avisa cuando hay una versión "
                                            "nueva y se actualiza con un clic.\n\n• Más tarde: no vuelve a preguntar "
                                            "hasta mañana.\n• Nunca en medio de una partida.")
+
+
+# ---------------------------------------------------------------- errores encontrados en la revisión (4.3)
+def test_opening_without_internet_does_not_stop_checking_for_12_hours(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    answers = [OSError("sin internet"), update.Release("3.4.0", "notas")]
+
+    def latest():
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(update, "latest", latest)
+    assert update.check(current="3.3.0") is None  # no se pudo saber
+    assert update.check(current="3.3.0").version == "3.4.0"  # al volver la conexión pregunta de nuevo, sin esperar
+
+
+def test_automatic_updates_check_every_two_hours(monkeypatch, tmp_path):
+    from bubble.state import load_state, update_state
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    asked = []
+    monkeypatch.setattr(update, "latest", lambda: asked.append(1) or update.Release("3.4.0"))
+    update.check(current="3.3.0")
+    saved = load_state()["update"]
+    update_state(update={**saved, "checked_at": time.time() - 3 * 3600})  # hace 3 horas
+    update.check(current="3.3.0")
+    assert len(asked) == 1  # al abrir: cada 12 horas
+    update.check(current="3.3.0", every=2 * 3600)
+    assert len(asked) == 2  # la actualización automática sí vuelve a preguntar
+
+
+def test_the_helper_leaves_everything_alone_if_bubble_did_not_close(monkeypatch, tmp_path):
+    install = make_project(tmp_path / "Bubble", "3.3.0")
+    staged = make_project(tmp_path / "nueva", "3.4.0")
+    reopened = []
+    monkeypatch.setattr(update_helper, "wait_for", lambda pid, timeout=90.0: False)
+    monkeypatch.setattr(update_helper.subprocess, "Popen", lambda *args, **kwargs: reopened.append(args))
+    plan = {"kind": "zip", "project": str(install), "staged": str(staged), "version": "3.4.0", "pid": 1,
+            "python": sys.executable, "relaunch": ["bubble"], "result": str(tmp_path / "resultado.json")}
+    result = update_helper.run(plan, say=lambda _text: None)
+    assert not result["ok"] and "cerrarse" in result["error"] and not reopened  # (no abre un segundo Bubble)
+    assert '"3.3.0"' in (install / "src" / "bubble" / "__init__.py").read_text()
+
+
+def test_a_file_locked_for_a_moment_does_not_ruin_the_update(monkeypatch, tmp_path):
+    folder = tmp_path / "bubble"
+    folder.mkdir()
+    real, attempts = Path.rename, []
+
+    def busy(self, target):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise PermissionError("[WinError 32] lo está usando otro proceso")
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "rename", busy)
+    monkeypatch.setattr(update_helper.time, "sleep", lambda _s: None)
+    update_helper._rename(folder, tmp_path / "bubble.anterior")
+    assert (tmp_path / "bubble.anterior").is_dir() and len(attempts) == 3
+
+
+def test_any_failure_while_preparing_lets_you_retry(window, monkeypatch):
+    dialog, restarted = window
+
+    def stuck(release, progress):
+        raise subprocess.TimeoutExpired("git", 60)
+
+    monkeypatch.setattr(update, "prepare", stuck)
+    dialog.go.invoke()
+    pump(dialog, lambda: "No se pudo" in str(dialog.status.cget("text")))
+    assert "disabled" not in dialog.go.state() and not restarted  # antes quedaba trabada

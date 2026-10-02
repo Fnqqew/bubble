@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "Đang giải nén…",
 "Listo para actualizar.": "Sẵn sàng cập nhật.",
+"git no pudo consultar el repositorio": "git không thể truy vấn kho mã nguồn",
+"no se pudo consultar si hay una versión nueva": "không thể kiểm tra xem có phiên bản mới hay không",
 "La descarga no es válida. Probá de nuevo más tarde.": "Bản tải về không hợp lệ. Thử lại sau nhé.",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "Bản Bubble này không tự cập nhật được. Hãy tải phiên bản mới từ GitHub.",
 "Revisando tus cambios…": "Đang kiểm tra các thay đổi của bạn…",

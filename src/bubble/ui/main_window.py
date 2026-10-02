@@ -444,9 +444,9 @@ class BubbleWindow:
         self.events.put(("call", lambda: self.when_free(show)))
 
     # ================= actualizaciones (ver update.py y update_window.py) =================
-    def check_update(self, force: bool = False) -> None:
-        """Comprueba si hay una versión nueva al abrir (como máximo cada 12 horas) o con «Buscar actualizaciones»
-        (`force`).
+    def check_update(self, force: bool = False, every: float | None = None) -> None:
+        """Comprueba si hay una versión nueva al abrir (como máximo cada 12 horas), con «Buscar actualizaciones»
+        (`force`) o, con la actualización automática, cada `every` segundos.
         """
         from .. import update
 
@@ -455,7 +455,7 @@ class BubbleWindow:
 
         def work() -> None:
             try:
-                release = update.check(force=force)
+                release = update.check(force=force, every=every or update.CHECK_EVERY_S)
             except Exception:  # noqa: BLE001 - sin poder revisar, se sigue como siempre
                 log.debug("No se pudo buscar actualizaciones", exc_info=True)
                 release = None
@@ -533,7 +533,8 @@ class BubbleWindow:
 
     def _auto_check_loop(self) -> None:
         if self.config.user.auto_update:
-            self.check_update()
+            # (con el intervalo de 12 horas de siempre, buscar cada 2 horas no servía: respondía lo ya sabido)
+            self.check_update(every=self.AUTO_CHECK_MS / 1000 - 60)
         self.root.after(self.AUTO_CHECK_MS, self._auto_check_loop)
 
     def open_update(self) -> None:

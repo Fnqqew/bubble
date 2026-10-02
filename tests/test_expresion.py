@@ -36,8 +36,8 @@ def test_every_sentence_ends_up_at_the_same_volume():
     polish = prosody.Polish()
     quiet = polish.apply(voice(level=0.08), RATE, "nube")  # hasta 14 dB más; subir más amplificaría ruido
     loud = polish.apply(voice(level=0.9), RATE, "nube")
-    assert prosody.level_db(quiet, RATE) == pytest.approx(prosody.TARGET_DB, abs=1)
-    assert prosody.level_db(loud, RATE) == pytest.approx(prosody.TARGET_DB, abs=1)
+    assert prosody.loudness_db(quiet, RATE) == pytest.approx(prosody.TARGET_DB, abs=1)  # (al oído)
+    assert prosody.loudness_db(loud, RATE) == pytest.approx(prosody.TARGET_DB, abs=1)
     assert np.max(np.abs(loud)) <= 0.97  # sin saturación
 
 
@@ -107,7 +107,7 @@ def test_the_cloud_voice_is_evened_out_while_it_arrives():
     assert len(joined) == len(arriving)  # no se pierde nada
     assert len(out) >= 2  # y se entrega por tramos, sin esperar la frase entera
     assert abs(semitones(prosody.median_pitch(joined, 24000), 200)) < 0.8
-    assert prosody.level_db(joined, 24000) == pytest.approx(prosody.TARGET_DB, abs=1.5)
+    assert prosody.loudness_db(joined, 24000) == pytest.approx(prosody.TARGET_DB, abs=1.5)
 
 
 def test_a_voice_without_pauses_still_starts_before_the_end():

@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "正在解压…",
 "Listo para actualizar.": "可以更新了。",
+"git no pudo consultar el repositorio": "git 无法查询代码仓库",
+"no se pudo consultar si hay una versión nueva": "无法检查是否有新版本",
 "La descarga no es válida. Probá de nuevo más tarde.": "下载的文件无效。请稍后再试。",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "这份 Bubble 无法自动更新。请从 GitHub 下载新版本。",
 "Revisando tus cambios…": "正在检查你的改动…",

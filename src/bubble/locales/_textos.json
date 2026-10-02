@@ -709,6 +709,8 @@
 "Building",
 "Descomprimiendo…",
 "Listo para actualizar.",
+"git no pudo consultar el repositorio",
+"no se pudo consultar si hay una versión nueva",
 "La descarga no es válida. Probá de nuevo más tarde.",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.",
 "Revisando tus cambios…",

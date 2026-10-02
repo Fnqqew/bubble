@@ -3,10 +3,10 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 4.2" src="https://img.shields.io/badge/versión-4.2-4a90e2?style=flat-square">
+  <img alt="Versión 4.3" src="https://img.shields.io/badge/versión-4.3-4a90e2?style=flat-square">
   <img alt="Basic gratis" src="https://img.shields.io/badge/Basic-gratis-5b6270?style=flat-square">
   <img alt="Bubble Pro" src="https://img.shields.io/badge/✦%20Bubble-Pro-f2c14e?style=flat-square&labelColor=2b2f36">
-  <img alt="59 idiomas" src="https://img.shields.io/badge/idiomas-59-2b2f36?style=flat-square">
+  <img alt="59 idiomas, todos con voz" src="https://img.shields.io/badge/idiomas-59%20·%20todos%20con%20voz-2b2f36?style=flat-square">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20·%2011-2b2f36?style=flat-square">
 </p>
 
@@ -16,6 +16,14 @@
   En un mismo servidor de Roblox coinciden jugadores de Brasil, India, Francia, México y Argentina.<br>
   Se cruzan, se piden ayuda, comparten partidas… y muchas veces no logran entenderse.<br>
   <b>Desarrollé Bubble para que nadie quede fuera de una conversación.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Fnqqew/bubble/releases/latest"><img alt="Descargar Bubble" src="https://img.shields.io/badge/Descargar%20Bubble-4.3-4a90e2?style=for-the-badge&logo=windows&logoColor=white"></a>
+  &nbsp;
+  <a href="docs/INSTALACION.md"><img alt="Cómo se instala" src="https://img.shields.io/badge/Cómo%20se%20instala-paso%20a%20paso-2b2f36?style=for-the-badge"></a>
+  &nbsp;
+  <a href="docs/GUIA.md"><img alt="Guía completa" src="https://img.shields.io/badge/Guía-completa-2b2f36?style=for-the-badge"></a>
 </p>
 
 <br>
@@ -34,18 +42,54 @@
 
 Bubble observa la pantalla mientras jugás y traduce todo lo que aparece:
 
-- **El chat.** Cada mensaje en otro idioma se muestra traducido encima del original. Los mensajes que ya están en tu
-  idioma no se modifican.
-- **Las burbujas** que aparecen sobre los jugadores, aunque muevas la cámara.
-- **Lo que escribís.** Presionás °, escribís con normalidad y el mensaje llega al chat traducido. Con Tab elegís el
-  idioma, entre 59 opciones.
-- **Las voces.** Lo que te dicen aparece subtitulado en la parte inferior, como en una película, y la traducción
-  se va mostrando mientras la persona habla, sin esperar a que termine.
-- **Tu voz.** Hablás en tu idioma y los demás te escuchan en el suyo, con voz de mujer o de hombre y con tu misma
-  expresión: si gritás, la voz grita; si preguntás, la voz pregunta.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>💬 El chat</h4>
+      Cada mensaje en otro idioma se muestra traducido encima del original, en alrededor de un segundo. Los que ya
+      están en tu idioma no se tocan.
+    </td>
+    <td width="50%" valign="top">
+      <h4>🫧 Las burbujas</h4>
+      Las que aparecen sobre los jugadores se traducen en su lugar y acompañan a la burbuja aunque muevas la cámara.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>⌨️ Lo que escribís</h4>
+      Presionás °, escribís con normalidad y el mensaje llega al chat traducido. Con Tab elegís el idioma, entre 59.
+    </td>
+    <td valign="top">
+      <h4>🎧 Lo que te dicen</h4>
+      Aparece subtitulado en la parte inferior, como en una película, y la traducción se va mostrando mientras la
+      persona habla, sin esperar a que termine.
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <h4>🎙️ Tu voz</h4>
+      Hablás en tu idioma y los demás te escuchan en el suyo, con voz de mujer o de hombre y con tu misma expresión:
+      si gritás, la voz grita; si preguntás, la voz pregunta. Funciona en los 59 idiomas, con el mismo volumen en todas
+      las voces.
+    </td>
+  </tr>
+</table>
 
 La traducción no es literal: interpreta la jerga (*vlw mano*, *ngl this obby is mid*, *mdr jsp*) y la expresa como la
 diría alguien de tu país.
+
+<br>
+
+## Novedades
+
+| Versión | Qué trae |
+|---|---|
+| **4.3** · Voces | Voz en los 59 idiomas: ahora también hablan el tailandés, el tamil, el guyaratí y el panyabí. Todas las voces suenan con el mismo volumen al oído, la japonesa se escucha clara (antes parecía susurrar) y la voz de la PC ya no se entrecorta cuando el equipo está ocupado. Las actualizaciones son más confiables. |
+| **4.2** · Más liviano | Una instalación nueva baja 770 MB en lugar de 1,1 GB y ocupa 1,1 GB en lugar de 1,9 GB, con las mismas funciones. El reconocimiento de voz carga tres veces más rápido. |
+| **4.1.1** · Voces que no sonaban | Cada frase se revisa antes de sonar: si una voz no produce sonido, se prueba otra; si ninguna puede, se avisa en el juego. |
+| **4.1** · Traducción en vivo | Lo que dicen los demás se traduce mientras hablan, y el chat aparece traducido en alrededor de un segundo. |
+
+[Todas las versiones](https://github.com/Fnqqew/bubble/releases)
 
 <br>
 
@@ -81,7 +125,7 @@ Basic es gratuito y procesa todo en tu PC. Pro envía la voz a la nube de Deepgr
 | | **Basic** · gratis | **✦ Pro** |
 |---|---|---|
 | Reconocimiento de voces | en tu PC | en la nube: reconoce aunque hablen rápido, se superpongan o mezclen idiomas |
-| Voces que hablan por vos | las de tu PC | voces naturales, con personalidad; en inglés, con emoción |
+| Voces que hablan por vos | las de tu PC, en los 59 idiomas | voces naturales, con personalidad; en inglés, con emoción |
 | Costo | gratis | según el uso, unos 0,35 US$ por hora de voz (la cuenta nueva incluye 200 US$) |
 
 En el juego se cambia de plan con **Ctrl+P**. Si se corta internet, esa frase se procesa en tu PC; si se agota el
@@ -92,11 +136,27 @@ Cuando conectes Claude, deja de consumir crédito. [Cómo se activa](docs/GUIA.m
 
 <br>
 
-## Funciona en cualquier juego
+## Funciona en cualquier juego y en cualquier PC
 
-Detecta el chat donde esté, lo lee con cualquier fondo y se adapta a tu PC para no afectar el rendimiento de Roblox.
-Es compatible con el Roblox de la web, con Bloxstrap y con el de la Microsoft Store, y las traducciones aparecen en tus
-capturas y grabaciones. Tampoco se confunde con el spam ni con las voces del otro extremo del mapa.
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <h4>🎮 Cualquier juego</h4>
+      Detecta el chat donde esté y lo lee con cualquier fondo. Funciona con el Roblox de la web, con Bloxstrap y con
+      el de la Microsoft Store.
+    </td>
+    <td width="33%" valign="top">
+      <h4>🪶 Liviano</h4>
+      Baja 770 MB y ocupa 1,1 GB. Se adapta a tu procesador y a tu memoria para no afectar el rendimiento de
+      Roblox.
+    </td>
+    <td width="33%" valign="top">
+      <h4>🎬 En tus grabaciones</h4>
+      Las traducciones aparecen en tus capturas y grabaciones, y no se confunde con el spam ni con las voces del otro
+      extremo del mapa.
+    </td>
+  </tr>
+</table>
 
 <br>
 
@@ -116,10 +176,15 @@ Bubble no modifica Roblox: observa la pantalla como una aplicación de grabació
   <img src="docs/instalacion.gif" alt="La instalación en 5 pasos: bajar Bubble, doble clic en Iniciar.bat, Bubble descarga lo que necesita, conectás tu cuenta de Claude y a jugar" width="100%">
 </p>
 
-Requisitos: Windows 10 u 11 y Claude Pro o Max (o, mientras tanto, una cuenta gratuita de Deepgram para usar Pro).
+Requisitos: Windows 10 u 11, alrededor de 1,2 GB libres y Claude Pro o Max (o, mientras tanto, una cuenta gratuita de
+Deepgram para usar Pro).
 
-**Descargá Bubble y hacé doble clic en `Iniciar.bat`.** La primera vez se prepara todo automáticamente, y lo que
-requiere tu permiso aparece con su propio botón. [La instalación paso a paso, con imágenes](docs/INSTALACION.md).
+1. **[Descargá Bubble](https://github.com/Fnqqew/bubble/releases/latest)** (Source code, zip) y extraelo.
+2. **Hacé doble clic en `Iniciar.bat`.** La primera vez se prepara todo automáticamente, y lo que requiere tu permiso
+   aparece con su propio botón.
+3. **Conectá tu cuenta de Claude** y empezá a jugar.
+
+[La instalación paso a paso, con imágenes](docs/INSTALACION.md).
 
 > [!IMPORTANT]
 > **Lo más importante es el micrófono.** Bubble te entiende tan bien como te escucha. Con un micrófono de auriculares

@@ -132,20 +132,21 @@ def voice_output(prefer_cable: bool = True) -> Output:
 
 
 TAIL_S = 0.5
+STREAM_BUFFER_S = 0.25  # colchón del reproductor (el de Windows, ~10 ms, corta la voz)
+STREAM_START_S = 0.35  # audio acumulado necesario para iniciar la reproducción
 
 
 def play(output: Output, audio: np.ndarray, rate: int) -> None:
     """Reproduce el audio y bloquea hasta terminar. Agrega medio segundo de silencio al final: el reproductor se cierra
     apenas recibe el último fragmento y cortaría el final de la frase.
+
+    Con el mismo colchón que play_stream: sin indicarlo, Windows usa ~10 ms, y si la PC se demoraba un instante (el
+    juego, la lectura del chat) la voz de la PC sonaba entrecortada.
     """
     com_ready()
     audio = np.clip(audio, -1, 1).astype(np.float32)
     tail = np.zeros((int(rate * TAIL_S), *audio.shape[1:]), dtype=np.float32)
-    output.device.play(np.concatenate([audio, tail]), samplerate=rate)
-
-
-STREAM_BUFFER_S = 0.25  # colchón del reproductor (el de Windows, ~10 ms, corta la voz)
-STREAM_START_S = 0.35  # audio acumulado necesario para iniciar la reproducción
+    output.device.play(np.concatenate([audio, tail]), samplerate=rate, blocksize=int(rate * STREAM_BUFFER_S))
 
 
 def play_stream(output: Output, pieces, rate: int, on_piece: Callable[[float], None] | None = None) -> float:

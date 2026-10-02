@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "Unzipping…",
 "Listo para actualizar.": "Ready to update.",
+"git no pudo consultar el repositorio": "git couldn't check the repository",
+"no se pudo consultar si hay una versión nueva": "couldn't check if there's a new version",
 "La descarga no es válida. Probá de nuevo más tarde.": "The download isn't valid. Try again later.",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "This copy of Bubble can't update itself. Download the new version from GitHub.",
 "Revisando tus cambios…": "Checking your changes…",

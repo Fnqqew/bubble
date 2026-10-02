@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "กำลังแตกไฟล์…",
 "Listo para actualizar.": "พร้อมอัปเดตแล้ว",
+"git no pudo consultar el repositorio": "Git ไม่สามารถตรวจสอบที่เก็บโค้ดได้",
+"no se pudo consultar si hay una versión nueva": "ตรวจสอบไม่ได้ว่ามีเวอร์ชันใหม่หรือเปล่า",
 "La descarga no es válida. Probá de nuevo más tarde.": "ไฟล์ที่ดาวน์โหลดใช้ไม่ได้ ลองใหม่อีกครั้งทีหลังนะ",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "Bubble ชุดนี้อัปเดตเองไม่ได้ ดาวน์โหลดเวอร์ชันใหม่จาก GitHub",
 "Revisando tus cambios…": "กำลังเช็กการเปลี่ยนแปลงของเธอ…",

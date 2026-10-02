@@ -233,7 +233,7 @@ def test_the_japanese_voice_pack_is_installed_only_when_needed(monkeypatch):
     installed = []
     monkeypatch.setattr(tts, "_has_modules", lambda family: bool(installed) or family not in tts.NEEDS)
     voices = tts.Voices(use_process=False)
-    assert voices.pack_missing("ja") and not voices.pack_missing("es") and not voices.pack_missing("th")
+    assert voices.pack_missing("ja") and not voices.pack_missing("es")
 
     def pip(command, **_kw):
         installed.append(command)

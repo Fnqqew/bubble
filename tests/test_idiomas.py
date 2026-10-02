@@ -34,7 +34,7 @@ def test_there_are_many_more_languages_and_each_has_a_voice_where_possible(monke
     assert voices.voice_for("hr", "masculina") == "sl_SI-artur-medium"  # croata, con la voz eslovena
     # solo hay voz masculina: se deriva la femenina
     assert voices.voice_for("fa", "femenina") == "fa_IR-amir-medium~femenina"
-    assert voices.voice_for("ta") is None  # sin voz de Piper: se usa la de Windows, si existe
+    assert voices.voice_for("ta") == "ml_IN-meera-medium"  # tamil, con la voz malayalam (antes no tenía voz)
 
 
 def test_the_detector_knows_the_new_languages_and_still_keeps_your_spanish():

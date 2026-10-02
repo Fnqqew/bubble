@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "Mengekstrak…",
 "Listo para actualizar.": "Siap diperbarui.",
+"git no pudo consultar el repositorio": "Git tidak bisa mengecek repositorinya",
+"no se pudo consultar si hay una versión nueva": "Tidak bisa mengecek apakah ada versi baru",
 "La descarga no es válida. Probá de nuevo más tarde.": "Unduhannya tidak valid. Coba lagi nanti.",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "Salinan Bubble ini tidak bisa diperbarui sendiri. Unduh versi barunya dari GitHub.",
 "Revisando tus cambios…": "Memeriksa perubahanmu…",

@@ -85,6 +85,10 @@ def plain_notes(markdown: str, limit: int = 900) -> str:
         line = raw.strip()
         if line.lower().startswith("co-authored-by"):
             continue
+        if line.startswith("|"):  # tabla: una línea por fila (la que separa el encabezado no se muestra)
+            if re.fullmatch(r"[|:\-\s]+", line):
+                continue
+            line = "- " + " · ".join(cell.strip() for cell in line.strip("|").split("|"))
         heading = line.startswith("#")
         line = re.sub(r"^#+\s*", "", line)
         line = re.sub(r"^>\s?", "", line)
@@ -133,7 +137,7 @@ def latest_from_github(timeout: float = 10) -> Release | None:
 def latest_from_git(folder: Path = PROJECT_DIR) -> Release | None:
     """Con una copia de git: las versiones (etiquetas vX.Y.Z) del repositorio, usando la sesión de git del usuario."""
     if _git(folder, "fetch", "--tags", "--quiet", "origin").returncode != 0:
-        return None
+        raise OSError("git no pudo consultar el repositorio")
     tags = [tag for tag in _git(folder, "tag", "--list", "v*").stdout.split() if parse_version(tag)]
     if not tags:
         return None
@@ -143,33 +147,53 @@ def latest_from_git(folder: Path = PROJECT_DIR) -> Release | None:
 
 
 def latest(folder: Path = PROJECT_DIR) -> Release | None:
-    release = None
+    """La última versión publicada (None si no hay ninguna). Lanza OSError si no se pudo preguntar (sin internet, o
+    GitHub no respondió): no es lo mismo que «no hay versión nueva».
+    """
+    release, reached = None, False
     try:
-        release = latest_from_github()
+        release, reached = latest_from_github(), True
     except (OSError, ValueError):
         log.debug("No se pudo preguntar a GitHub", exc_info=True)
     if release is None and install_kind(folder) == "git" and shutil.which("git"):
         try:
-            release = latest_from_git(folder)
+            release, reached = latest_from_git(folder), True
         except (OSError, subprocess.SubprocessError):
             log.debug("No se pudo preguntar con git", exc_info=True)
+    if not reached:
+        raise OSError("no se pudo consultar si hay una versión nueva")
     return release
 
 
-def check(force: bool = False, current: str = __version__) -> Release | None:
+def check(force: bool = False, current: str = __version__, every: float = CHECK_EVERY_S) -> Release | None:
     """La versión nueva, si existe (None si ya está actualizado o no se pudo determinar). Sin `force`, consulta como
-    máximo una vez cada 12 horas (si no, usa el resultado de la última consulta).
+    máximo una vez cada `every` segundos (si no, usa el resultado de la última consulta). Si no se pudo consultar
+    (sin internet), tampoco se cuenta como consultado: antes, abrir Bubble sin conexión dejaba de buscar por 12 horas.
     """
     from .state import load_state, update_state
 
     saved = load_state().get("update") or {}
-    if not force and time.time() - float(saved.get("checked_at", 0)) < CHECK_EVERY_S:
-        known = saved.get("latest")
-        release = Release(**known) if isinstance(known, dict) else None
-    else:
-        release = latest()
-        update_state(update={**saved, "checked_at": time.time(), "latest": asdict(release) if release else None})
+    known = saved.get("latest")
+    if force or time.time() - float(saved.get("checked_at", 0)) >= every:
+        try:
+            fresh = latest()
+        except OSError:
+            log.info("No se pudo consultar si hay una versión nueva: se usa lo último que se sabía")
+        else:
+            known = asdict(fresh) if fresh else None
+            update_state(update={**saved, "checked_at": time.time(), "latest": known})
+    release = _release(known)
     return release if release is not None and is_newer(release.version, current) else None
+
+
+def _release(saved) -> Release | None:
+    """La versión guardada en el estado (None si no hay o si la guardó otra versión de Bubble con otros datos)."""
+    if not isinstance(saved, dict):
+        return None
+    try:
+        return Release(**{key: saved[key] for key in ("version", "notes", "url", "zip_url") if key in saved})
+    except TypeError:
+        return None
 
 
 def should_offer(release: Release) -> bool:

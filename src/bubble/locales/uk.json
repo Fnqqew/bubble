@@ -709,6 +709,8 @@
 "Building": "Building",
 "Descomprimiendo…": "Розпаковую…",
 "Listo para actualizar.": "Готово до оновлення.",
+"git no pudo consultar el repositorio": "git не зміг звернутися до репозиторію",
+"no se pudo consultar si hay una versión nueva": "не вдалося перевірити, чи є нова версія",
 "La descarga no es válida. Probá de nuevo más tarde.": "Завантаження недійсне. Спробуй ще раз пізніше.",
 "Esta copia de Bubble no se puede actualizar sola. Descargá la versión nueva de GitHub.": "Ця копія Bubble не може оновитися сама. Завантаж нову версію з GitHub.",
 "Revisando tus cambios…": "Перевіряю твої зміни…",

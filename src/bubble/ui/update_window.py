@@ -80,7 +80,8 @@ class UpdateWindow:
         def work() -> None:
             try:
                 folder = update.prepare(self.release, self._progress)
-            except (update.UpdateError, OSError, ValueError) as exc:
+            # Cualquier falla: antes, una que no era de red (git que no responde) dejaba la ventana trabada.
+            except Exception as exc:  # noqa: BLE001
                 message = str(exc) if isinstance(exc, update.UpdateError) else f"No se pudo descargar ({exc})."
                 self.post(lambda: self._failed(message))
                 return
