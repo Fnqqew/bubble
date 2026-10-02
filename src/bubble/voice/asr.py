@@ -26,7 +26,7 @@ from typing import Callable
 
 import numpy as np
 
-from .models import models_dir
+from .models import models_dir, whisper_path
 from .stt import is_hallucination
 
 SAMPLE_RATE = 16000
@@ -196,7 +196,8 @@ class FastWhisper:
 
         threads = threads or max(2, min(6, (os.cpu_count() or 4) // 2))
         self.name = name
-        self._model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=threads,
+        # El modelo liviano (o el que ya estaba); si no hay ninguno, faster-whisper baja el de Systran.
+        self._model = WhisperModel(whisper_path(name) or name, device="cpu", compute_type="int8", cpu_threads=threads,
                                    download_root=str(models_dir() / "whisper"))
         self._tokenizers: dict[str, object] = {}
         self._lock = threading.Lock()

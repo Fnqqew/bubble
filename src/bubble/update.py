@@ -76,7 +76,8 @@ def install_kind(folder: Path = PROJECT_DIR) -> str:
 
 def plain_notes(markdown: str, limit: int = 900) -> str:
     """Las novedades en texto simple (sin imágenes, enlaces ni marcas de formato), para mostrar en la ventana."""
-    text = re.sub(r"<[^>]+>", "", markdown or "")
+    # Solo etiquetas HTML de verdad: un «<3» del texto se borraba junto con todo lo que seguía hasta el próximo «>».
+    text = re.sub(r"</?[A-Za-z!][^<>\n]*>", "", markdown or "")
     text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
     lines: list[str] = []

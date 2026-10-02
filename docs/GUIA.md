@@ -31,7 +31,7 @@ funcionamiento interno. No hace falta leerla de corrido; cada sección se puede 
 1. Busca **Python** (3.12 o posterior, de 64 bits). Si no encuentra una versión adecuada, ofrece instalarla.
 2. Crea su propio entorno (`.venv`) con los paquetes necesarios.
 3. Abre **Preparar Bubble**, que descarga el resto con una barra de progreso: el reconocimiento de voz (hasta unos
-   500 MB), el reconocimiento de quién habla (unos 30 MB) y las voces en inglés (unos 120 MB). Mientras tanto, podés
+   330 MB), el reconocimiento de quién habla (unos 30 MB) y las voces en inglés (unos 120 MB). Mientras tanto, podés
    seguir usando la PC.
 4. Lo que requiere tu permiso aparece con su propio botón: los componentes de Windows que falten, Claude Code, tu
    cuenta de Claude y el micrófono virtual.
@@ -179,7 +179,7 @@ idiomas a la vez.
 
 En Basic, todo el audio se procesa en tu PC: **Whisper** reconoce lo que se dice, un modelo pequeño identifica quién
 habla y **Piper** genera la voz. Claude solo recibe el texto. La primera vez se descargan los modelos (hasta unos
-500 MB, según tu PC) y cada voz que uses (unos 60 MB); se guardan en `%LOCALAPPDATA%\Bubble\models`.
+330 MB, según tu PC) y cada voz que uses (unos 60 MB); se guardan en `%LOCALAPPDATA%\Bubble\models`.
 
 ### Lo que te dicen
 

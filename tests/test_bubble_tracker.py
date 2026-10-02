@@ -137,13 +137,15 @@ def test_old_bubble_moves_up_and_new_one_appears_below():
 
 def test_fast_closing_matches_scipy():
     import numpy as np
+    import pytest
 
-    from bubble.capture.bubble_tracker import _ndimage, close_3x3
+    from bubble.capture.bubble_tracker import close_3x3
 
+    ndimage = pytest.importorskip("scipy.ndimage")  # solo en la PC de desarrollo (extra «pruebas»)
     rng = np.random.default_rng(3)
     for density in (0.3, 0.6, 0.9):
         mask = rng.random((61, 97)) < density
-        assert np.array_equal(close_3x3(mask), _ndimage().binary_closing(mask, structure=np.ones((3, 3))))
+        assert np.array_equal(close_3x3(mask), ndimage.binary_closing(mask, structure=np.ones((3, 3))))
 
 
 

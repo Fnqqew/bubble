@@ -274,7 +274,8 @@ def test_the_heavy_parts_load_while_the_splash_is_showing(monkeypatch):
     loaded = []
     monkeypatch.setattr(importlib, "import_module", lambda name: loaded.append(name))
     launch.preload()
-    assert "claude_agent_sdk" in loaded and "scipy.ndimage" in loaded
+    assert "claude_agent_sdk" in loaded and "faster_whisper" in loaded
+    assert loaded.index("bubble.voice") < loaded.index("faster_whisper")  # (le da el módulo vacío en lugar de PyAV)
 
 
 def test_tab_asks_for_the_new_language_right_away_and_the_next_one_too(monkeypatch, tmp_path):

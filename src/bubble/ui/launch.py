@@ -91,7 +91,8 @@ def preload() -> None:
     import importlib
 
     # dxcam no se precarga: al importarse inicializa la placa de video con COM y quedaría atado a este hilo.
-    for name in ("claude_agent_sdk", "scipy.ndimage", "onnxruntime", "faster_whisper", "websockets.asyncio.client"):
+    # (bubble.voice antes que faster_whisper: le da el módulo vacío en lugar de PyAV)
+    for name in ("claude_agent_sdk", "onnxruntime", "bubble.voice", "faster_whisper", "websockets.asyncio.client"):
         try:
             importlib.import_module(name)
         except Exception:  # noqa: BLE001 - lo que no esté (la parte de voz sin instalar) se carga cuando haga falta

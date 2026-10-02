@@ -32,8 +32,11 @@ if not defined PY goto sin_python
 if not exist ".venv\Scripts\python.exe" (
     %PY% -m venv .venv || goto error
 )
-".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --upgrade pip >nul
-".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -e ".[voz]" || goto error
+rem Sin cache: pip guardaba una copia de todo lo descargado (~350 MB) que no se vuelve a usar.
+".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --no-cache-dir --upgrade pip >nul
+".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --no-cache-dir -e ".[voz]" || goto error
+rem faster-whisper sin sus dependencias: la que falta (PyAV, 69 MB) solo sirve para abrir archivos de audio.
+".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --no-cache-dir --no-deps faster-whisper==1.2.1 || goto error
 :abrir
 start "" ".venv\Scripts\pythonw.exe" -m bubble
 exit /b 0

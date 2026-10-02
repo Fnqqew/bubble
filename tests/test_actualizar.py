@@ -55,6 +55,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>""")
                      "Un aviso importante.")
     long = update.plain_notes("\n".join(f"línea {n}" for n in range(200)), limit=60)
     assert long.endswith("\n…") and len(long) < 70
+    hearts = update.plain_notes("- Frases como «<3 gg» ya suenan.\n- Otra mejora.\n\n> Se actualiza solo.")
+    assert hearts == "• Frases como «<3 gg» ya suenan.\n• Otra mejora.\n\nSe actualiza solo."
 
 
 def test_knows_how_bubble_was_installed(tmp_path):

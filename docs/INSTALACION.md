@@ -18,7 +18,7 @@ No hace falta saber programar ni tener nada instalado de antemano: si falta algo
 - **Una suscripción de Claude, Pro o Max.** Es la que realiza las traducciones. Bubble no cobra nada ni pide datos de
   pago. Si todavía no tenés una, Bubble Pro puede traducir con el crédito de regalo de Deepgram (ver el paso 4).
 - **Roblox**, tanto el de roblox.com como el de la Microsoft Store.
-- **Alrededor de 1,5 GB libres** y conexión a internet.
+- **Alrededor de 1,2 GB libres** y conexión a internet.
 - Para que te escuchen con la voz traducida: **auriculares con micrófono**.
 
 > [!IMPORTANT]
@@ -61,7 +61,7 @@ Se abre una ventana de consola que prepara todo. Cuando termina, se cierra sola 
 <img src="instalacion/paso-3.png" alt="La ventana «Preparar Bubble» descargando el reconocimiento de voz y las voces" width="100%">
 
 Se abre **Preparar Bubble** y descarga lo necesario para reconocer voces y hablar por vos: el reconocimiento de voz
-(hasta unos 500 MB), el modelo que distingue quién habla (unos 30 MB) y las voces en inglés (unos 120 MB). Podés seguir
+(hasta unos 330 MB), el modelo que distingue quién habla (unos 30 MB) y las voces en inglés (unos 120 MB). Podés seguir
 usando la PC mientras tanto.
 
 Si a Windows le faltan componentes de Microsoft (Visual C++), aparece el botón **Instalar componentes**. Al tocarlo,

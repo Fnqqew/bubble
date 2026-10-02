@@ -9,7 +9,9 @@ tiene su propio botón y requiere autorización.
 from __future__ import annotations
 
 import importlib
+import importlib.metadata
 import importlib.util
+import logging
 import os
 import subprocess
 import sys
@@ -19,8 +21,16 @@ from typing import Callable
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 VOICE_MODULES = ("faster_whisper", "piper", "soundcard", "websockets", "onnxruntime")
+# Se instala sin dependencias (las que usa están en el extra «voz» de pyproject.toml; PyAV no hace falta). La misma
+# versión figura en Iniciar.bat y en update_helper.py.
+WHISPER_PACKAGE = "faster-whisper==1.2.1"
+# Paquetes que Bubble dejó de usar en la versión 4.2: en las PCs que los tenían se desinstalan (~180 MB, ver tidy).
+LEFTOVERS = ("scipy", "av")
+# Sin guardar copia de lo descargado: pip la conservaba en su caché (~350 MB que nadie volvía a usar).
+PIP_INSTALL = ("-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir")
 Progress = Callable[[str, float], None]  # (descripción de la tarea, 0..1; -1 si se desconoce el total)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,10 +58,9 @@ def _whisper_names() -> list[str]:
 
 
 def _whisper_ready() -> bool:
-    from .voice.models import models_dir
+    from .voice.models import whisper_path
 
-    folder = models_dir() / "whisper"
-    return all(any(folder.glob(f"models--*faster-whisper-{name}*/snapshots/*/model.bin")) for name in _whisper_names())
+    return all(whisper_path(name) for name in _whisper_names())
 
 
 def _speakers_ready() -> bool:
@@ -108,28 +117,40 @@ def _pip_install(progress: Progress) -> str:
     if (PROJECT_DIR / "pyproject.toml").exists():
         target = [f"{PROJECT_DIR}[voz]"] if not (PROJECT_DIR / ".git").exists() else ["-e", f"{PROJECT_DIR}[voz]"]
     else:
-        target = ["faster-whisper>=1.2", "piper-tts>=1.3", "soundcard>=0.4", "websockets>=14"]
-    command = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", *target]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                               encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
-    for line in process.stdout:
-        line = line.strip()
-        if line.startswith(("Collecting", "Downloading", "Installing collected", "Building")):
-            progress(line.split(" (")[0][:80], -1)
-    if process.wait() != 0:
-        raise RuntimeError("pip no pudo instalar la parte de voz (¿hay conexión?)")
+        target = ["ctranslate2>=4.0,<5", "huggingface-hub>=0.21", "tokenizers>=0.13,<1", "onnxruntime>=1.14,<2",
+                  "tqdm", "piper-tts>=1.3", "soundcard>=0.4", "websockets>=14"]
+    whisper = [sys.executable, *PIP_INSTALL, "--no-deps", WHISPER_PACKAGE]
+    for command in ([sys.executable, *PIP_INSTALL, *target], whisper):
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                   encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+        for line in process.stdout:
+            line = line.strip()
+            if line.startswith(("Collecting", "Downloading", "Installing collected", "Building")):
+                progress(line.split(" (")[0][:80], -1)
+        if process.wait() != 0:
+            raise RuntimeError("pip no pudo instalar la parte de voz (¿hay conexión?)")
     importlib.invalidate_caches()
     return "Parte de voz instalada."
 
 
 def _download_whisper(progress: Progress) -> str:
-    from faster_whisper import download_model
-
-    from .voice.models import models_dir
+    from .voice.models import WHISPER_LIGHT, download_whisper, models_dir, whisper_path
 
     names = _whisper_names()
     for index, name in enumerate(names):
-        progress(f"Reconocimiento de voz «{name}» ({index + 1} de {len(names)})", -1)
+        if whisper_path(name):
+            continue
+        label = f"Reconocimiento de voz «{name}» ({index + 1} de {len(names)})"
+        progress(label, -1)
+        if name in WHISPER_LIGHT:
+            try:
+                download_whisper(name, label, progress)
+                continue
+            except (OSError, ValueError) as exc:  # (GitHub bloqueado, descarga dañada): se usa el de Systran
+                log.warning("No se pudo bajar el Whisper liviano «%s»: %s", name, exc)
+        from . import voice  # noqa: F401 - prepara faster-whisper para funcionar sin PyAV
+        from faster_whisper import download_model
+
         download_model(name, cache_dir=str(models_dir() / "whisper"))
     return "Reconocimiento de voz listo."
 
@@ -197,8 +218,8 @@ def steps() -> list[Step]:
     return [
         Step("windows", "Componentes de Windows", "Visual C++ de Microsoft: los necesita la parte de voz.",
              _runtime_ready, _install_runtime, action="Instalar componentes"),
-        Step("voz", "Parte de voz", "Paquetes para entender y decir voces (~300 MB).", _has_modules, _pip_install),
-        Step("whisper", "Reconocimiento de voz", "Entiende voces en tu PC (Basic), hasta ~500 MB.", _whisper_ready,
+        Step("voz", "Parte de voz", "Paquetes para entender y decir voces (~80 MB).", _has_modules, _pip_install),
+        Step("whisper", "Reconocimiento de voz", "Entiende voces en tu PC (Basic), hasta ~330 MB.", _whisper_ready,
              _download_whisper, after=["voz"]),
         Step("voces", "Reconocimiento de voces", "Sabe quién habla (Voz 1, Voz 2…), ~30 MB.", _speakers_ready,
              _download_speakers, after=["voz"]),
@@ -239,6 +260,35 @@ def automatic(step: Step) -> bool:
 
 def voice_ready() -> bool:
     return _has_modules()
+
+
+def _installed(name: str) -> bool:
+    try:
+        importlib.metadata.distribution(name)
+        return True
+    except importlib.metadata.PackageNotFoundError:
+        return False
+
+
+def tidy() -> list[str]:
+    """Desinstala los paquetes que Bubble ya no usa (ver LEFTOVERS) y devuelve cuáles. No lo hace en la PC de
+    desarrollo, donde los usan las pruebas y el laboratorio de voz.
+    """
+    if _installed("pytest"):
+        return []
+    present = [name for name in LEFTOVERS if _installed(name)]
+    if not present:
+        return []
+    executable = Path(sys.executable)
+    python = executable.with_name("python.exe") if executable.name.lower() == "pythonw.exe" else executable
+    done = subprocess.run([str(python if python.exists() else executable), "-m", "pip", "uninstall", "-y",
+                           "--disable-pip-version-check", *present], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=600, creationflags=NO_WINDOW)
+    if done.returncode != 0:
+        log.info("No se pudieron desinstalar %s: %s", present, (done.stderr or done.stdout)[-300:])
+        return []
+    log.info("Desinstalados (Bubble ya no los usa): %s", ", ".join(present))
+    return present
 
 
 def environment_note() -> str:

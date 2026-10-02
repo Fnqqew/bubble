@@ -27,6 +27,7 @@ from ..geometry import Rect
 from ..performance import Pacer, Stopwatch
 from .bubbles import BubbleItem
 from .ocr import WindowsOcr
+from .regions import label, regions
 from .screen import grab, reading_mark, still_readable
 
 log = logging.getLogger(__name__)
@@ -37,12 +38,6 @@ SIGNATURE_SIZE = (24, 6)
 # mensaje).
 SIGNATURE_CHANGED = 0.08  # misma burbuja movida: 0; con zoom: ~0.04-0.065; otro texto: >= 0.17
 
-
-def _ndimage():
-    """scipy tarda ~1 s en cargarse: se importa solo cuando hace falta, para que Bubble abra rápido."""
-    from scipy import ndimage
-
-    return ndimage
 
 
 @dataclass
@@ -136,7 +131,7 @@ def _fill_holes(mask: np.ndarray) -> np.ndarray:
     """Rellena lo encerrado por la mancha (el texto dentro de la burbuja). Usa una sola pasada de etiquetado, mucho más
     rápida que `binary_fill_holes`, que dilata repetidamente.
     """
-    outside, _count = _ndimage().label(~np.pad(mask, 1))
+    outside, _count = label(~np.pad(mask, 1))
     border = np.unique(np.concatenate((outside[0], outside[-1], outside[:, 0], outside[:, -1])))
     return ~np.isin(outside, border)[1:-1, 1:-1] | mask
 
@@ -156,12 +151,10 @@ def find_bubble_boxes(image: Image.Image, exclude: Rect | None = None) -> list[B
     dark = luma < 140
     # Cierra los cortes que deja el texto oscuro dentro de la burbuja (el relleno fino se hace por zona).
     closed = close_3x3(bright)
-    labels, _count = _ndimage().label(closed)
+    labels, found = regions(closed)
     min_width = int(28 * SCALE)
     boxes = []
-    for index, region in enumerate(_ndimage().find_objects(labels), start=1):
-        if region is None:
-            continue
+    for index, region in enumerate(found, start=1):
         rows, cols = region
         if (rows.stop - rows.start) / SCALE < 14 or (cols.stop - cols.start) / SCALE < 28:
             continue

@@ -299,6 +299,11 @@ class BubbleWindow:
                 return
             if missing:
                 self.events.put(("call", lambda: self.when_free(self.open_setup)))
+                return
+            try:
+                install.tidy()  # libera lo que Bubble ya no usa (scipy y PyAV, ~180 MB)
+            except Exception:  # noqa: BLE001 - se intenta de nuevo la próxima vez
+                log.debug("No se pudo desinstalar lo que ya no se usa", exc_info=True)
 
         threading.Thread(target=work, name="bubble-revisar-instalacion", daemon=True).start()
 

@@ -8,12 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image
 
-
-def _ndimage():
-    """scipy tarda ~1 s en cargarse, por lo que se importa de forma diferida para que Bubble abra rápido."""
-    from scipy import ndimage
-
-    return ndimage
+from .regions import median_filter
 
 
 @dataclass(frozen=True)
@@ -75,7 +70,7 @@ def binarize_local_background(image: Image.Image, min_distance: float = 60, rati
     rgb = image.convert("RGB")
     small = rgb.reduce(3)
     background_small = np.stack(
-        [_ndimage().median_filter(np.asarray(small)[..., channel], size=7) for channel in range(3)], axis=2)
+        [median_filter(np.asarray(small)[..., channel], size=7) for channel in range(3)], axis=2)
     background = np.asarray(Image.fromarray(background_small.astype(np.uint8)).resize(rgb.size, Image.Resampling.BILINEAR),
                             dtype=np.float32)
     pixels = np.asarray(rgb, dtype=np.float32)

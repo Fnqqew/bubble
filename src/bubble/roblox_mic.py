@@ -63,9 +63,9 @@ def find_mic_in_bar(image: Image.Image) -> MicState | None:
 
 def _blobs(mask: np.ndarray, minimum: int) -> list[tuple[np.ndarray, np.ndarray]]:
     """Manchas separadas de la máscara (de mayor a menor), con al menos `minimum` píxeles."""
-    from scipy import ndimage
+    from .capture.regions import label
 
-    labels, count = ndimage.label(mask, structure=np.ones((3, 3)))
+    labels, count = label(mask, diagonal=True)
     found = [np.nonzero(labels == index) for index in range(1, count + 1)]
     return sorted((f for f in found if len(f[0]) >= minimum), key=lambda f: -len(f[0]))
 

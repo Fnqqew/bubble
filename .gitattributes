@@ -1,0 +1,10 @@
+# Los .bat van con finales de linea de Windows (CRLF) tal cual, tambien en el ZIP de cada version: con LF, cmd a
+# veces no encuentra las etiquetas de goto y Iniciar.bat se cortaba en la primera instalacion.
+*.bat -text
+
+# Lo que no hace falta para usar Bubble no va en el ZIP de cada version (las imagenes de la guia se ven en GitHub).
+docs/*.gif export-ignore
+docs/*.png export-ignore
+docs/instalacion/** export-ignore
+tests/** export-ignore
+tools/** export-ignore

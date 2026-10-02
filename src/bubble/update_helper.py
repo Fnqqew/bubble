@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 
 KEEP = {".venv", ".git"}  # lo que una actualización nunca modifica
+WHISPER_PACKAGE = "faster-whisper==1.2.1"  # sin dependencias (como en install.py)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
@@ -80,10 +81,12 @@ def git_pull(project: Path) -> bool:
 
 
 def pip_install(python: str, project: Path) -> None:
-    done = subprocess.run([python, "-m", "pip", "install", "--disable-pip-version-check", "-e", f"{project}[voz]"],
-                          capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
-    if done.returncode != 0:
-        raise RuntimeError("no se pudieron instalar los paquetes nuevos (¿hay internet?)")
+    pip = [python, "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir"]
+    for command in ([*pip, "-e", f"{project}[voz]"], [*pip, "--no-deps", WHISPER_PACKAGE]):
+        done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              creationflags=NO_WINDOW)
+        if done.returncode != 0:
+            raise RuntimeError("no se pudieron instalar los paquetes nuevos (¿hay internet?)")
 
 
 def run(plan: dict, say=print) -> dict:
